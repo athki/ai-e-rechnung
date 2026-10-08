@@ -1,0 +1,15 @@
+# Steuerfall C: Delaware C-Corp, Drittland (US), nicht steuerbar, 0 %. Erfunden.
+# Ohne USt-IdNr.; die Unternehmereigenschaft belegt der Registereintrag (EN 16931 BT-47).
+firma: Sample Inc.
+ansprechpartner: John Sample
+adresse:
+  strasse: 251 Little Falls Drive
+  plz: "19808"
+  ort: Wilmington, DE
+land: US
+register:
+  name: Delaware File Number
+  nummer: "1234567"
+unternehmer: true
+sprache: en
+waehrung: USD

@@ -1,0 +1,9 @@
+# Steuerfall A: Privatperson im Inland, 19 % USt. Erfunden.
+firma: Erika Beispiel
+adresse:
+  strasse: Beispielstraße 7
+  plz: "60311"
+  ort: Frankfurt am Main
+land: DE
+unternehmer: false
+sprache: de

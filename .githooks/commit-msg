@@ -1,0 +1,3 @@
+#!/bin/sh
+# Prüft die Commit-Message gegen die Sperrliste. Einschalten: make hooks
+exec python3 -I "$(git rev-parse --show-toplevel)/.githooks/sperrliste.py" nachricht "$1"

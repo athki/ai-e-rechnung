@@ -1,0 +1,19 @@
+# Beispiel-Aussteller (erfunden). Die echte Datei liegt im Gewerbe-Ordner unter stammdaten/
+# und wird nur vom Nutzer selbst gepflegt – `rechnung init --stammdaten` legt dort ein Gerüst an.
+name: Max Mustermann
+geschaeftsbezeichnung: Mustermann Beratung
+adresse:
+  strasse: Musterstraße 1
+  plz: "12345"
+  ort: Musterstadt
+land: DE
+email: max@example.com
+telefon: +49 123 4567890
+website: example.com
+steuernummer: 143/123/12345
+ustid: DE123456789
+bank:
+  kontoinhaber: Max Mustermann
+  iban: DE89 3704 0044 0532 0130 00
+  bic: COBADEFFXXX
+  name: Musterbank

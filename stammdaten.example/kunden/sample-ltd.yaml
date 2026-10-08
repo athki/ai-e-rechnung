@@ -1,0 +1,16 @@
+# Steuerfall C: Unternehmen im Drittland (UK), nicht steuerbar, 0 %. Erfunden.
+firma: Sample Ltd
+ansprechpartner: Jane Sample
+adresse:
+  strasse: 1 Sample Street
+  plz: EC1A 1AA
+  ort: London
+land: GB
+ustid: GB123456789
+register:
+  name: Companies House
+  nummer: "01234567"
+referenz: Sample Panel 2026
+unternehmer: true
+sprache: en
+waehrung: EUR

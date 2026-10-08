@@ -1,0 +1,10 @@
+# Steuerfall D: Privatperson im Drittland, 19 % deutsche USt. Erfunden.
+# resolve bricht hier ab, solange in der Rechnung nicht steuerfall: D mit begruendung: steht.
+firma: Hans Beispiel
+adresse:
+  strasse: Beispielweg 5
+  plz: "8001"
+  ort: Zürich
+land: CH
+unternehmer: false
+sprache: de

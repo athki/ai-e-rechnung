@@ -1,0 +1,23 @@
+% ============================================================
+% Erzeugt von render.py aus rechnung.resolved.json – der Aussteller.
+% Die echten Stammdaten liegen im Gewerbe-Ordner und nie im Repo; diese Datei
+% entsteht nur im Temp-Verzeichnis des Builds.
+% ============================================================
+\newcommand{\InvIssuerName}{\VAR{name_zeile}}
+\newcommand{\InvIssuerPerson}{\VAR{aussteller.name}}
+\newcommand{\InvIssuerAddressLine}{\VAR{adresse_zeile}}
+\newcommand{\InvIssuerCountryEn}{\VAR{land_en}}
+\newcommand{\InvIssuerCountryDe}{\VAR{land_de}}
+\newcommand{\InvIssuerEmail}{\VAR{aussteller.email}}
+\newcommand{\InvIssuerPhone}{\VAR{telefon}}
+\newcommand{\InvIssuerWeb}{\VAR{website}}
+
+% Rücksendeangabe: nur Name, Straße, Ort – mehr zeigt das Fenster des Umschlags nicht.
+\newcommand{\InvIssuerSenderLine}{\VAR{ruecksendeangabe}}
+
+\newcommand{\InvIssuerTaxNo}{\VAR{steuernummer}}
+\newcommand{\InvIssuerVatId}{\VAR{ustid}}
+
+\newcommand{\InvIssuerIban}{\VAR{iban}}
+\newcommand{\InvIssuerBic}{\VAR{bic}}
+\newcommand{\InvIssuerBank}{\VAR{bank}}

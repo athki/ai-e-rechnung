@@ -1,0 +1,16 @@
+kunde: sample-ltd
+datum: 2026-06-17
+leistungsdatum: 2026-06-10
+sprache: en
+positionen:
+  - beschreibung: "Panel participation, Sample Policy Forum, London"
+    menge: 2
+    einheit: stunde
+    einzelpreis: 200.00
+  - beschreibung: "Travel: flight FRA--LON--FRA, receipt attached"
+    menge: 1
+    einheit: pauschal
+    einzelpreis: 287.30
+belege:
+  - datei: flug.pdf
+    text: "Flight receipt FRA-LON-FRA (position 2)"

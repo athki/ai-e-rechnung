@@ -1,0 +1,26 @@
+% sample-receipt.tex — placeholder receipt used by the example invoices.
+% Build once: pdflatex sample-receipt.tex (produces sample-receipt.pdf).
+% Real invoices append the actual receipt PDFs instead.
+\documentclass[11pt,a4paper]{article}
+\usepackage[a4paper,margin=30mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{xcolor}
+\pagestyle{empty}
+\begin{document}
+\color{black!60}
+{\Large\bfseries SAMPLE AIRLINE}\\[2mm]
+E-ticket receipt --- placeholder for the template's example invoice\\[8mm]
+\begin{tabular}{@{}ll@{}}
+Passenger & MUSTERMANN / MAX MR\\
+Booking reference & ABC123\\
+Flight & FRA--LON 09 JUN 2026 · LON--FRA 11 JUN 2026\\
+Fare & EUR 241.40\\
+Taxes and fees & EUR 45.90\\
+\textbf{Total paid} & \textbf{EUR 287.30}\\
+\end{tabular}
+\vfill
+\small This page is not a real receipt. It exists so that the example invoice can
+demonstrate how attachments are appended.
+\end{document}

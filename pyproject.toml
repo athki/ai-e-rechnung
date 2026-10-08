@@ -1,0 +1,30 @@
+[project]
+name = "ai-e-rechnung"
+version = "0.1.0"
+description = "Rechnungen für ein deutsches Kleingewerbe: aus einem kurzen YAML eine vollständige Rechnung als PDF (LaTeX)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+]
+
+[project.scripts]
+rechnung = "rechnung.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rechnung"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

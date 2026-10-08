@@ -1,0 +1,11 @@
+# Steuerfall B: Unternehmen in der EU mit USt-IdNr., Reverse Charge, 0 %. Erfunden.
+firma: Exemple SARL
+ansprechpartner: Jean Exemple
+adresse:
+  strasse: 12 Rue de l'Exemple
+  plz: "75001"
+  ort: Paris
+land: FR
+ustid: FR12345678901
+unternehmer: true
+sprache: en

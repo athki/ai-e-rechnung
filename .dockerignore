@@ -1,0 +1,9 @@
+.git
+.venv
+.claude
+.DS_Store
+build
+demo-output
+config.toml
+**/__pycache__
+.pytest_cache

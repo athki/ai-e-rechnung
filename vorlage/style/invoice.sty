@@ -1,0 +1,490 @@
+% ============================================================
+% invoice.sty — mechanics. No choices here (style/defaults.sty) and no
+% identity (include/issuer.tex). No tax logic anywhere: the document
+% prints what it is given; which VAT case applies, which rate, which
+% note, is decided outside (rechnung.yaml -> resolve()).
+%
+% Document data (preamble, after the packages):
+%   \InvoiceKind{invoice|creditnote|cancellation|quote}   default: invoice
+%   \InvoiceNumber{2026-0001}   \InvoiceDate{22 September 2026}   \InvoiceCurrency{EUR}
+% Blocks (body, in this order):
+%   \invoiceaddress{recipient lines}{\metarow{label}{value}... \metasep \metarow...}   block 2 + 3
+%   \invoiceheading                                 block 4: "<kind> <number>" + grey hairline
+%   <introduction paragraph>                        block 5: content
+%   \begin{positions}[vat] \pos{..}{..}{..}{..}{..}{..} / \posvat{..}{7 args} \end{positions}   block 6
+%   \begin{totals} \totalrow{label}{\money{EUR}{..}} ... \totalfinal{label}{..} \end{totals}   block 7
+%   <tax note paragraph>                            block 8: content, from resolve()
+%   \invoicepayment{due date}{reference}            block 8: standard sentence with slots
+%   \invoiceclosing[text]                           closing + "valid without signature" (toggles)
+%   \invoiceattachments{\attachmentrow{1}{text}...} list at the end of the body
+%   \attachmentspage{\attachmentfile{1}{text}{file.pdf}...}   page 2: heading + list
+%   \attachmentpdf{1}{attachments/file.pdf}         appends the receipt pages (pdfpages)
+%   \begin{timesheet}[unit label]{position no} \timesheetrow{date}{activity}{3.5} ... \timesheettotal{12.0} \end{timesheet}
+%   \posunit{day}                                   unit dictionary (day, days, hour, hours, flat, each, km)
+%   \InvStr...                                      every fixed string, overridable per document
+%   \money{EUR}{1200.50}  \pct{19}                  money & numbers (include/currency.tex)
+%   \stub{note}                                     placeholder marker
+% Footer (every page) and letterhead (page 1) come from include/issuer.tex.
+% ============================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{style/invoice}[2026/09/22 invoice mechanics]
+
+\RequirePackage{style/defaults}
+\RequirePackage{etoolbox}
+\RequirePackage{iftex}
+
+% ------------------------------------------------------------
+% Fallbacks for settings added after the first release
+% ------------------------------------------------------------
+% A custom template folder may carry an older copy of defaults.sty. Every
+% setting added to defaults.sty from now on gets a fallback here, with the
+% same value, so such a copy keeps building and keeps its look:
+%   \providecommand{\InvoiceNewSetting}{value}
+%   \@ifundefinedcolor{NewColor}{\definecolor{NewColor}{HTML}{000000}}{}
+%   \ifdefined\ifNewToggle\else\newif\ifNewToggle \NewToggletrue\fi
+% tests/test_vorlage.py fails if one is missing; `rechnung doctor` names
+% the settings a custom defaults.sty does not know yet.
+% (none yet)
+
+% ------------------------------------------------------------
+% Language, fixed strings, unit dictionary
+% ------------------------------------------------------------
+\expandafter\RequirePackage\expandafter[\InvoiceLanguage]{babel}
+\RequirePackage[autostyle]{csquotes}
+
+\ifdefstring{\InvoiceLanguage}{ngerman}{%
+  % document kinds: heading word / metadata label for the number
+  \csdef{InvStr@kind@invoice}{Rechnung Nr.}%
+  \csdef{InvStr@kind@creditnote}{Gutschrift Nr.}%
+  \csdef{InvStr@kind@cancellation}{Stornorechnung Nr.}%
+  \csdef{InvStr@kind@quote}{Angebot Nr.}%
+  \csdef{InvStr@numlabel@invoice}{Rechnungsnummer}%
+  \csdef{InvStr@numlabel@creditnote}{Gutschriftsnummer}%
+  \csdef{InvStr@numlabel@cancellation}{Rechnungsnummer}%
+  \csdef{InvStr@numlabel@quote}{Angebotsnummer}%
+  \csdef{InvStr@stampkind@invoice}{Rechnung Nr.}%
+  \csdef{InvStr@stampkind@creditnote}{Gutschrift Nr.}%
+  \csdef{InvStr@stampkind@cancellation}{Stornorechnung Nr.}%
+  \csdef{InvStr@stampkind@quote}{Angebot Nr.}%
+  % metadata labels
+  \newcommand{\InvStrDate}{Rechnungsdatum}%
+  \newcommand{\InvStrServiceDate}{Leistungsdatum}%
+  \newcommand{\InvStrServicePeriod}{Leistungszeitraum}%
+  \newcommand{\InvStrDue}{Fällig am}%
+  \newcommand{\InvStrValidUntil}{Gültig bis}%
+  \newcommand{\InvStrReference}{Ihre Referenz}%
+  \newcommand{\InvStrCustomerNo}{Kundennummer}%
+  \newcommand{\InvStrOriginal}{Zu Rechnung Nr.}%
+  \newcommand{\InvStrTaxNo}{Steuernummer}%
+  \newcommand{\InvStrVatId}{USt-IdNr.}%
+  \newcommand{\InvStrOurTaxNo}{Unsere St.-Nr.}%
+  \newcommand{\InvStrOurVatId}{Unsere USt-IdNr.}%
+  \newcommand{\InvStrCustomerVatId}{Ihre USt-IdNr.}%
+  \newcommand{\InvStrCustomerRegister}{Ihre Register-Nr.}%
+  % positions table
+  \newcommand{\InvStrPos}{Pos}%
+  \newcommand{\InvStrDescription}{Beschreibung}%
+  \newcommand{\InvStrQty}{Menge}%
+  \newcommand{\InvStrUnit}{Einheit}%
+  \newcommand{\InvStrUnitPrice}{Einzelpreis}%
+  \newcommand{\InvStrVat}{USt}%
+  \newcommand{\InvStrAmount}{Gesamt}%
+  % totals
+  \newcommand{\InvStrNet}{Nettobetrag}%
+  \newcommand{\InvStrVatTotal}{Umsatzsteuer}%
+  \newcommand{\InvStrTotal}{Rechnungsbetrag}%
+  \newcommand{\InvStrSeeNote}{(siehe Hinweis)}%
+  % sentences
+  \newcommand{\InvStrPayment}[2]{Zahlbar bis #1 ohne Abzug per Überweisung in \InvCurrency\ auf
+    IBAN \InvIssuerIban\ (BIC \InvIssuerBic), Verwendungszweck: #2.}%
+  \newcommand{\InvStrClosing}{Vielen Dank für die Zusammenarbeit.}%
+  \newcommand{\InvStrNoSignature}{Diese Rechnung wurde maschinell erstellt und ist ohne Unterschrift gültig.}%
+  % attachments, timesheet
+  \newcommand{\InvStrAttachments}{Anlagen}%
+  \newcommand{\InvStrAttachmentStamp}[1]{Anlage #1 zu \InvStrStampKind\ \InvNumber}%
+  \newcommand{\InvStrTimesheet}{Leistungsnachweis}%
+  \newcommand{\InvStrPosition}{Position}%
+  \newcommand{\InvStrDateCol}{Datum}%
+  \newcommand{\InvStrActivity}{Tätigkeit}%
+  \newcommand{\InvStrHours}{Stunden}%
+  \newcommand{\InvStrSum}{Summe}%
+  % running lines
+  \newcommand{\InvStrPage}{Seite}%
+  \newcommand{\InvStrOf}{von}%
+  \let\InvIssuerCountry\InvIssuerCountryDe
+  % units
+  \csdef{InvStr@unit@day}{Tag}\csdef{InvStr@unit@days}{Tage}%
+  \csdef{InvStr@unit@hour}{Stunde}\csdef{InvStr@unit@hours}{Stunden}%
+  \csdef{InvStr@unit@flat}{pauschal}\csdef{InvStr@unit@each}{Stück}\csdef{InvStr@unit@km}{km}%
+}{%
+  \csdef{InvStr@kind@invoice}{Invoice no.}%
+  \csdef{InvStr@kind@creditnote}{Credit note no.}%
+  \csdef{InvStr@kind@cancellation}{Cancellation invoice no.}%
+  \csdef{InvStr@kind@quote}{Quote no.}%
+  \csdef{InvStr@numlabel@invoice}{Invoice no.}%
+  \csdef{InvStr@numlabel@creditnote}{Credit note no.}%
+  \csdef{InvStr@numlabel@cancellation}{Invoice no.}%
+  \csdef{InvStr@numlabel@quote}{Quote no.}%
+  \csdef{InvStr@stampkind@invoice}{invoice no.}%
+  \csdef{InvStr@stampkind@creditnote}{credit note no.}%
+  \csdef{InvStr@stampkind@cancellation}{cancellation invoice no.}%
+  \csdef{InvStr@stampkind@quote}{quote no.}%
+  \newcommand{\InvStrDate}{Invoice date}%
+  \newcommand{\InvStrServiceDate}{Date of service}%
+  \newcommand{\InvStrServicePeriod}{Service period}%
+  \newcommand{\InvStrDue}{Due date}%
+  \newcommand{\InvStrValidUntil}{Valid until}%
+  \newcommand{\InvStrReference}{Your reference}%
+  \newcommand{\InvStrCustomerNo}{Customer no.}%
+  \newcommand{\InvStrOriginal}{Original invoice no.}%
+  \newcommand{\InvStrTaxNo}{Tax no.}%
+  \newcommand{\InvStrVatId}{VAT ID}%
+  \newcommand{\InvStrOurTaxNo}{Our tax no.}%
+  \newcommand{\InvStrOurVatId}{Our VAT ID}%
+  \newcommand{\InvStrCustomerVatId}{Your VAT no.}%
+  \newcommand{\InvStrCustomerRegister}{Your company no.}%
+  \newcommand{\InvStrPos}{Pos}%
+  \newcommand{\InvStrDescription}{Description}%
+  \newcommand{\InvStrQty}{Qty}%
+  \newcommand{\InvStrUnit}{Unit}%
+  \newcommand{\InvStrUnitPrice}{Unit price}%
+  \newcommand{\InvStrVat}{VAT}%
+  \newcommand{\InvStrAmount}{Amount}%
+  \newcommand{\InvStrNet}{Net amount}%
+  \newcommand{\InvStrVatTotal}{VAT}%
+  \newcommand{\InvStrTotal}{Total}%
+  \newcommand{\InvStrSeeNote}{(see note below)}%
+  \newcommand{\InvStrPayment}[2]{Payable by #1 without deduction by bank transfer in \InvCurrency\ to
+    IBAN \InvIssuerIban\ (BIC \InvIssuerBic), reference #2.}%
+  \newcommand{\InvStrClosing}{Thank you for your business.}%
+  \newcommand{\InvStrNoSignature}{This invoice was generated electronically and is valid without signature.}%
+  \newcommand{\InvStrAttachments}{Attachments}%
+  \newcommand{\InvStrAttachmentStamp}[1]{Attachment #1 to \InvStrStampKind\ \InvNumber}%
+  \newcommand{\InvStrTimesheet}{Timesheet}%
+  \newcommand{\InvStrPosition}{position}%
+  \newcommand{\InvStrDateCol}{Date}%
+  \newcommand{\InvStrActivity}{Activity}%
+  \newcommand{\InvStrHours}{Hours}%
+  \newcommand{\InvStrSum}{Total}%
+  \newcommand{\InvStrPage}{Page}%
+  \newcommand{\InvStrOf}{of}%
+  \let\InvIssuerCountry\InvIssuerCountryEn
+  \csdef{InvStr@unit@day}{day}\csdef{InvStr@unit@days}{days}%
+  \csdef{InvStr@unit@hour}{hour}\csdef{InvStr@unit@hours}{hours}%
+  \csdef{InvStr@unit@flat}{flat}\csdef{InvStr@unit@each}{each}\csdef{InvStr@unit@km}{km}%
+}
+
+% money: auto follows the language
+\ifdefstring{\CurrencyLocale}{auto}{%
+  \ifdefstring{\InvoiceLanguage}{ngerman}{\renewcommand{\CurrencyLocale}{de}}%
+    {\renewcommand{\CurrencyLocale}{en}}}{}
+\ifdefstring{\CurrencyStyle}{auto}{%
+  \ifdefstring{\InvoiceLanguage}{ngerman}{\renewcommand{\CurrencyStyle}{iso-after}}%
+    {\renewcommand{\CurrencyStyle}{iso-before}}}{}
+% numbers set by siunitx follow the surrounding weight (bold total line)
+\AtBeginDocument{\sisetup{reset-text-series=false}}
+
+% ------------------------------------------------------------
+% Document data
+% ------------------------------------------------------------
+\newcommand{\InvKind}{invoice}
+\newcommand{\InvNumber}{}
+\newcommand{\InvDate}{}
+\newcommand{\InvCurrency}{EUR}
+\newcommand{\InvoiceKind}[1]{\renewcommand{\InvKind}{#1}}
+\newcommand{\InvoiceNumber}[1]{\renewcommand{\InvNumber}{#1}}
+\newcommand{\InvoiceDate}[1]{\renewcommand{\InvDate}{#1}}
+\newcommand{\InvoiceCurrency}[1]{\renewcommand{\InvCurrency}{#1}}
+\newcommand{\InvStrKindLabel}{\csuse{InvStr@kind@\InvKind}}       % "Invoice no."  (heading, running header)
+\newcommand{\InvStrNumberLabel}{\csuse{InvStr@numlabel@\InvKind}} % "Invoice no."  (metadata label)
+\newcommand{\InvStrStampKind}{\csuse{InvStr@stampkind@\InvKind}}  % "invoice no."  (attachment stamp)
+
+% ------------------------------------------------------------
+% Fonts (dispatch on \InvoiceFont)
+% ------------------------------------------------------------
+\RequirePackage[T1]{fontenc}
+\RequirePackage[utf8]{inputenc}
+\ifdefstring{\InvoiceFont}{charter-fira}{%
+  \IfFileExists{XCharter.sty}{\RequirePackage{XCharter}}{\RequirePackage{charter}}%
+  \IfFileExists{FiraSans.sty}{\RequirePackage[semibold,lining]{FiraSans}}%
+    {\RequirePackage{helvet}}%
+  \newcommand{\InvHeadFont}{\sffamily\bfseries}%
+  \newcommand{\InvRunFont}{\sffamily}%
+}{}
+\ifdefstring{\InvoiceFont}{sans}{%
+  \IfFileExists{FiraSans.sty}{\RequirePackage[sfdefault,light,semibold,lining]{FiraSans}}%
+    {\RequirePackage{helvet}\renewcommand{\familydefault}{\sfdefault}}%
+  \newcommand{\InvHeadFont}{\sffamily\bfseries}%
+  \newcommand{\InvRunFont}{\sffamily}%
+}{}
+\ifdefstring{\InvoiceFont}{serif}{%
+  \IfFileExists{XCharter.sty}{\RequirePackage{XCharter}}{\RequirePackage{charter}}%
+  \newcommand{\InvHeadFont}{\rmfamily\bfseries}%
+  \newcommand{\InvRunFont}{\rmfamily}%
+}{}
+\RequirePackage[protrusion=true,expansion=true]{microtype}
+
+% ------------------------------------------------------------
+% Page geometry, colors, paragraphs
+% ------------------------------------------------------------
+\RequirePackage[a4paper,
+  left=\InvoiceMarginLeft, right=\InvoiceMarginRight,
+  top=\InvoiceMarginTop, bottom=\InvoiceMarginBottom,
+  headheight=14pt, headsep=9mm, footskip=\InvoiceFootSkip]{geometry}
+\pagecolor{PaperBg}
+\color{InkMain}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{\InvoiceParSkip}
+\raggedbottom
+\RequirePackage{graphicx}
+
+% ------------------------------------------------------------
+% Lists: flat, tight, accent markers + compact list for table cells
+% ------------------------------------------------------------
+\RequirePackage{enumitem}
+\setlist{leftmargin=\InvoiceListIndent, itemsep=\InvoiceItemSep, parsep=0pt, topsep=3pt}
+\setlist[itemize,1]{label=\textcolor{Accent}{\rule[0.35ex]{0.55em}{0.55em}}}
+\setlist[itemize,2]{label=\textcolor{Accent!70}{\rule[0.35ex]{0.4em}{0.4em}}}
+\setlist[enumerate,1]{label=\InvRunFont\color{Accent}\arabic*.}
+\newlist{celllist}{itemize}{1}
+\setlist[celllist]{label=\textcolor{Accent}{\rule[0.3ex]{0.4em}{0.4em}},
+  leftmargin=1.2em, itemsep=0pt, parsep=0pt, topsep=2pt, partopsep=0pt,
+  after=\vspace{-\baselineskip}}
+
+% ------------------------------------------------------------
+% Letterhead (page 1): absolute placement under the accent frame rule
+% ------------------------------------------------------------
+\RequirePackage{tikz}
+\newcommand{\inv@letterhead}{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \draw[Accent, line width=\InvoiceRuleHeavy]
+      ([xshift=\InvoiceMarginLeft, yshift=-\InvoiceFrameTop]current page.north west) --
+      ([xshift=-\InvoiceMarginRight, yshift=-\InvoiceFrameTop]current page.north east);
+    \node[anchor=north west, inner sep=0pt, text width=\textwidth, align=left,
+          font=\InvHeadFont\InvoiceLetterheadSize, text=InkMain]
+      at ([xshift=\InvoiceMarginLeft, yshift=-\InvoiceLetterheadTop]current page.north west)
+      {\InvIssuerName};
+    % Links die Postanschrift, rechts die Kontaktwege: so bleibt der Kopf ruhig und
+    % die Kontaktdaten stehen nicht im Anschriftfeld, das der Umschlag zeigt.
+    \node[anchor=north west, inner sep=0pt, text width=0.55\textwidth, align=left,
+          font=\InvRunFont\InvoiceLabelSize, text=InkSoft]
+      at ([xshift=\InvoiceMarginLeft, yshift=-\InvoiceLetterheadLinesTop]current page.north west)
+      {\InvIssuerAddressLine\ifdefempty{\InvIssuerCountry}{}{\ \textperiodcentered\ \InvIssuerCountry}};
+    \node[anchor=north east, inner sep=0pt, text width=0.40\textwidth, align=right,
+          font=\InvRunFont\InvoiceLabelSize, text=InkSoft]
+      at ([xshift=-\InvoiceMarginRight, yshift=-\InvoiceLetterheadLinesTop]current page.north east)
+      {\InvIssuerEmail\\\InvIssuerPhone\\\InvIssuerWeb};
+  \end{tikzpicture}}
+
+% ------------------------------------------------------------
+% Footer (every page): accent frame rule, then bank · tax IDs · page
+% ------------------------------------------------------------
+\RequirePackage{lastpage}
+\RequirePackage{refcount}   % \getpagerefnumber: Seitenzahl als Zahl, fuer \ifnum
+\newcommand{\inv@footer}{%
+  \parbox[b]{\textwidth}{%
+    {\color{Accent}\hrule height \InvoiceRuleHeavy}\par
+    \vspace{7pt}%
+    {\InvRunFont\InvoiceFooterSize\color{InkSoft}%
+      \begin{minipage}[t]{60mm}\raggedright
+        \InvIssuerPerson\\IBAN \InvIssuerIban\\BIC \InvIssuerBic\ \textperiodcentered\ \InvIssuerBank
+      \end{minipage}\hfill
+      \begin{minipage}[t]{50mm}\raggedright
+        \InvStrTaxNo\ \InvIssuerTaxNo\\\InvStrVatId\ \InvIssuerVatId
+      \end{minipage}\hfill
+      \begin{minipage}[t]{30mm}\raggedleft
+        \mbox{}\\\mbox{}\\%
+        % Einseitige Rechnungen brauchen kein "Seite 1 von 1".
+        \ifnum\getpagerefnumber{LastPage}>1
+          \InvStrPage~\thepage\ \InvStrOf~\getpagerefnumber{LastPage}%
+        \fi
+      \end{minipage}\par}}}
+
+% ------------------------------------------------------------
+% Page styles: page 1 = letterhead, page 2+ = running header with grey hairline
+% ------------------------------------------------------------
+\RequirePackage{fancyhdr}
+\fancypagestyle{invoicefirst}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+  \fancyhead[C]{\inv@letterhead}%
+  \fancyfoot[C]{\inv@footer}}
+\fancypagestyle{invoice}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{\InvoiceRuleHair}%
+  \renewcommand{\headrule}{{\color{RuleGrey}\hrule width\headwidth height\headrulewidth}}%
+  \renewcommand{\footrulewidth}{0pt}%
+  \fancyhead[L]{\InvRunFont\InvoiceRunningSize\color{InkSoft}\InvStrKindLabel\ \InvNumber\ \textperiodcentered\ \InvIssuerName}%
+  \fancyhead[R]{\InvRunFont\InvoiceRunningSize\color{InkSoft}\InvDate}%
+  \fancyfoot[C]{\inv@footer}}
+\pagestyle{invoice}
+% Page 1 starts automatically: letterhead style, flow pushed down so that the
+% top of the recipient's first line sits at \InvoiceRecipientTop from the edge
+% (\vspace* leaves an empty box at the page top, hence topskip + baselineskip + parskip).
+\AtBeginDocument{\thispagestyle{invoicefirst}%
+  \vspace*{\dimexpr\InvoiceRecipientTop-\InvoiceMarginTop-\topskip-\baselineskip-\parskip+\ht\strutbox\relax}}
+
+% ------------------------------------------------------------
+% Block 2 + 3: recipient (left) and metadata (right)
+% ------------------------------------------------------------
+\RequirePackage{array}
+\RequirePackage{tabularx}
+\RequirePackage{booktabs}
+\RequirePackage{colortbl}
+\newcolumntype{D}{>{\raggedright\arraybackslash}X}   % umbrechende Textspalte (Metadaten, Positionen)
+\newcommand{\metarow}[2]{#1 & #2\\}
+% Grauer Strich zwischen den Abschnitten (Rechnung · unsere Steuerdaten · Kundendaten); so breit wie die Spalte.
+\newcommand{\metasep}{\specialrule{\InvoiceRuleHair}{\InvoiceMetaSepSkip}{\InvoiceMetaSepSkip}}
+% Die Ruecksendeangabe steht klein ueber der Empfaengeranschrift, damit die Post den
+% Brief zurueckschicken kann. Nur Name, Strasse, Ort - keine Kontaktdaten.
+\newcommand{\inv@senderline}{%
+  \ifdefempty{\InvIssuerSenderLine}{}{%
+    {\InvRunFont\InvoiceSenderLineSize\color{InkSoft}\InvIssuerSenderLine\par}%
+    \vspace{\InvoiceSenderLineSkip}}}
+\newcommand{\invoiceaddress}[2]{%
+  \noindent
+  \begin{minipage}[t]{\InvoiceRecipientWidth}\raggedright\setlength{\parskip}{0pt}%
+    \inv@senderline #1\par\end{minipage}%
+  \hfill
+  \begin{minipage}[t]{\InvoiceMetaWidth}\raggedright\setlength{\parskip}{0pt}%
+    % Unsichtbares Gegenstück zur Rücksendeangabe: sonst begänne der Metadatenblock
+    % eine Zeile höher als die Empfängeranschrift.
+    \ifdefempty{\InvIssuerSenderLine}{}{%
+      {\InvoiceSenderLineSize\strut\par}\vspace{\InvoiceSenderLineSkip}}%
+    \renewcommand{\arraystretch}{1.18}%
+    \arrayrulecolor{RuleGrey}%
+    % Die Wertspalte nimmt die Restbreite und bricht um: eine lange Referenz läuft
+    % sonst rechts aus der Seite.
+    \begin{tabularx}{\linewidth}[t]{@{}>{\InvRunFont\InvoiceLabelSize\color{InkSoft}}l@{\hspace{1.4em}}D@{}}
+      #2
+    \end{tabularx}\par\arrayrulecolor{black}%
+  \end{minipage}\par}
+
+% ------------------------------------------------------------
+% Block 4: heading — "<kind> <number>" by default, any text via the optional argument
+% ------------------------------------------------------------
+\newcommand{\invoiceheading}[1][\InvStrKindLabel\ \InvNumber]{%
+  \par\vspace{9mm}%
+  {\InvHeadFont\InvoiceHeadingSize\color{InkMain}#1\par}%
+  \nopagebreak\vspace{1.6mm}\nopagebreak
+  {\color{RuleGrey}\hrule height \InvoiceRuleLight}\par
+  \vspace{3.5mm}}
+
+% ------------------------------------------------------------
+% Block 6: positions table (grey rules, sans grey header, decimal-aligned amounts)
+%   \begin{positions}       Pos · Description · Qty · Unit · Unit price · Amount
+%   \begin{positions}[vat]  … · VAT · Amount   (only when an invoice mixes rates)
+% ------------------------------------------------------------
+\newcolumntype{Q}{S[table-format=\InvoiceQtyFormat, table-text-alignment=right]}
+\newcolumntype{M}{S[table-format=\InvoiceAmountFormat, table-text-alignment=right]}
+\newcolumntype{P}{@{}l D Q l M M@{}}      % single-rate invoice
+\newcolumntype{V}{@{}l D Q l M r M@{}}    % mixed-rate invoice (VAT column)
+\newcommand{\tabhead}[1]{\multicolumn{1}{l}{\InvRunFont\InvoiceTableHeadSize\color{InkSoft}#1}}
+\newcommand{\tabheadr}[1]{\multicolumn{1}{r}{\InvRunFont\InvoiceTableHeadSize\color{InkSoft}#1}}
+\newcommand{\tabheadrr}[2]{\multicolumn{1}{r}{\InvRunFont\InvoiceTableHeadSize\color{InkSoft}%
+  \begin{tabular}[b]{@{}r@{}}#1\\#2\end{tabular}}}
+\newif\ifinv@vat
+\newcommand{\inv@header}{%
+  \tabhead{\InvStrPos} & \tabhead{\InvStrDescription} & \tabheadr{\InvStrQty} & \tabhead{\InvStrUnit} &
+  \tabheadrr{\InvStrUnitPrice}{(\InvCurrency)} & \tabheadrr{\InvStrAmount}{(\InvCurrency)}\\}
+\newcommand{\inv@headervat}{%
+  \tabhead{\InvStrPos} & \tabhead{\InvStrDescription} & \tabheadr{\InvStrQty} & \tabhead{\InvStrUnit} &
+  \tabheadrr{\InvStrUnitPrice}{(\InvCurrency)} & \tabheadr{\InvStrVat} & \tabheadrr{\InvStrAmount}{(\InvCurrency)}\\}
+\newenvironment{positions}[1][]{%
+  \par\vspace{2mm}%
+  \InvoiceTableSize\setlength{\tabcolsep}{\InvoiceTabColSep}%
+  \renewcommand{\arraystretch}{\InvoiceTableStretch}%
+  \arrayrulecolor{RuleGrey}%
+  \ifstrequal{#1}{vat}{\inv@vattrue\def\inv@spec{V}}{\inv@vatfalse\def\inv@spec{P}}%
+  \edef\inv@begin{\noexpand\tabularx{\noexpand\textwidth}{\inv@spec}}%
+  \noindent\inv@begin
+  \toprule
+  \ifinv@vat\inv@headervat\else\inv@header\fi
+  \midrule}{%
+  \bottomrule
+  \endtabularx\par\arrayrulecolor{black}}
+\newcommand{\posunit}[1]{\ifcsdef{InvStr@unit@#1}{\csuse{InvStr@unit@#1}}{#1}}
+\newcommand{\pos}[6]{#1 & #2 & #3 & \posunit{#4} & #5 & #6\\}
+\newcommand{\posvat}[7]{#1 & #2 & #3 & \posunit{#4} & #5 & #6 & #7\\}
+
+% ------------------------------------------------------------
+% Block 7: totals, right-aligned under the table; as many lines as given
+% ------------------------------------------------------------
+\newenvironment{totals}{%
+  \par\vspace{3mm}%
+  \renewcommand{\arraystretch}{1.2}%
+  \arrayrulecolor{RuleGrey}%
+  \hfill\begin{tabular}{@{}l@{\hspace{3em}}r@{}}}{%
+  \end{tabular}\par\arrayrulecolor{black}\vspace{2mm}}
+\newcommand{\totalrow}[2]{#1 & #2\\}
+\newcommand{\totalfinal}[2]{\midrule\textbf{#1} & {\bfseries #2}\\}
+
+% ------------------------------------------------------------
+% Block 8: payment sentence, closing, signature line, attachments list
+% ------------------------------------------------------------
+\newcommand{\invoicepayment}[2]{\par\InvStrPayment{#1}{#2}\par}
+\newcommand{\invoiceclosing}[1][\InvStrClosing]{%
+  \ifInvoiceClosing\par\vspace{2mm}#1\\\InvIssuerPerson\par\fi
+  \ifInvoiceNoSignatureLine{\InvoiceSmallSize\color{InkSoft}\InvStrNoSignature\par}\fi}
+\newcommand{\attachmentrow}[2]{& #1 & #2\\}
+\newcommand{\invoiceattachments}[1]{%
+  \par\vspace{3mm}%
+  \begin{tabular}{@{}>{\InvRunFont\InvoiceLabelSize\color{InkSoft}}l@{\hspace{1.4em}}r@{\hspace{0.8em}}l@{}}
+    \InvStrAttachments #1
+  \end{tabular}\par}
+
+% ------------------------------------------------------------
+% Attachments page and appended receipt PDFs
+% ------------------------------------------------------------
+\RequirePackage{pdfpages}
+\newcommand{\attachmentfile}[3]{#1 & #2 & #3\\}
+\newcommand{\attachmentspage}[1]{%
+  \clearpage
+  \invoiceheading[\InvStrAttachments]%
+  \begin{tabular}{@{}r@{\hspace{0.8em}}l@{\hspace{2em}}>{\InvRunFont\InvoiceLabelSize\color{InkSoft}}l@{}}
+    #1
+  \end{tabular}\par}
+\newcommand{\inv@stamp}[1]{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=north east, inner sep=0pt, font=\InvRunFont\InvoiceLabelSize, text=InkSoft]
+      at ([xshift=-\InvoiceMarginRight, yshift=-22mm]current page.north east)
+      {\InvStrAttachmentStamp{#1}};
+  \end{tikzpicture}}
+% \attachmentpdf{n}{file}: every page of the PDF, scaled to sit inside header and footer
+\newcommand{\attachmentpdf}[2]{%
+  \includepdf[pages=-, scale=0.78, offset=0 -3mm,
+    pagecommand={\thispagestyle{invoice}\ifInvoiceAttachmentStamp\inv@stamp{#1}\fi}]{#2}}
+
+% ------------------------------------------------------------
+% Timesheet page: \begin{timesheet}[unit label]{position no} ... \end{timesheet}
+% ------------------------------------------------------------
+\newcolumntype{T}{@{}l D Q@{}}
+\newcommand{\inv@tsheader}[1]{\tabhead{\InvStrDateCol} & \tabhead{\InvStrActivity} & \tabheadr{#1}\\}
+\newenvironment{timesheet}[2][\InvStrHours]{%
+  \clearpage
+  \invoiceheading[\InvStrTimesheet\ --- \InvStrPosition~#2]%
+  \InvoiceTableSize\setlength{\tabcolsep}{\InvoiceTabColSep}%
+  \renewcommand{\arraystretch}{\InvoiceTableStretch}%
+  \arrayrulecolor{RuleGrey}%
+  \def\inv@tsunit{#1}%
+  \noindent\tabularx{\textwidth}{T}
+  \toprule
+  \inv@tsheader{\inv@tsunit}
+  \midrule}{%
+  \bottomrule
+  \endtabularx\par\arrayrulecolor{black}}
+\newcommand{\timesheetrow}[3]{#1 & #2 & #3\\}
+\newcommand{\timesheettotal}[1]{\midrule & \textbf{\InvStrSum} & {\bfseries\num{#1}}\\}
+
+% ------------------------------------------------------------
+% Stub marker
+% ------------------------------------------------------------
+\newcommand{\stub}[1]{{\color{InkSoft}\small\itshape [stub] #1}}
+
+% ------------------------------------------------------------
+% Hyperref last (quiet links; PDF metadata from the document data)
+% ------------------------------------------------------------
+\RequirePackage[colorlinks=true, linkcolor=InkMain, urlcolor=Accent, pdfborder={0 0 0}]{hyperref}
+\AtBeginDocument{\hypersetup{pdftitle={\InvStrKindLabel\ \InvNumber}, pdfauthor={\InvIssuerPerson},
+  pdfsubject={\InvIssuerName}, pdfcreator={\TemplateName\ \TemplateVersion}}}

@@ -1,0 +1,92 @@
+% ============================================================
+% defaults.sty — THE single file of style choices for invoices.
+% Everything visual is decided here; style/invoice.sty implements it.
+% The issuer's identity (name, address, contact, tax IDs, bank) lives
+% in include/issuer.tex. The invoice's language is set per document
+% (line one of rechnung.tex); this file only holds the default.
+% To start: copy the whole template folder, edit include/issuer.tex once,
+% then write one invoice per .tex file.
+% ============================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{style/defaults}[2026/09/22 invoice defaults]
+\RequirePackage{xcolor}   % needed for the color choices below
+
+% ---------- Template version (do not edit in a copy; see CHANGELOG.md) ----------
+\newcommand{\TemplateName}{ai-e-rechnung-vorlage}
+\newcommand{\TemplateVersion}{0.1.0}
+
+% ---------- Language (default; each invoice sets its own on line one) ----------
+% One of: english | ngerman
+% Drives hyphenation, quotes, every fixed string (labels, table headers,
+% totals, footer, closing) and the number format. Content stays content.
+\providecommand{\InvoiceLanguage}{english}
+
+% ---------- Identity: the issuer ----------
+\input{include/issuer}
+
+% ---------- Font family ----------
+% One of: charter-fira | sans | serif
+\newcommand{\InvoiceFont}{charter-fira}
+
+% ---------- Paper & ink ----------
+\definecolor{PaperBg}{HTML}{FFFFFF}    % white
+\definecolor{InkMain}{HTML}{1F1F1F}    % body text (near-black)
+\definecolor{InkSoft}{HTML}{6B6B6B}    % labels, letterhead lines, footer, secondary text
+\definecolor{RuleGrey}{HTML}{C8C8C8}   % every hairline between the two frame rules
+\definecolor{Accent}{HTML}{000000}     % black; frame rules, list markers, links – set your own colour here
+
+% ---------- Rules ----------
+% Rule of the page: accent frame rules at top and bottom, grey hairlines for
+% everything in between (heading underline, table rules, running header).
+\newcommand{\InvoiceRuleHeavy}{1.2pt}  % frame rules (top of page 1, above the footer)
+\newcommand{\InvoiceRuleLight}{0.5pt}  % heading underline
+\newcommand{\InvoiceRuleHair}{0.4pt}   % table rules, running-header hairline
+
+% ---------- Page geometry (A4) ----------
+\newcommand{\InvoiceMarginLeft}{25mm}
+\newcommand{\InvoiceMarginRight}{25mm}
+\newcommand{\InvoiceMarginTop}{28mm}     % text area on continuation pages
+\newcommand{\InvoiceMarginBottom}{34mm}  % room for the three-line footer
+\newcommand{\InvoiceFootSkip}{19mm}      % footer baseline = bottom margin - footskip (15 mm from the edge)
+\newcommand{\InvoiceFrameTop}{15mm}      % page 1: accent rule, measured from the top edge
+\newcommand{\InvoiceLetterheadTop}{19.5mm}   % page 1: issuer name line
+\newcommand{\InvoiceLetterheadLinesTop}{25.5mm} % page 1: grey address/contact lines
+\newcommand{\InvoiceRecipientTop}{45mm}  % page 1: Anschriftfeld nach DIN 5008 Form B (Fensterumschlag)
+\newcommand{\InvoiceRecipientWidth}{80mm}
+\newcommand{\InvoiceMetaWidth}{70mm}
+\newcommand{\InvoiceMetaSepSkip}{2.5pt}   % Luft über und unter den grauen Strichen zwischen den drei Metadaten-Abschnitten
+
+% ---------- Type scale (restrained contrast) ----------
+% Body is the class size (11pt).
+\newcommand{\InvoiceLetterheadSize}{\fontsize{12}{15}\selectfont}   % issuer name line
+\newcommand{\InvoiceHeadingSize}{\fontsize{16}{19}\selectfont}      % "Invoice no. …"
+\newcommand{\InvoiceSenderLineSize}{\fontsize{6.5}{8}\selectfont}  % Ruecksendeangabe ueber dem Empfaenger
+\newcommand{\InvoiceSenderLineSkip}{2.2mm}
+\newcommand{\InvoiceLabelSize}{\fontsize{8.5}{11}\selectfont}       % letterhead lines, metadata labels, attachments label
+\newcommand{\InvoiceTableHeadSize}{\fontsize{9}{11}\selectfont}     % positions table header
+\newcommand{\InvoiceTableSize}{\small}                              % positions table body
+\newcommand{\InvoiceFooterSize}{\fontsize{7.5}{9.5}\selectfont}
+\newcommand{\InvoiceRunningSize}{\footnotesize}                     % running header (page 2+)
+\newcommand{\InvoiceSmallSize}{\small}                              % "valid without signature" line
+
+% ---------- Paragraphs & lists ----------
+\newcommand{\InvoiceParSkip}{0.55\baselineskip}
+\newcommand{\InvoiceListIndent}{1.4em}
+\newcommand{\InvoiceItemSep}{2pt}
+
+% ---------- Positions table ----------
+\newcommand{\InvoiceQtyFormat}{3.1}      % siunitx table-format for the quantity column (3.1 fits 1 and 12.5)
+\newcommand{\InvoiceAmountFormat}{6.2}   % siunitx table-format for prices and amounts (up to 999 999.99)
+\newcommand{\InvoiceTabColSep}{4pt}
+\newcommand{\InvoiceTableStretch}{1.25}
+
+% ---------- Money & numbers (include/currency.tex) ----------
+% auto follows \InvoiceLanguage: english -> "EUR 1,200.50", ngerman -> "1.200,50 EUR"
+\newcommand{\CurrencyStyle}{auto}       % auto | iso-before | symbol | iso-after
+\newcommand{\CurrencyLocale}{auto}      % auto | en | de
+\newcommand{\CurrencyCodeFont}{}        % e.g. \sffamily to set codes in the heading face
+
+% ---------- Toggles ----------
+\newif\ifInvoiceClosing         \InvoiceClosingtrue          % "Thank you for your business." + name
+\newif\ifInvoiceNoSignatureLine \InvoiceNoSignatureLinetrue  % "generated electronically, valid without signature"
+\newif\ifInvoiceAttachmentStamp \InvoiceAttachmentStamptrue  % "Attachment n to invoice …" on appended PDFs

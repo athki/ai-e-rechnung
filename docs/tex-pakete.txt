@@ -1,0 +1,56 @@
+# TeX-Pakete, die das Werkzeug braucht. Einzige Quelle für Dockerfile und `rechnung doctor`.
+#
+# Format: <tlmgr-paket> <prüfdatei>
+#   prüfdatei = Datei, die kpsewhich finden muss, oder bin:<programm> für ein Programm im PATH.
+# Das Dockerfile installiert die erste Spalte per tlmgr; doctor prüft die zweite.
+# Jedes neue \usepackage in vorlage/ bekommt hier eine Zeile.
+
+# Engine und Build (pdflatex, wie die Vorlage in vorlage/)
+latex-bin        bin:pdflatex
+pdftex           bin:pdftex
+latexmk          bin:latexmk
+
+# Grundlagen
+l3kernel         expl3.sty
+l3packages       xparse.sty
+lm               lmodern.sty
+latex            article.cls
+tools            array.sty
+graphics         graphicx.sty
+oberdiek         refcount.sty
+etoolbox         etoolbox.sty
+iftex            iftex.sty
+
+# Schriften: XCharter (Fließtext), Fira Sans (Auszeichnung), beide offen lizenziert;
+# charter und helvet sind die Rückfallebene der Vorlage, euro das Eurozeichen.
+xcharter         XCharter.sty
+fira             FiraSans.sty
+psnfss           helvet.sty
+charter          bchr8a.pfb
+eurosym          eurosym.sty
+
+# Satz der Rechnung
+babel            babel.sty
+babel-german     ngermanb.ldf
+babel-english    english.ldf
+csquotes         csquotes.sty
+microtype        microtype.sty
+geometry         geometry.sty
+xcolor           xcolor.sty
+colortbl         colortbl.sty
+booktabs         booktabs.sty
+tools            tabularx.sty   # tabularx steckt im Paket tools
+siunitx          siunitx.sty
+enumitem         enumitem.sty
+fancyhdr         fancyhdr.sty
+lastpage         lastpage.sty
+pgf              tikz.sty
+pdfpages         pdfpages.sty
+hyperref         hyperref.sty
+
+# Indirekte Abhängigkeiten. Eine TeX-Live-Vollinstallation hat sie ohnehin; im schlanken
+# Container fehlen sie, deshalb stehen sie hier ausdrücklich (gefunden beim Bau von vorlage/beispiel.tex).
+xkeyval          xkeyval.sty
+xstring          xstring.sty
+carlisle         scalefnt.sty
+fontaxes         fontaxes.sty

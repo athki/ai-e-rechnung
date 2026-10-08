@@ -1,0 +1,127 @@
+% ============================================================
+% Erzeugt von render.py aus rechnung.resolved.json – nicht von Hand ändern.
+% Dieselbe Rechnung wie beispiel.tex, nur mit Platzhaltern. Hier wird nichts entschieden:
+% Steuerfall, Sätze, Summen, Hinweistext und Fälligkeit stehen schon fest.
+% Jinja-Delimiter der Vorlage: Wert = VAR, Logik = BLOCK.
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+\newcommand{\InvoiceLanguage}{\VAR{sprache_latex}}
+
+\usepackage{style/defaults}
+\usepackage{style/invoice}
+\input{include/currency}
+
+\InvoiceKind{invoice}
+\InvoiceNumber{\VAR{nummer}}
+\InvoiceDate{\VAR{datum}}
+\InvoiceCurrency{\VAR{waehrung}}
+
+\begin{document}
+
+% Block 2: Empfänger, rein postalisch – so, wie es im Fensterumschlag steht.
+\invoiceaddress{%
+\BLOCK{for zeile in empfaenger}
+  \VAR{zeile}\BLOCK{if not loop.last}\\\BLOCK{endif}
+
+\BLOCK{endfor}
+}{%
+% Block 3: Metadaten in drei Abschnitten, getrennt durch graue Striche: die Rechnung selbst,
+% unsere Steuerdaten („Unsere …“), die des Kunden („Ihre …“): seine Referenz, seine USt-IdNr.
+% (bei Fall B stehen so beide Nummern auf der Rechnung) und sein Registereintrag (belegt ohne
+% USt-IdNr. den Unternehmerstatus).
+  \metarow{\InvStrNumberLabel}{\InvNumber}
+  \metarow{\InvStrDate}{\InvDate}
+\BLOCK{if leistungsdatum_bis}
+  \metarow{\InvStrServicePeriod}{\VAR{leistungsdatum}--\VAR{leistungsdatum_bis}}
+\BLOCK{else}
+  \metarow{\InvStrServiceDate}{\VAR{leistungsdatum}}
+\BLOCK{endif}
+  \metarow{\InvStrDue}{\VAR{faelligkeit}}
+  \metasep
+\BLOCK{if aussteller.steuernummer}
+  \metarow{\InvStrOurTaxNo}{\InvIssuerTaxNo}
+\BLOCK{endif}
+\BLOCK{if aussteller.ustid}
+  \metarow{\InvStrOurVatId}{\InvIssuerVatId}
+\BLOCK{endif}
+\BLOCK{if referenz or kunde_ustid or kunde_register}
+  \metasep
+\BLOCK{endif}
+\BLOCK{if referenz}
+  \metarow{\InvStrReference}{\VAR{referenz}}
+\BLOCK{endif}
+\BLOCK{if kunde_ustid}
+  \metarow{\InvStrCustomerVatId}{\VAR{kunde_ustid}}
+\BLOCK{endif}
+\BLOCK{if kunde_register}
+  \metarow{\InvStrCustomerRegister}{\VAR{kunde_register}}
+\BLOCK{endif}
+}
+
+% Block 4: Betreff
+\invoiceheading
+
+\BLOCK{if einleitung}
+% Block 5: Einleitung
+\VAR{einleitung}
+\BLOCK{endif}
+
+% Block 6: Positionen. Die USt-Spalte erscheint nur bei gemischten Sätzen.
+\BLOCK{if gemischte_saetze}
+\begin{positions}[vat]
+\BLOCK{for p in positionen}
+  \posvat{\VAR{p.pos}}{\VAR{p.beschreibung}}{\VAR{p.menge}}{\VAR{p.einheit}}{\VAR{p.einzelpreis}}{\pct{\VAR{p.steuersatz}}}{\VAR{p.zeilensumme}}
+\BLOCK{endfor}
+\end{positions}
+\BLOCK{else}
+\begin{positions}
+\BLOCK{for p in positionen}
+  \pos{\VAR{p.pos}}{\VAR{p.beschreibung}}{\VAR{p.menge}}{\VAR{p.einheit}}{\VAR{p.einzelpreis}}{\VAR{p.zeilensumme}}
+\BLOCK{endfor}
+\end{positions}
+\BLOCK{endif}
+
+% Block 7: Summen. Bei 0 % bleibt die USt-Zeile stehen und verweist auf den Hinweis;
+% bei gemischten Sätzen steht das Netto je Satz (§ 14 Abs. 4 Nr. 8 UStG).
+\begin{totals}
+\BLOCK{if gemischte_saetze}
+\BLOCK{for g in steuergruppen}
+  \totalrow{\InvStrNet\ \pct{\VAR{g.satz}}}{\money{\VAR{waehrung}}{\VAR{g.netto}}}
+  \totalrow{\InvStrVatTotal\ \pct{\VAR{g.satz}}}{\money{\VAR{waehrung}}{\VAR{g.betrag}}}
+\BLOCK{endfor}
+\BLOCK{else}
+  \totalrow{\InvStrNet}{\money{\VAR{waehrung}}{\VAR{netto}}}
+\BLOCK{for g in steuergruppen}
+\BLOCK{if g.satz == "0"}
+  \totalrow{\InvStrVatTotal\ \InvStrSeeNote}{\money{\VAR{waehrung}}{\VAR{g.betrag}}}
+\BLOCK{else}
+  \totalrow{\InvStrVatTotal\ \pct{\VAR{g.satz}}}{\money{\VAR{waehrung}}{\VAR{g.betrag}}}
+\BLOCK{endif}
+\BLOCK{endfor}
+\BLOCK{endif}
+  \totalfinal{\InvStrTotal}{\money{\VAR{waehrung}}{\VAR{brutto}}}
+\end{totals}
+
+\BLOCK{if hinweis}
+% Block 8: Steuerhinweis, wörtlich aus rules.hinweis
+\VAR{hinweis}
+\BLOCK{endif}
+
+\invoicepayment{\VAR{faelligkeit}}{\InvNumber}
+
+\invoiceclosing
+
+\BLOCK{if belege}
+\invoiceattachments{%
+\BLOCK{for b in belege}
+  \attachmentrow{\VAR{loop.index}}{\VAR{b.text}}
+\BLOCK{endfor}
+}
+
+% Anlagen: jede Seite gestempelt
+\BLOCK{for b in belege}
+\attachmentpdf{\VAR{loop.index}}{attachments/\VAR{b.datei}}
+\BLOCK{endfor}
+\BLOCK{endif}
+
+\end{document}

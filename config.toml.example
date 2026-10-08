@@ -1,0 +1,42 @@
+# Nach ~/.config/rechnung/config.toml kopieren und anpassen.
+# Jede Option gibt es auch als Umgebungsvariable RECHNUNG_<OPTION> (Env gewinnt),
+# z. B. RECHNUNG_GEWERBE=/gewerbe. Den Pfad dieser Datei setzt RECHNUNG_CONFIG.
+
+# Wurzel des Gewerbe-Ordners. Fehlt sie, läuft alles im Demo-Modus gegen stammdaten.example/.
+gewerbe = "~/Gewerbe"
+
+# Unterordner, relativ zur Wurzel. Nur diese fasst das Werkzeug an.
+stammdaten = "stammdaten"
+kunden = "stammdaten/kunden"
+ausgang = "rechnung-ausgang"
+steuerberater = "steuerberater"
+
+# LaTeX-Engine: "pdflatex", "lualatex" oder "xelatex".
+# Default pdflatex.
+engine = "pdflatex"
+
+# Rechnungsnummer – das ganze Format an einer Stelle.
+# {jahr} = Jahr aus dem Rechnungsdatum, {lfd:04d} = laufende Nummer, vierstellig.
+# Eine Änderung wirkt nur auf NEUE Rechnungen; bestehende behalten Nummer und Ordnernamen.
+# Die laufende Nummer liest das Werkzeug aus den Ziffern am Ende der Ordner im Jahresordner,
+# unabhängig vom Präfix – ein Formatwechsel zählt also weiter statt bei 0001 neu zu beginnen.
+# `rechnung doctor` zeigt die nächste Nummer.
+nummer_format = "{jahr}-{lfd:04d}"
+
+# Zahlungsziel in Tagen ab Rechnungsdatum
+zahlungsziel_tage = 14
+
+# Sprache der Rechnung: "de" oder "en" – eine Sprache je Rechnung. Pro Kunde und pro Rechnung überschreibbar.
+sprache = "de"
+
+# Währung: "EUR", "USD" oder "GBP". Fremdwährung ist nur zulässig, wenn keine deutsche
+# Umsatzsteuer ausgewiesen wird (Steuerfall B und C).
+waehrung = "EUR"
+
+# Eigener Vorlagen-Ordner (optional). Darin liegen nur die Dateien, die anders aussehen sollen,
+# unter demselben Pfad wie in vorlage/ im Repo – meist nur style/defaults.sty. Beim Bauen
+# ersetzen sie die gleichnamigen Dateien der Standardvorlage; neue Dateien (z. B. ein Logo)
+# kommen dazu. resolved.json hält fest, welche eigenen Dateien beteiligt waren.
+# `rechnung doctor` zeigt, was ersetzt wird, und nennt Stellschrauben, die einer älteren
+# eigenen defaults.sty fehlen (für die gelten die Standardwerte).
+# vorlage = "~/meine-vorlage"

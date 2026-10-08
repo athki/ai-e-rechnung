@@ -1,0 +1,32 @@
+% ============================================================
+% issuer.tex — Aussteller: wer abrechnet, wo er sitzt, wie man ihn bezahlt.
+%
+% Hier stehen bewusst NUR erfundene Musterdaten, identisch mit
+% stammdaten.example/ich.yaml. Sie dienen dem Beispiel-PDF (vorlage/beispiel.pdf).
+% Für echte Rechnungen erzeugt render.py diese Datei zur Laufzeit im Temp-Verzeichnis
+% aus rechnung.resolved.json (Vorlage: issuer.tex.j2); die echten Daten liegen im
+% Gewerbe-Ordner und niemals in diesem Repo.
+% ============================================================
+
+% ---------- Briefkopf (Seite 1, unter der Rahmenlinie) ----------
+\newcommand{\InvIssuerName}{Mustermann Beratung}           % fette Zeile
+\newcommand{\InvIssuerPerson}{Max Mustermann}              % natürliche Person: Gruß, Kontoinhaber
+\newcommand{\InvIssuerAddressLine}{Musterstraße 1 \textperiodcentered\ 12345 Musterstadt}
+\newcommand{\InvIssuerCountryEn}{Germany}                  % an die Adresszeile in englischen Rechnungen
+\newcommand{\InvIssuerCountryDe}{}                         % … und in deutschen ({} = weglassen, Inland)
+\newcommand{\InvIssuerEmail}{max@example.com}
+\newcommand{\InvIssuerPhone}{+49 123 4567890}
+\newcommand{\InvIssuerWeb}{example.com}
+
+% ---------- Rücksendeangabe (klein über der Empfängeranschrift) ----------
+% Nur Name, Straße, Ort. Keine Kontaktdaten – sie stünden sonst im Fenster des Umschlags.
+\newcommand{\InvIssuerSenderLine}{Max Mustermann \textperiodcentered\ Musterstraße 1 \textperiodcentered\ 12345 Musterstadt}
+
+% ---------- Steuerliche Kennungen (Metadatenblock und Fußzeile) ----------
+\newcommand{\InvIssuerTaxNo}{143/123/12345}                % Steuernummer
+\newcommand{\InvIssuerVatId}{DE123456789}                  % USt-IdNr.
+
+% ---------- Bank (Zahlungssatz und Fußzeile) ----------
+\newcommand{\InvIssuerIban}{DE89 3704 0044 0532 0130 00}
+\newcommand{\InvIssuerBic}{COBADEFFXXX}
+\newcommand{\InvIssuerBank}{Musterbank}

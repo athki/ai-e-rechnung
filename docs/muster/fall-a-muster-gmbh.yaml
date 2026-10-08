@@ -1,0 +1,9 @@
+kunde: muster-gmbh
+datum: 2026-06-17
+leistungsdatum: 2026-06-10
+sprache: de
+positionen:
+  - beschreibung: "Beratung Marktzugang, Workshop in Berlin"
+    menge: 8
+    einheit: stunde
+    einzelpreis: 150.00

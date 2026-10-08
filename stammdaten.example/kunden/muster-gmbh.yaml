@@ -1,0 +1,14 @@
+# Steuerfall A: Unternehmen im Inland, 19 % USt. Erfunden.
+firma: Muster GmbH
+ansprechpartner: Erika Musterfrau
+adresse:
+  strasse: Musterallee 10
+  plz: "10115"
+  ort: Berlin
+land: DE
+ustid: DE987654321
+register:
+  name: Handelsregister Berlin-Charlottenburg
+  nummer: HRB 123456
+unternehmer: true
+sprache: de

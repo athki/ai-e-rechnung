@@ -1,0 +1,81 @@
+% ============================================================
+% beispiel.tex — eine Rechnung mit fest eingetippten Werten, damit jede Designrunde
+% in Sekunden kompiliert. Daten: stammdaten.example/ (Max Mustermann an Sample Ltd),
+% Steuerfall C – Unternehmen im Drittland, keine deutsche USt.
+%
+% Dieselbe Rechnung wie die Jinja-Vorlage rechnung.tex.j2, deren Werte aus
+% rechnung.resolved.json kommen. Hier stehen sie bewusst hart drin; beide zusammen ändern.
+%
+% Bauen:  make beispiel        (oder: latexmk beispiel.tex  in diesem Ordner)
+% Stil:   style/defaults.sty · Mechanik: style/invoice.sty · Aussteller: include/issuer.tex
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+\newcommand{\InvoiceLanguage}{english}   % english | ngerman — eine Sprache je Rechnung
+
+\usepackage{style/defaults}
+\usepackage{style/invoice}
+\input{include/currency}
+
+\InvoiceKind{invoice}                    % invoice | creditnote | cancellation | quote
+\InvoiceNumber{2026-0001}
+\InvoiceDate{17 June 2026}
+\InvoiceCurrency{EUR}
+
+\begin{document}
+
+% ---- Block 2: Empfänger (rein postalisch) · Block 3: Metadaten – Rechnung · unsere · Ihre Daten ----
+\invoiceaddress{%
+  Sample Ltd\\
+  Jane Sample\\
+  1 Sample Street\\
+  London EC1A 1AA\\
+  United Kingdom}{%
+  \metarow{\InvStrNumberLabel}{\InvNumber}
+  \metarow{\InvStrDate}{\InvDate}
+  \metarow{\InvStrServiceDate}{10 June 2026}
+  \metarow{\InvStrDue}{1 July 2026}
+  \metasep
+  \metarow{\InvStrOurTaxNo}{\InvIssuerTaxNo}
+  \metarow{\InvStrOurVatId}{\InvIssuerVatId}
+  \metasep
+  \metarow{\InvStrReference}{Sample Panel 2026}
+  \metarow{\InvStrCustomerVatId}{GB123456789}
+  \metarow{\InvStrCustomerRegister}{01234567 (Companies House)}}
+
+% ---- Block 4: Betreff ----
+\invoiceheading
+
+% ---- Block 5: Einleitung ----
+For my participation as a panelist at the Sample Policy Forum on 10~June 2026
+in London I invoice as follows:
+
+% ---- Block 6: Positionen ----
+\begin{positions}
+  \pos{1}{Panel participation, Sample Policy Forum, London, 10~June 2026}
+    {2}{hours}{200.00}{400.00}
+  \pos{2}{Travel: flight FRA--LON--FRA, 9--11 June 2026, receipt attached (attachment~1)}
+    {1}{flat}{287.30}{287.30}
+\end{positions}
+
+% ---- Block 7: Summen. Bei 0 % bleibt die USt-Zeile stehen und verweist auf den Hinweis. ----
+\begin{totals}
+  \totalrow{\InvStrNet}{\money{EUR}{687.30}}
+  \totalrow{\InvStrVatTotal\ \InvStrSeeNote}{\money{EUR}{0.00}}
+  \totalfinal{\InvStrTotal}{\money{EUR}{687.30}}
+\end{totals}
+
+% ---- Block 8: Steuerhinweis (Fall C, Text aus rules.hinweis) · Zahlung ----
+Place of supply: United Kingdom. Not subject to German VAT; the reverse charge may
+apply in the recipient's country.
+
+\invoicepayment{1 July 2026}{\InvNumber}
+
+\invoiceclosing
+
+\invoiceattachments{%
+  \attachmentrow{1}{Flight receipt FRA--LON--FRA, 9--11 June 2026 (position 2)}}
+
+% ---- Anlagen: jede Seite gestempelt "Attachment 1 to invoice no. …" ----
+\attachmentpdf{1}{attachments/sample-receipt.pdf}
+
+\end{document}

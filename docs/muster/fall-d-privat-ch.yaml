@@ -1,0 +1,11 @@
+kunde: privat-ch
+datum: 2026-06-17
+leistungsdatum: 2026-06-10
+sprache: de
+steuerfall: D
+begruendung: "Privatperson im Drittland, Leistungsort Inland (§ 3a Abs. 1 UStG)"
+positionen:
+  - beschreibung: "Vortrag, Zürich"
+    menge: 1
+    einheit: pauschal
+    einzelpreis: 900.00
