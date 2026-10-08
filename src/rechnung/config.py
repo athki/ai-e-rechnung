@@ -176,7 +176,7 @@ STAMMDATEN_GERUEST = """\
 # fassen sie nie an. Sie verlässt den Gewerbe-Ordner nicht.
 #
 # Pflicht nach § 14 Abs. 4 UStG: voller Name und Anschrift sowie steuernummer ODER ustid.
-# Bei EU-Kunden mit Reverse Charge (Fall B) wird die ustid gebraucht.
+# Bei EU-Kunden mit Reverse Charge wird die ustid gebraucht (außer als Kleinunternehmer).
 
 name:                     # voller Name der natürlichen Person, nicht nur die Geschäftsbezeichnung
 geschaeftsbezeichnung:    # optional, z. B. "Mustermann Beratung"
@@ -193,6 +193,7 @@ website:                  # optional
 
 steuernummer:             # z. B. 143/123/12345
 ustid:                    # z. B. DE123456789
+# kleinunternehmer: true   # § 19 UStG: keine Umsatzsteuer; Umsatzgrenzen prüfst du selbst
 
 bank:
   kontoinhaber:

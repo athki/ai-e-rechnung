@@ -117,6 +117,9 @@ class Stammdaten(Basis):
     website: str | None = None
     steuernummer: str | None = None
     ustid: str | None = None
+    # Kleinunternehmerregelung (§ 19 UStG). Die Umsatzgrenzen kennt das Werkzeug nicht; ob sie
+    # eingehalten sind, verantwortet der Nutzer (RULES.md R13).
+    kleinunternehmer: bool = False
     bank: Bank
 
     @model_validator(mode="after")

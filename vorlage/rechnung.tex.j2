@@ -82,9 +82,11 @@
 \BLOCK{endif}
 
 % Block 7: Summen. Bei 0 % bleibt die USt-Zeile stehen und verweist auf den Hinweis;
-% bei gemischten Sätzen steht das Netto je Satz (§ 14 Abs. 4 Nr. 8 UStG).
+% bei gemischten Sätzen steht das Netto je Satz (§ 14 Abs. 4 Nr. 8 UStG). Ein Kleinunternehmer
+% nennt das Entgelt in einer Summe, ohne Steuerzeile (§ 34a UStDV).
 \begin{totals}
-\BLOCK{if gemischte_saetze}
+\BLOCK{if ohne_steuerzeile}
+\BLOCK{elif gemischte_saetze}
 \BLOCK{for g in steuergruppen}
   \totalrow{\InvStrNet\ \pct{\VAR{g.satz}}}{\money{\VAR{waehrung}}{\VAR{g.netto}}}
   \totalrow{\InvStrVatTotal\ \pct{\VAR{g.satz}}}{\money{\VAR{waehrung}}{\VAR{g.betrag}}}

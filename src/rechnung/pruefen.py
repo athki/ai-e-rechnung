@@ -113,13 +113,15 @@ def befunde(r: Resolved, text: str) -> list[Befund]:
                                 enthaelt(n, f"{satz} %") or enthaelt(n, f"{satz}%"), "§ 14 Abs. 4 Nr. 8"))
     else:
         hinweis = r.hinweis[r.sprache] if r.hinweis else ""
-        liste.append(Befund("Steuerbetrag 0,00", geld(Decimal("0.00"), r.waehrung, r.sprache),
-                            enthaelt(n, geld(Decimal("0.00"), r.waehrung, r.sprache)), "§ 14 Abs. 4 Nr. 8"))
+        if r.ergebnis != "kleinunternehmer":   # dort gibt es keine Steuerzeile (§ 34a UStDV)
+            liste.append(Befund("Steuerbetrag 0,00", geld(Decimal("0.00"), r.waehrung, r.sprache),
+                                enthaelt(n, geld(Decimal("0.00"), r.waehrung, r.sprache)), "§ 14 Abs. 4 Nr. 8"))
         if hinweis:
             liste.append(Befund("Hinweis auf Steuerbefreiung / Nichtsteuerbarkeit", hinweis,
                                 enthaelt(n, hinweis), "§ 14 Abs. 4 Nr. 8"))
 
-    if r.ergebnis == "reverse_charge":
+    # Ein Kleinunternehmer muss die USt-IdNrn. nicht angeben (§ 19 Abs. 1 Satz 2 UStG, RULES.md R15).
+    if r.ergebnis == "reverse_charge" and not a.kleinunternehmer:
         liste.append(Befund("USt-IdNr. des Kunden (Reverse Charge)", k.ustid or "",
                             enthaelt(n, k.ustid or ""), "§ 14a Abs. 1"))
         liste.append(Befund("USt-IdNr. des Ausstellers (Reverse Charge)", a.ustid or "",

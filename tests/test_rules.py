@@ -117,6 +117,39 @@ def test_festgelegter_leistungsort_geht_durch_dieselben_regeln():
         rules.entscheide(kunde("CH", None, False), leistung(), ich(), festgelegt="FR")
 
 
+@pytest.mark.parametrize(
+    "land, ustid, unternehmer, einordnung, ort, ergebnis, regeln",
+    [
+        ("DE", "DE1", True, "beratung", None, "kleinunternehmer", {"R13", "R14", "R16"}),
+        ("CH", None, False, "sonstige", None, "kleinunternehmer", {"R4", "R13", "R14", "R16"}),
+        ("FR", None, True, "beratung", None, "reverse_charge", {"R14", "R15", "R28"}),   # ohne USt-IdNr.
+        ("FR", "FR1", True, "beratung", None, "reverse_charge", {"R14", "R15", "R28"}),
+        ("US", None, True, "beratung", None, "nicht_steuerbar", {"R14", "R17", "R31"}),
+        ("DE", None, False, "unterrichtend", "CH", "nicht_steuerbar", {"R5", "R14", "R17", "R31"}),
+    ],
+)
+def test_kleinunternehmer(land, ustid, unternehmer, einordnung, ort, ergebnis, regeln):
+    ku = ich(ustid=None).model_copy(update={"kleinunternehmer": True})   # oft ohne USt-IdNr.
+    e = rules.entscheide(kunde(land, ustid, unternehmer), leistung(einordnung, ort), ku)
+    assert e.ergebnis == ergebnis
+    assert e.satz == Decimal(0)                       # R14: nie ein Steuerausweis
+    assert regeln <= set(e.regeln)
+    assert "R10" not in e.regeln and "R29" not in e.regeln
+
+
+def test_kleinunternehmer_hinweis():
+    ku = ich().model_copy(update={"kleinunternehmer": True})
+    e = rules.entscheide(kunde("DE", None, False), leistung(), ku)
+    assert rules.hinweis(e, "de") == {"de": "Steuerfrei als Leistung eines Kleinunternehmers (§ 19 Abs. 1 UStG)."}
+    assert "small business exemption" in rules.hinweis(e, "en")["en"]
+
+
+def test_kleinunternehmer_auch_mit_festgelegtem_leistungsort_ohne_steuer():
+    ku = ich().model_copy(update={"kleinunternehmer": True})
+    e = rules.entscheide(kunde("FR", "FR1", True), leistung(), ku, festgelegt="DE")
+    assert (e.ergebnis, e.satz) == ("kleinunternehmer", Decimal(0))
+
+
 def test_gb_ist_drittland():
     assert "GB" not in rules.EU_LAENDER
     assert rules.kategorie("GB") == rules.DRITTLAND

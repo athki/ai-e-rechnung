@@ -143,6 +143,8 @@ def kontext(r: Resolved) -> dict:
             for g in r.steuergruppen
         ],
         "gemischte_saetze": len(r.steuergruppen) > 1,
+        # Kleinunternehmer: Entgelt in einer Summe, keine Steuerzeile (§ 34a UStDV, RULES.md R16).
+        "ohne_steuerzeile": r.ergebnis == "kleinunternehmer",
         "netto": zahl(r.netto),
         "ust_betrag": zahl(r.ust_betrag),
         "brutto": zahl(r.brutto),

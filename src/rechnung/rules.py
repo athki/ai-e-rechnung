@@ -185,13 +185,21 @@ class Entscheidung:
 def entscheide(
     kunde: Kunde, leistung: Leistung, aussteller: Stammdaten, festgelegt: str | None = None
 ) -> Entscheidung:
-    """Vom Leistungsort zu Ergebnis und Satz. `festgelegt` ist ein manuell gesetzter Leistungsort (R37)."""
+    """Vom Leistungsort zu Ergebnis und Satz. `festgelegt` ist ein manuell gesetzter Leistungsort (R37).
+
+    Für Kleinunternehmer (§ 19 UStG) bestimmt dieselbe Tabelle den Leistungsort; steuerfrei ist nur,
+    was im Inland steuerbar ist (R13), Steuer weist ein Kleinunternehmer nie aus (R14).
+    """
     ort = Ort(festgelegt, ("R37",), None) if festgelegt else leistungsort(kunde, leistung)
     unternehmer = ist_unternehmer(kunde)
+    ku = aussteller.kleinunternehmer
     regeln = ["R1", "R2", *ort.regeln, "R9"]
     k = kategorie(ort.land)
-    if k == INLAND:
-        ergebnis: Ergebnis = "inland"
+    if k == INLAND and ku:
+        ergebnis: Ergebnis = "kleinunternehmer"
+        regeln += ["R13", "R16"]
+    elif k == INLAND:
+        ergebnis = "inland"
         regeln.append("R10")
     elif k == EU:
         if not unternehmer:
@@ -199,15 +207,19 @@ def entscheide(
                 f"Leistungsort {ort.land} ist ein anderer EU-Staat, der Kunde ist kein Unternehmer: Die "
                 f"Umsatzsteuer wäre dort zu erklären. Das deckt das Werkzeug nicht ab (RULES.md R18)."
             )
-        _ustids_vorhanden(kunde, aussteller)
         ergebnis = "reverse_charge"
-        regeln += ["R11", "R28", "R29", "R30"]
+        if ku:
+            # § 19 Abs. 1 Satz 2 UStG schließt § 14a Abs. 1 Satz 3 aus: keine USt-IdNrn. nötig (R15).
+            regeln += ["R11", "R15", "R28", "R30"]
+        else:
+            _ustids_vorhanden(kunde, aussteller)
+            regeln += ["R11", "R28", "R29", "R30"]
     else:
         ergebnis = "nicht_steuerbar"
-        regeln.append("R31")
+        regeln += ["R17", "R31"] if ku else ["R31"]
     satz = REGELSATZ if ergebnis == "inland" else NULLSATZ
     if satz == NULLSATZ:
-        regeln.append("R12")
+        regeln.append("R14" if ku else "R12")
     return Entscheidung(ort, ergebnis, satz, unternehmer, tuple(regeln))
 
 
@@ -261,6 +273,12 @@ def hinweis(e: Entscheidung, sprache: str = "de") -> dict[str, str] | None:
             "de": (f"Leistungsort: {land_name(e.ort.land, 'de')}. Die Leistung ist in Deutschland "
                    f"nicht steuerbar{fundstelle}."),
             "en": f"Place of supply: {land_name(e.ort.land, 'en')}. Not subject to German VAT{nachsatz}",
+        }
+    elif e.ergebnis == "kleinunternehmer":
+        # § 34a Nr. 5 UStDV: Hinweis, dass die Steuerbefreiung für Kleinunternehmer gilt (R16).
+        texte = {
+            "de": "Steuerfrei als Leistung eines Kleinunternehmers (§ 19 Abs. 1 UStG).",
+            "en": "VAT exempt: small business exemption under section 19 (1) of the German VAT Act (UStG).",
         }
     else:
         return None

@@ -99,6 +99,19 @@ def test_reverse_charge_verlangt_beide_ustidnr(gewerbe):
 
 
 @BRAUCHT_LATEX
+def test_kleinunternehmer_ohne_steuerzeile_mit_hinweis(gewerbe):
+    ich = gewerbe / "stammdaten" / "ich.yaml"
+    ich.write_text(ich.read_text(encoding="utf-8") + "kleinunternehmer: true\n", encoding="utf-8")
+    ergebnis, pdf = baue("muster-gmbh")
+    assert ergebnis.ergebnis == "kleinunternehmer"
+    befunde = pruefen.pruefe(ergebnis, pdf)
+    assert all(b.gefunden for b in befunde)
+    assert "Hinweis auf Steuerbefreiung / Nichtsteuerbarkeit" in {b.angabe for b in befunde}
+    text = pruefen.normalisiere(pruefen.pdf_text(pdf))
+    assert "Umsatzsteuer" not in text and "Nettobetrag" not in text   # Entgelt in einer Summe
+
+
+@BRAUCHT_LATEX
 def test_fehlende_steuernummer_wird_rot(gewerbe, monkeypatch):
     """Die Steuernummer aus der Vorlage entfernen – die Prüfung muss das melden.
 

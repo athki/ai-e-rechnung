@@ -267,6 +267,28 @@ def test_reverse_charge_fristwarnung(gewerbe):
     assert len(ergebnis.warnungen) == 1 and "14a Abs. 1 Satz 2" in ergebnis.warnungen[0]
 
 
+def kleinunternehmer(gewerbe):
+    ich = gewerbe / "stammdaten" / "ich.yaml"
+    ich.write_text(ich.read_text(encoding="utf-8") + "kleinunternehmer: true\n", encoding="utf-8")
+
+
+def test_kleinunternehmer_inland_ohne_steuer(gewerbe):
+    kleinunternehmer(gewerbe)
+    nummer = lege_an(gewerbe, "muster-gmbh")
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    assert ergebnis.ergebnis == "kleinunternehmer"
+    assert ergebnis.ust_betrag == Decimal("0.00") and ergebnis.brutto == Decimal("1000.00")
+    assert ergebnis.hinweis == {"de": "Steuerfrei als Leistung eines Kleinunternehmers (§ 19 Abs. 1 UStG)."}
+
+
+def test_kleinunternehmer_mit_positionssatz_bricht_ab(gewerbe):
+    kleinunternehmer(gewerbe)
+    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: 1000.00\n    steuersatz: 7")
+    nummer = lege_an(gewerbe, "muster-gmbh", positionen)
+    with pytest.raises(r.ResolveFehler, match="kleinunternehmer"):
+        r.resolve(config.laden(), nummer)
+
+
 def test_reverse_charge_ohne_eigene_ustid_bricht_ab(gewerbe):
     from rechnung import rules
     ich = gewerbe / "stammdaten" / "ich.yaml"
