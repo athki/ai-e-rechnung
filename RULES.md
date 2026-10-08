@@ -52,8 +52,8 @@ Entscheidung im Nachhinein prüfbar.
 **IDs** werden einmal vergeben und nie neu nummeriert. Fällt eine Regel weg, bleibt ihre Nummer
 frei. Die Lean-Theoreme tragen dieselben IDs.
 
-**Feldnamen**, die es heute noch nicht gibt (`leistungsart`, `kleinunternehmer` …), sind vorläufig;
-festgelegt werden sie, wenn der Code angepasst wird.
+**Feldnamen** sind die aus `rechnung.yaml` (`leistung.einordnung`, `leistungsort` …), `ich.yaml`
+(`kleinunternehmer`) und den Kundendateien (`kunde.land` …).
 
 **Gesetzesstand:** Wortlaut von gesetze-im-internet.de (UStG, UStDV) und EUR-Lex (MwStSystRL,
 konsolidierte Fassung), abgerufen am 2026-10-08.
@@ -90,7 +90,8 @@ Rechnungsdaten stehen), liegt die Verantwortung beim Menschen, der die Rechnung 
 | Restaurationsleistungen, Arbeiten an beweglichen Gegenständen | § 3a Abs. 3 Nr. 3a | erkennt es nicht |
 | Vermittlungsleistungen an Privatpersonen | § 3a Abs. 3 Nr. 4 | erkennt es nicht |
 | Eintrittsberechtigungen zu Veranstaltungen an Unternehmer (Ticketverkauf) | § 3a Abs. 3 Nr. 5 | erkennt es nicht |
-| Telekommunikation, Rundfunk, elektronisch erbrachte Leistungen an Privatpersonen in der EU (OSS) | § 3a Abs. 5 | erkennt es nicht |
+| Telekommunikation, Rundfunk, elektronisch erbrachte Leistungen an Privatpersonen in der EU (OSS); bis 2015 Katalog Nr. 11–13 | § 3a Abs. 5 | keine Einordnung dafür; erkennt es nicht |
+| Bank-, Finanz- und Versicherungsumsätze, Geschäfte mit Gold, Silber, Platin | § 3a Abs. 4 Satz 2 Nr. 6, § 4 Nr. 8 und 10 | keine Einordnung dafür: meist steuerfrei, und Steuerbefreiungen außer § 19 kennt das Werkzeug nicht |
 | Nutzung oder Auswertung im Drittland | § 3a Abs. 8 | erkennt es nicht |
 | Leistungsort einer Privatperson-Leistung in einem anderen EU-Staat (z. B. Workshop für Privatleute in Paris) | § 3a Abs. 3 Nr. 3 | **bricht ab**: Steuer wäre im anderen Staat zu erklären |
 | Nicht unternehmerisch tätige juristische Person mit USt-IdNr. als Kunde | § 3a Abs. 2 Satz 3 | wird wie ein Unternehmer behandelt, wenn `unternehmer: true` gesetzt ist; Verantwortung beim Menschen |
@@ -371,7 +372,7 @@ vollständige Tabelle steht in Teil 4.
   Leistungsort dort, wo der Aussteller sein Unternehmen betreibt, also im Inland.
 - **Annahmen:** Der Aussteller betreibt sein Unternehmen vom Inland aus und hat keine Betriebsstätte
   im Ausland.
-- **Werkzeug:** `kunde.unternehmer: false`, `leistungsart: grundregel` (neu).
+- **Werkzeug:** `kunde.unternehmer: false`, `leistung.einordnung: sonstige`.
 - **Status:** Annahme – ungeprüft.
 
 #### R5 – Tätigkeitsleistung an Nichtunternehmer: Ort der Tätigkeit
@@ -382,7 +383,8 @@ vollständige Tabelle steht in Teil 4.
   Leistung tatsächlich erbracht wird.
 - **Annahmen:** Ob eine Leistung in diese Gruppe gehört, entscheidet der Mensch (Abgrenzung etwa
   Vortrag ↔ Beratung, siehe Teil 6). Die Leistung wird an einem Ort erbracht, in einem Land.
-- **Werkzeug:** `leistungsart: taetigkeit`, `taetigkeit_ort` (Land) (beide neu).
+- **Werkzeug:** `leistung.einordnung`: `kulturell`, `kuenstlerisch`, `wissenschaftlich`,
+  `unterrichtend`, `sportlich` oder `unterhaltend`; `leistung.ort` (Land).
 - **Status:** Annahme – ungeprüft.
 
 #### R6 – Tätigkeitsleistung, virtuell: Wohnsitz des Empfängers
@@ -392,7 +394,7 @@ vollständige Tabelle steht in Teil 4.
   verfügbar gemacht, liegt der Leistungsort dort, wo der Empfänger ansässig ist oder seinen Wohnsitz
   hat.
 - **Annahmen:** Das Land in den Kundendaten ist der Wohnsitz.
-- **Werkzeug:** `taetigkeit_ort: online` (neu).
+- **Werkzeug:** `leistung.ort: online`.
 - **Status:** Annahme – ungeprüft.
 
 #### R7 – Katalogleistung an Nichtunternehmer im Drittland: Wohnsitz des Empfängers
@@ -401,7 +403,7 @@ vollständige Tabelle steht in Teil 4.
 - **Regel:** Ist die Leistung eine der in § 3a Abs. 4 Satz 2 genannten und der Empfänger kein
   Unternehmer mit Wohnsitz oder Sitz im Drittlandsgebiet, liegt der Leistungsort an seinem Wohnsitz.
 - **Annahmen:** Welche Nummer des Katalogs zutrifft, entscheidet der Mensch und gibt sie an.
-- **Werkzeug:** `leistungsart: katalog`, `katalog_nr` (1–10, 14) (beide neu).
+- **Werkzeug:** `leistung.einordnung`: ein Wort aus der Katalogtabelle in Teil 4 (Nr. 1–5, 7–10, 14).
 - **Status:** Annahme – ungeprüft.
 
 #### R8 – Katalogleistung an Nichtunternehmer in der EU oder im Inland: Grundregel
@@ -413,7 +415,7 @@ vollständige Tabelle steht in Teil 4.
 - **Werkzeug:** wie R7.
 - **Status:** Annahme – ungeprüft.
 
-#### R9 – Eine Leistungsart je Rechnung; Nebenleistungen folgen der Hauptleistung
+#### R9 – Eine Einordnung je Rechnung; Nebenleistungen folgen der Hauptleistung
 
 - **Quelle:** Q14 (Einheitlichkeit der Leistung, Verwaltungsauffassung).
 - **Regel:** Eine Rechnung beschreibt eine Hauptleistung und ihre Nebenleistungen (z. B.
@@ -421,7 +423,8 @@ vollständige Tabelle steht in Teil 4.
   Mehrere Hauptleistungen verschiedener Art gehören auf getrennte Rechnungen.
 - **Annahmen:** Weiterberechnete Auslagen sind Nebenleistung und Teil des Entgelts, kein durchlaufender
   Posten. Getrennte Rechnungen sind strenger als nötig, aber zulässig.
-- **Werkzeug:** `leistungsart` gilt für die ganze Rechnung, nicht je Position.
+- **Werkzeug:** `leistung` gilt für die ganze Rechnung, nicht je Position; `leistung.taetigkeit`
+  beschreibt die Hauptleistung in eigenen Worten.
 - **Status:** Annahme – ungeprüft. Für Reisekosten als Nebenleistung im Drittland-Fall indirekt
   mitbestätigt (siehe R3), da die bestätigte Rechnung Flugkosten enthielt.
 
@@ -530,12 +533,14 @@ vollständige Tabelle steht in Teil 4.
 
 - **Quelle:** Grundsatz.
 - **Regel:** Das Werkzeug entscheidet nur, wenn alle Merkmale bekannt sind, die nach R3–R8 den
-  Leistungsort bestimmen: `kunde.land`, `kunde.unternehmer` (im Inland nur bei `taetigkeit` nötig,
-  sonst führt jede Antwort zum Inland), `leistungsart` (wenn der Kunde kein Unternehmer ist) und `taetigkeit_ort` bzw. `katalog_nr`.
-  Fehlt eines, bricht es ab und nennt das Feld. Bei einem EU-Unternehmer ohne USt-IdNr. bricht es
-  ebenfalls ab (R29).
-- **Annahmen:** keine.
-- **Werkzeug:** Abbruch mit Meldung, die Kunde, Feld und mögliche Werte nennt.
+  Leistungsort bestimmen. Fehlt eines, bricht es ab und nennt das Feld. Bei einem EU-Unternehmer ohne
+  USt-IdNr. bricht es ebenfalls ab (R29).
+- **Annahmen:** Ein Kunde in der EU mit USt-IdNr. gilt als Unternehmer, auch wenn `unternehmer` nicht
+  gesetzt ist (R3). Ein Kunde im Inland braucht `unternehmer` nur bei einer Tätigkeitsleistung (R5),
+  sonst führt jede Antwort zum Inland.
+- **Werkzeug:** `leistung` (`taetigkeit`, `einordnung`, bei Tätigkeitsleistungen `ort`) ist in jeder
+  Rechnung Pflicht – strenger als nötig, weil die Einordnung bei Unternehmern das Ergebnis nicht
+  ändert, aber im Ergebnis festgehalten werden soll. `kunde.unternehmer` nach der Annahme oben.
 - **Status:** Annahme – ungeprüft.
 
 ### Pflichtangaben (§ 14 Abs. 4 UStG)
@@ -705,82 +710,108 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
 #### R35 – Einordnung wird festgehalten
 
 - **Quelle:** Grundsatz.
-- **Regel:** Das Ergebnis jeder Rechnung hält fest, welche Merkmale (Länderkategorie, Unternehmer,
-  Leistungsart, Ort, Kleinunternehmer) und welche Regeln (IDs) zur Entscheidung geführt haben.
-- **Werkzeug:** Regel-Trace in `resolved.json` (neu).
+- **Regel:** Das Ergebnis jeder Rechnung hält fest, welche Merkmale (Land des Kunden, Unternehmer,
+  Tätigkeit, Einordnung, Ort, Kleinunternehmer), welcher Leistungsort und welche Regeln (IDs) zur
+  Entscheidung geführt haben.
+- **Werkzeug:** `leistung`, `leistungsort`, `ergebnis`, `regeln` in `rechnung.resolved.json`.
 - **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
 
-#### R36 – Warnung bei ungeprüften Regeln
+#### R36 – (entfallen)
+
+War: Warnung bei ungeprüften Regeln. Entfallen am 2026-10-08: Der Status steht in diesem Dokument,
+der Regel-Trace (R35) zeigt, welche Regeln eine Rechnung angewandt hat.
+
+#### R37 – Manuelle Festlegung des Leistungsorts nur mit Begründung
 
 - **Quelle:** Grundsatz.
-- **Regel:** Wird eine Regel mit Status „Annahme – ungeprüft“ angewandt, sagt das Werkzeug das bei
-  `resolve` und `bauen`.
-- **Werkzeug:** Meldung (neu).
-- **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
-
-#### R37 – Manuelle Festlegung nur mit Begründung
-
-- **Quelle:** Grundsatz.
-- **Regel:** Der Mensch darf das Ergebnis der Entscheidungstabelle überschreiben, aber nur mit
-  schriftlicher Begründung in der Rechnung. Die Begründung steht im Ergebnis. R12 und R14 gelten auch
-  dann.
-- **Annahmen:** Gedacht für Fälle außerhalb des Geltungsbereichs, die der Mensch nach Rücksprache
-  selbst verantwortet.
-- **Werkzeug:** `steuerfall` + `begruendung`.
+- **Regel:** Der Mensch darf den Leistungsort festlegen, statt ihn aus R3–R8 ableiten zu lassen, aber
+  nur mit schriftlicher Begründung in der Rechnung. Ergebnis, Satz und Pflichttext folgen dann aus dem
+  festgelegten Ort nach denselben Regeln wie sonst; R12, R14 und R18 gelten auch dann. Die Begründung
+  steht im Ergebnis.
+- **Annahmen:** Gedacht für Fälle außerhalb des Geltungsbereichs (z. B. Leistung an eine Betriebsstätte
+  des Kunden in einem anderen Land), die der Mensch nach Rücksprache selbst verantwortet. Festgelegt
+  wird eine Tatsache, nicht das Ergebnis – so ist etwa ein Kleinunternehmer mit 19 % ausgeschlossen.
+- **Werkzeug:** `leistungsort` + `begruendung` in `rechnung.yaml`.
 - **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
 
 ---
 
 ## Teil 4 – Zuordnung zum Werkzeug
 
+### Die Einordnung der Leistung
+
+`leistung.einordnung` nimmt genau ein Wort aus dieser Tabelle. Das Wort ist der Begriff aus dem Gesetz;
+die Gruppe leitet das Werkzeug daraus ab. `rechnung neu` schreibt die Liste als Kommentar in die Datei.
+
+| Einordnung | Fundstelle | Gruppe | Regel bei Privatpersonen |
+| --- | --- | --- | --- |
+| `kulturell` | § 3a Abs. 3 Nr. 3 | Tätigkeit | R5, R6 |
+| `kuenstlerisch` | § 3a Abs. 3 Nr. 3 | Tätigkeit | R5, R6 |
+| `wissenschaftlich` | § 3a Abs. 3 Nr. 3 | Tätigkeit | R5, R6 |
+| `unterrichtend` | § 3a Abs. 3 Nr. 3 | Tätigkeit | R5, R6 |
+| `sportlich` | § 3a Abs. 3 Nr. 3 | Tätigkeit | R5, R6 |
+| `unterhaltend` | § 3a Abs. 3 Nr. 3 | Tätigkeit | R5, R6 |
+| `rechte` | § 3a Abs. 4 Satz 2 Nr. 1 – Patente, Urheber-, Markenrechte und ähnliche Rechte | Katalog | R7, R8 |
+| `werbung` | Nr. 2 – Werbung, Öffentlichkeitsarbeit | Katalog | R7, R8 |
+| `beratung` | Nr. 3 – Rechtsanwalt, Steuerberater, Sachverständiger, Ingenieur, Dolmetscher, Übersetzer …; rechtliche, wirtschaftliche, technische Beratung | Katalog | R7, R8 |
+| `datenverarbeitung` | Nr. 4 | Katalog | R7, R8 |
+| `informationen` | Nr. 5 – Überlassung von Informationen, gewerblichen Verfahren und Erfahrungen | Katalog | R7, R8 |
+| – | Nr. 6 – Bank-, Finanz-, Versicherungsumsätze, Edelmetalle | außen vor (Teil 1) | – |
+| `personal` | Nr. 7 – Gestellung von Personal | Katalog | R7, R8 |
+| `verzicht-recht` | Nr. 8 – Verzicht auf ein Recht aus Nr. 1 | Katalog | R7, R8 |
+| `verzicht-taetigkeit` | Nr. 9 – Verzicht auf eine gewerbliche oder berufliche Tätigkeit | Katalog | R7, R8 |
+| `vermietung` | Nr. 10 – bewegliche Gegenstände, außer Beförderungsmittel | Katalog | R7, R8 |
+| – | Nr. 11–13 – weggefallen, heute § 3a Abs. 5 | außen vor (Teil 1) | – |
+| `energienetze` | Nr. 14 – Zugang zu Gas-, Strom-, Wärme-, Kältenetzen | Katalog | R7, R8 |
+| `sonstige` | § 3a Abs. 1 und 2 – keine der obigen | Grundregel | R4 |
+
+Bei Unternehmern ist die Gruppe gleichgültig: Es gilt immer R3.
+
 ### Die Entscheidungstabelle
 
-Eingaben: Land des Kunden (Inland / EU / Drittland), Unternehmer ja/nein, Leistungsart, Ort der
-Tätigkeit. Ausgabe: Leistungsort, und daraus Satz und Pflichttext.
+Eingaben: Land des Kunden (Inland / EU / Drittland), Unternehmer ja/nein, Gruppe der Einordnung, Ort
+der Tätigkeit. Ausgabe: Leistungsort, und daraus das Ergebnis mit Satz und Pflichttext.
 
 **Regelbesteuerung:**
 
-| # | Kunde | Leistungsart | Leistungsort | Satz | Pflichttext | Regeln | Fall heute |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Unternehmer, Inland | jede | Inland | 19 % / 7 % | – | R3, R10 | A |
-| 2 | Unternehmer, EU | jede | EU-Staat des Kunden | 0 % | Steuerschuldnerschaft | R3, R11, R28–R30 | B |
-| 3 | Unternehmer, Drittland | jede | Drittland des Kunden | 0 % | Leistungsort | R3, R31 | C |
-| 4 | Privat, Inland | `grundregel`, `katalog` | Inland | 19 % / 7 % | – | R4, R8, R10 | A |
-| 5 | Privat, EU | `grundregel`, `katalog` | Inland | 19 % / 7 % | – | R4, R8, R10 | D (heute Abbruch) |
-| 6 | Privat, Drittland | `grundregel` | Inland | 19 % / 7 % | – | R4, R10 | D (heute Abbruch) |
-| 7 | Privat, Drittland | `katalog` | Drittland des Kunden | 0 % | Leistungsort | R7, R31 | – (heute D, also falsch) |
-| 8 | Privat, jedes Land | `taetigkeit`, Ort Inland | Inland | 19 % / 7 % | – | R5, R10 | A bzw. D |
-| 9 | Privat, jedes Land | `taetigkeit`, Ort Drittland | Drittland der Tätigkeit | 0 % | Leistungsort | R5, R31 | – (heute falsch) |
-| 10 | Privat, jedes Land | `taetigkeit`, Ort anderer EU-Staat | dieser EU-Staat | – | – | R18 | **Abbruch** |
-| 11 | Privat, Inland/Drittland/EU | `taetigkeit`, online | Wohnsitz des Kunden | wie Zeile 4, 3 bzw. 10 | | R6 | – |
-| 12 | Unternehmer, EU, ohne USt-IdNr. | jede | EU-Staat des Kunden | – | – | R19, R29 | D (**Abbruch**, bleibt) |
-| 13 | Unternehmer unbekannt / Leistungsart fehlt | | | – | – | R19 | D (**Abbruch**, bleibt) |
+| # | Kunde | Einordnung | Leistungsort | Ergebnis | Satz | Pflichttext | Regeln | früher |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Unternehmer, Inland | jede | Inland | `inland` | 19 % / 7 % | – | R3, R10 | A |
+| 2 | Unternehmer, EU | jede | EU-Staat des Kunden | `reverse_charge` | 0 % | Steuerschuldnerschaft | R3, R11, R28–R30 | B |
+| 3 | Unternehmer, Drittland | jede | Drittland des Kunden | `nicht_steuerbar` | 0 % | Leistungsort | R3, R31 | C |
+| 4 | Privat, Inland | Grundregel, Katalog | Inland | `inland` | 19 % / 7 % | – | R4, R8, R10 | A |
+| 5 | Privat, EU | Grundregel, Katalog | Inland | `inland` | 19 % / 7 % | – | R4, R8, R10 | D (Abbruch) |
+| 6 | Privat, Drittland | Grundregel | Inland | `inland` | 19 % / 7 % | – | R4, R10 | D (Abbruch) |
+| 7 | Privat, Drittland | Katalog | Drittland des Kunden | `nicht_steuerbar` | 0 % | Leistungsort | R7, R31 | D (falsch) |
+| 8 | Privat, jedes Land | Tätigkeit, Ort Inland | Inland | `inland` | 19 % / 7 % | – | R5, R10 | A bzw. D |
+| 9 | Privat, jedes Land | Tätigkeit, Ort Drittland | Drittland der Tätigkeit | `nicht_steuerbar` | 0 % | Leistungsort | R5, R31 | A bzw. D (falsch) |
+| 10 | Privat, jedes Land | Tätigkeit, Ort anderer EU-Staat | dieser EU-Staat | – | – | – | R18 | **Abbruch** |
+| 11 | Privat, jedes Land | Tätigkeit, online | Wohnsitz des Kunden | wie Zeile 8, 9 bzw. 10 | | | R6 | – |
+| 12 | Unternehmer, EU, ohne USt-IdNr. | jede | EU-Staat des Kunden | – | – | – | R19, R29 | D (**Abbruch**, bleibt) |
+| 13 | Unternehmer unbekannt | | | – | – | – | R19 | D (**Abbruch**, bleibt) |
 
-Zeile 11 genauer: Kunde im Inland → Inland, 19 %; Kunde im Drittland → nicht steuerbar, Pflichttext
-Leistungsort; Kunde in einem anderen EU-Staat → Abbruch (R18).
+**Kleinunternehmer** (`kleinunternehmer: true` in `ich.yaml`): dieselbe Tabelle bestimmt den
+Leistungsort, dann gilt:
 
-**Kleinunternehmer** (`kleinunternehmer: true`): dieselbe Tabelle bestimmt den Leistungsort, dann gilt:
+| Leistungsort | Ergebnis | Satz | Pflichttext | Regeln |
+| --- | --- | --- | --- | --- |
+| Inland (Zeilen 1, 4, 5, 6, 8, 11) | `kleinunternehmer` | 0 % | Kleinunternehmer-Hinweis | R13, R14, R16 |
+| EU-Staat, Kunde Unternehmer (Zeile 2) | `reverse_charge` | 0 % | Steuerschuldnerschaft; USt-IdNrn. nicht Pflicht | R14, R15, R28, R30 |
+| Drittland (Zeilen 3, 7, 9, 11) | `nicht_steuerbar` | 0 % | Leistungsort | R14, R17, R31 |
+| Abbruch (Zeilen 10, 12, 13) | – | – | – | R18, R19 |
 
-| Leistungsort | Satz | Pflichttext | Regeln |
-| --- | --- | --- | --- |
-| Inland (Zeilen 1, 4, 5, 6, 8, 11) | 0 % | Kleinunternehmer-Hinweis | R13, R14, R16 |
-| EU-Staat, Kunde Unternehmer (Zeile 2) | 0 % | Steuerschuldnerschaft; USt-IdNrn. nicht Pflicht | R15, R28 |
-| Drittland (Zeilen 3, 7, 9) | 0 % | Leistungsort | R17, R31 |
-| Abbruch (Zeilen 10, 12, 13) | – | – | R18, R19 |
+### Die Ergebnisse
 
-### Was aus den Fällen A–D wird
+| Ergebnis | Bedeutung | früher |
+| --- | --- | --- |
+| `inland` | Leistungsort Inland, steuerpflichtig, 19 % oder 7 % | A, D |
+| `reverse_charge` | Leistungsort in einem anderen EU-Staat, Steuer schuldet der Kunde | B |
+| `nicht_steuerbar` | Leistungsort im Drittland | C |
+| `kleinunternehmer` | Leistungsort Inland, steuerfrei nach § 19 | – |
 
-- **A** (Kunde im Inland) bleibt: Leistungsort Inland, 19 % oder 7 %.
-- **B** (EU-Unternehmer mit USt-IdNr.) bleibt; dazu kommen die Prüfung der eigenen USt-IdNr. (R29) und
-  die Fristwarnung (R30). Der Pflichttext zitiert § 14a **Abs. 1** statt Abs. 5.
-- **C** (Unternehmer im Drittland) bleibt und wird erweitert: Auch Privatpersonen können einen
-  Leistungsort im Drittland haben (Zeilen 7, 9, 11).
-- **D** löst sich auf. Heute fasst D zwei verschiedene Dinge zusammen: fehlende Daten und
-  Privatpersonen mit Leistungsort im Inland. Künftig:
-  - fehlende Daten → Abbruch (R19), wie heute;
-  - Privatperson mit Leistungsort im Inland → wie A, ohne Abbruch (Zeilen 5, 6, 8);
-  - Privatperson mit Leistungsort im Drittland → wie C (Zeilen 7, 9).
-- Die Namen der Ergebnisse (Buchstaben oder sprechende Namen) werden bei der Umsetzung festgelegt.
+D gibt es nicht mehr. Es fasste zwei verschiedene Dinge zusammen: fehlende Daten (jetzt Abbruch, R19)
+und Privatpersonen, deren Leistungsort je nach Einordnung im Inland (`inland`) oder im Drittland
+(`nicht_steuerbar`) liegt.
 
 ---
 
@@ -828,5 +859,5 @@ Leistungsort; Kunde in einem anderen EU-Staat → Abbruch (R18).
 10. **Frist (R30):** Warnung genügt, oder soll das Werkzeug eine verspätete Rechnung verweigern?
 11. **Pflichtangaben bei nicht steuerbaren Leistungen (R20–R27):** Das Werkzeug wendet den vollen
     Katalog des § 14 Abs. 4 auch an, wenn der Leistungsort im Drittland liegt. Spricht etwas dagegen?
-12. **Manuelle Festlegung (R37):** Gibt es Fälle, in denen Sie eine Festlegung gegen die Tabelle
-    empfehlen würden? Oder soll es diese Möglichkeit gar nicht geben?
+12. **Manuelle Festlegung (R37):** Gibt es Fälle, in denen Sie einen anderen Leistungsort als den
+    aus der Tabelle empfehlen würden? Oder soll es diese Möglichkeit gar nicht geben?
