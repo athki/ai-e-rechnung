@@ -20,6 +20,7 @@ from rechnung import config, rules, vorlage
 from rechnung.models import (
     Input,
     Kunde,
+    Leistung,
     Resolved,
     ResolvedPosition,
     Stammdaten,
@@ -99,8 +100,13 @@ def _yaml(pfad: Path) -> dict:
 
 
 def _klammer_dict(wert: object) -> bool:
-    """`{354.82}` oder `{Event}` am Wertanfang liest YAML als Dictionary mit leeren Werten."""
-    return isinstance(wert, dict) and bool(wert) and all(v is None for v in wert.values())
+    """`{354.82}` oder `{Event}` am Wertanfang liest YAML als Dictionary mit leeren Werten.
+
+    Nicht gemeint ist ein Block, dessen Felder nur noch leer sind – etwa `leistung:` direkt nach
+    `rechnung neu`; dort sagt die Meldung des Modells, was fehlt.
+    """
+    return (isinstance(wert, dict) and bool(wert) and all(v is None for v in wert.values())
+            and not set(wert) <= set(Leistung.model_fields))
 
 
 def _wert(wert: object) -> str:
@@ -204,6 +210,21 @@ def finde_ordner(cfg: config.Config, nummer: str) -> Path:
 
 
 LEISTUNGSDATUM_PFLICHT = "# PFLICHT: Tag der Leistung, JJJJ-MM-TT"
+TAETIGKEIT_PFLICHT = "# PFLICHT: was geleistet wird, in eigenen Worten"
+EINORDNUNG_PFLICHT = "# PFLICHT: ein Wort aus der Liste unten"
+ORT_KOMMENTAR = "# nur bei kulturell … unterhaltend: Land (z. B. GB) oder online"
+
+
+def leistung_zeilen(taetigkeit: str | None, einordnung: str | None, ort: str | None) -> str:
+    """Der leistung:-Block für `rechnung neu`: vorbefüllt, was angegeben ist, sonst leer und markiert."""
+    def wert(w: str | None) -> str:
+        return json.dumps(w, ensure_ascii=False) if w else ""
+    zeilen = [
+        f"  taetigkeit: {wert(taetigkeit)}" if taetigkeit else f"  taetigkeit:             {TAETIGKEIT_PFLICHT}",
+        f"  einordnung: {einordnung}" if einordnung else f"  einordnung:             {EINORDNUNG_PFLICHT}",
+        f"  ort: {ort}" if ort else f"  # ort:                  {ORT_KOMMENTAR}",
+    ]
+    return "\n".join(zeilen)
 
 GERUEST = """\
 # Rechnung {nummer}
@@ -218,6 +239,37 @@ datum: {datum}              # Rechnungsdatum
 # referenz:                 # Bestellnummer oder Event des Kunden, falls vorhanden
 # einleitung:               # ein Satz über der Tabelle; ohne Angabe bleibt die Stelle leer
 
+# Was geleistet wird und wie es nach § 3a UStG einzuordnen ist – daraus folgt der Leistungsort.
+# Maßgeblich ist die Hauptleistung; Nebenleistungen wie Reisekosten folgen ihr.
+leistung:
+{leistung_zeilen}
+#
+# einordnung – genau ein Wort:
+#   § 3a Abs. 3 Nr. 3 – an Privatpersonen gilt der Ort der Tätigkeit (ort: Land oder online):
+#     kulturell | kuenstlerisch | wissenschaftlich | unterrichtend | sportlich | unterhaltend
+#   § 3a Abs. 4 Satz 2 – an Privatpersonen im Drittland gilt deren Wohnsitz:
+#     rechte              Nr. 1   Patente, Urheber-, Markenrechte und ähnliche Rechte
+#     werbung             Nr. 2   Werbung, Öffentlichkeitsarbeit
+#     beratung            Nr. 3   Rechtsanwalt, Steuerberater, Wirtschaftsprüfer, Sachverständiger,
+#                                 Ingenieur, Aufsichtsrat, Dolmetscher, Übersetzer; rechtliche,
+#                                 wirtschaftliche, technische Beratung
+#     datenverarbeitung   Nr. 4
+#     informationen       Nr. 5   Überlassung von Informationen, Verfahren, Erfahrungen
+#     (nicht unterstützt) Nr. 6   Bank-, Finanz-, Versicherungsumsätze, Gold/Silber/Platin –
+#                                 meist steuerfrei nach § 4 UStG; diese Befreiungen kennt das
+#                                 Werkzeug nicht
+#     personal            Nr. 7   Gestellung von Personal
+#     verzicht-recht      Nr. 8   Verzicht auf ein Recht aus Nr. 1
+#     verzicht-taetigkeit Nr. 9   Verzicht auf eine gewerbliche oder berufliche Tätigkeit
+#     vermietung          Nr. 10  bewegliche Gegenstände, außer Beförderungsmittel
+#     (weggefallen)       Nr. 11–13  heute § 3a Abs. 5 (Telekommunikation, Rundfunk,
+#                                 elektronische Leistungen) – nicht unterstützt
+#     energienetze        Nr. 14  Zugang zu Gas-, Strom-, Wärme-, Kältenetzen
+#   § 3a Abs. 1 und 2 – keine der obigen:
+#     sonstige
+# Bei Unternehmern als Kunden ist der Leistungsort immer ihr Sitz; die Einordnung wird trotzdem
+# festgehalten. Begriffe und Regeln: RULES.md, Teil 4.
+
 positionen:
   - beschreibung: {beschreibung}
     menge: 1
@@ -231,9 +283,9 @@ positionen:
 # belege:                   # Dateinamen in belege/, z. B. flug.pdf
 #   - flug.pdf
 
-# Steuerfall setzt das Werkzeug selbst. Nur überschreiben, wenn es einen Grund gibt –
-# dann ist begruendung: Pflicht:
-# steuerfall: D
+# Den Leistungsort leitet das Werkzeug selbst ab. Nur in Sonderfällen außerhalb von RULES.md
+# festlegen – dann ist begruendung: Pflicht (RULES.md R37):
+# leistungsort: CH
 # begruendung: ...
 """
 
@@ -245,11 +297,15 @@ def neu(
     datum: date | None = None,
     sprache: str | None = None,
     waehrung: str | None = None,
+    taetigkeit: str | None = None,
+    einordnung: str | None = None,
+    ort: str | None = None,
 ) -> tuple[Path, str]:
     """Legt Ordner und vorbefülltes rechnung.yaml an. Gibt (Ordner, Nummer) zurück.
 
     Ohne Leistungsdatum bleibt das Feld leer und markiert; `resolve` bricht ab, bis es dasteht.
-    Still das Rechnungsdatum einzusetzen hieße, eine Pflichtangabe zu raten.
+    Still das Rechnungsdatum einzusetzen hieße, eine Pflichtangabe zu raten. Ebenso die Einordnung
+    der Leistung: ohne Angabe bleibt `leistung:` leer, mit der Liste der Begriffe als Kommentar.
     """
     kunde = lade_kunde(cfg, kuerzel)
     datum = datum or date.today()
@@ -272,6 +328,7 @@ def neu(
             kuerzel=kuerzel,
             datum=datum.isoformat(),
             leistungsdatum_zeile=leistungsdatum_zeile,
+            leistung_zeilen=leistung_zeilen(taetigkeit, einordnung, ort),
             sprache_zeile=sprache_zeile,
             waehrung_zeile=waehrung_zeile,
             zahlungsziel=cfg.zahlungsziel_tage,
@@ -315,18 +372,15 @@ def rechne(
     sprache = eingabe.sprache or kunde.sprache or cfg.sprache
     waehrung = eingabe.waehrung or kunde.waehrung or cfg.waehrung
 
-    manuell = eingabe.steuerfall is not None
-    fall = eingabe.steuerfall or rules.steuerfall(kunde)
-    if fall == "D" and not manuell:
-        raise ResolveFehler(rules.fall_d_erklaerung(kunde))
-    basissatz = rules.steuersatz(fall)
+    entscheidung = rules.entscheide(kunde, eingabe.leistung, stammdaten, eingabe.leistungsort)
+    basissatz = entscheidung.satz
 
     positionen: list[ResolvedPosition] = []
     for i, p in enumerate(eingabe.positionen, start=1):
-        if p.steuersatz is not None and fall in ("B", "C"):
+        if p.steuersatz is not None and basissatz == rules.NULLSATZ:
             raise ResolveFehler(
-                f"Position {i}: steuersatz ist gesetzt, aber Steuerfall {fall} weist keine "
-                f"Umsatzsteuer aus. Den Satz aus der Position entfernen."
+                f"Position {i}: steuersatz ist gesetzt, aber das Ergebnis {entscheidung.ergebnis} weist "
+                f"keine deutsche Umsatzsteuer aus (RULES.md R12). Den Satz aus der Position entfernen."
             )
         satz = p.steuersatz if p.steuersatz is not None else basissatz
         positionen.append(
@@ -358,6 +412,16 @@ def rechne(
     netto = sum((g.netto for g in gruppen), Decimal(0))
     ust = sum((g.betrag for g in gruppen), Decimal(0))
 
+    warnungen: list[str] = []
+    if entscheidung.ergebnis == "reverse_charge":
+        frist = rules.frist_reverse_charge(eingabe.leistungsdatum_bis or eingabe.leistungsdatum)
+        if datum > frist:
+            warnungen.append(
+                f"Rechnungsdatum {datum} liegt nach der Frist {frist}: Bei Steuerschuldnerschaft des "
+                f"Leistungsempfängers ist die Rechnung bis zum 15. des Folgemonats auszustellen "
+                f"(§ 14a Abs. 1 Satz 2 UStG, RULES.md R30). Die Rechnung bleibt gültig."
+            )
+
     return Resolved(
         nummer=nummer,
         datum=datum,
@@ -370,10 +434,12 @@ def rechne(
         waehrung=waehrung,
         aussteller=stammdaten,
         kunde=kunde,
-        steuerfall=fall,
-        steuerfall_manuell=manuell,
+        leistung=eingabe.leistung,
+        leistungsort=entscheidung.ort.land,
+        leistungsort_manuell=eingabe.leistungsort is not None,
         begruendung=eingabe.begruendung,
-        hinweis=rules.hinweis(fall, kunde.land, sprache),
+        ergebnis=entscheidung.ergebnis,
+        hinweis=rules.hinweis(entscheidung, sprache),
         referenz=eingabe.referenz or kunde.referenz,
         einleitung=eingabe.einleitung,
         positionen=positionen,
@@ -386,6 +452,7 @@ def rechne(
         vorlage_eigen=eigen,
         input_hash=hash_,
         erzeugt_am=datetime.now().astimezone(),
+        warnungen=warnungen,
     )
 
 

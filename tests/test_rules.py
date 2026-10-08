@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from rechnung import rules
-from rechnung.models import Adresse, Kunde
+from rechnung.models import Adresse, Bank, Kunde, Leistung, Stammdaten
 
 
 def kunde(land: str, ustid: str | None = None, unternehmer: bool | None = None) -> Kunde:
@@ -21,78 +21,165 @@ def kunde(land: str, ustid: str | None = None, unternehmer: bool | None = None) 
     )
 
 
-# ---------------------------------------------------------------- Steuerfall
+# ---------------------------------------------------------------- Einordnung (RULES.md Teil 4)
+
+def test_einordnungen_passen_zum_modell():
+    from typing import get_args
+    from rechnung.models import TAETIGKEITEN, Einordnung
+    assert set(rules.EINORDNUNGEN) == set(get_args(Einordnung))
+    assert {w for w, (g, _) in rules.EINORDNUNGEN.items() if g == rules.TAETIGKEIT} == set(TAETIGKEITEN)
+
+
+def test_einordnungen_stehen_in_rules_md():
+    text = (Path(__file__).parent.parent / "RULES.md").read_text(encoding="utf-8")
+    for wort in rules.EINORDNUNGEN:
+        assert f"| `{wort}` |" in text, wort
+
+
+def test_katalog_nr_6_und_11_bis_13_fehlen_bewusst():
+    nummern = {f.rsplit("Nr. ", 1)[1].split()[0] for _, f in rules.EINORDNUNGEN.values() if "Abs. 4" in f}
+    assert nummern == {"1", "2", "3", "4", "5", "7", "8", "9", "10", "14"}
+
+
+# ---------------------------------------------------------------- Leistungsort und Ergebnis
+
+def ich(ustid: str | None = "DE123456789") -> Stammdaten:
+    return Stammdaten(
+        name="Max Mustermann", adresse=Adresse(strasse="Weg 1", plz="1", ort="Ort"), email="a@b.c",
+        steuernummer="1/2/3", ustid=ustid, bank=Bank(kontoinhaber="M", iban="DE89370400440532013000"),
+    )
+
+
+def leistung(einordnung: str = "sonstige", ort: str | None = None) -> Leistung:
+    return Leistung(taetigkeit="Test", einordnung=einordnung, ort=ort)
+
 
 @pytest.mark.parametrize(
-    "land, ustid, unternehmer, erwartet",
+    "land, ustid, unternehmer, einordnung, ort, erwartet_ort, ergebnis, regel",
     [
-        ("DE", "DE123", True, "A"),      # Inland, Unternehmen
-        ("DE", None, False, "A"),        # Inland, Privatperson
-        ("FR", "FR123", True, "B"),      # EU mit USt-IdNr.
-        ("AT", "ATU123", None, "B"),     # USt-IdNr. genügt
-        ("FR", None, True, "D"),         # EU ohne USt-IdNr. -> nicht B
-        ("GB", None, True, "C"),         # Drittland, Unternehmer
-        ("US", None, True, "C"),         # Delaware C-Corp
-        ("CH", None, False, "D"),        # Drittland, Privatperson
-        ("CH", None, None, "D"),         # Unternehmereigenschaft unbekannt
+        # Unternehmer: immer Sitz des Kunden (R3), gleich welche Einordnung
+        ("DE", "DE1", True, "beratung", None, "DE", "inland", "R3"),
+        ("FR", "FR1", True, "unterrichtend", "DE", "FR", "reverse_charge", "R3"),
+        ("AT", "ATU1", None, "sonstige", None, "AT", "reverse_charge", "R3"),   # USt-IdNr. genügt
+        ("GB", None, True, "sonstige", None, "GB", "nicht_steuerbar", "R3"),
+        ("US", None, True, "beratung", None, "US", "nicht_steuerbar", "R3"),
+        # Privatperson, Grundregel (R4)
+        ("DE", None, False, "sonstige", None, "DE", "inland", "R4"),
+        ("FR", None, False, "sonstige", None, "DE", "inland", "R4"),
+        ("CH", None, False, "sonstige", None, "DE", "inland", "R4"),
+        # Privatperson, Katalog: Drittland -> Wohnsitz (R7), sonst Inland (R8)
+        ("CH", None, False, "beratung", None, "CH", "nicht_steuerbar", "R7"),
+        ("US", None, False, "datenverarbeitung", None, "US", "nicht_steuerbar", "R7"),
+        ("FR", None, False, "beratung", None, "DE", "inland", "R8"),
+        ("DE", None, False, "werbung", None, "DE", "inland", "R8"),
+        # Privatperson, Tätigkeit: Ort der Tätigkeit (R5), online Wohnsitz (R6)
+        ("DE", None, False, "unterrichtend", "DE", "DE", "inland", "R5"),
+        ("DE", None, False, "unterrichtend", "CH", "CH", "nicht_steuerbar", "R5"),
+        ("CH", None, False, "kuenstlerisch", "DE", "DE", "inland", "R5"),
+        ("CH", None, False, "unterrichtend", "online", "CH", "nicht_steuerbar", "R6"),
+        ("DE", None, False, "unterhaltend", "online", "DE", "inland", "R6"),
+        # Inland ohne Angabe zum Unternehmer: jede Antwort führt zum Inland
+        ("DE", None, None, "beratung", None, "DE", "inland", "R4"),
     ],
 )
-def test_steuerfall(land, ustid, unternehmer, erwartet):
-    assert rules.steuerfall(kunde(land, ustid, unternehmer)) == erwartet
+def test_entscheidungstabelle(land, ustid, unternehmer, einordnung, ort, erwartet_ort, ergebnis, regel):
+    e = rules.entscheide(kunde(land, ustid, unternehmer), leistung(einordnung, ort), ich())
+    assert (e.ort.land, e.ergebnis) == (erwartet_ort, ergebnis)
+    assert regel in e.regeln
+    assert e.satz == (Decimal(19) if ergebnis == "inland" else Decimal(0))
+
+
+@pytest.mark.parametrize(
+    "land, ustid, unternehmer, einordnung, ort, meldung",
+    [
+        ("CH", None, None, "sonstige", None, "unternehmer"),           # R19
+        ("FR", None, None, "sonstige", None, "ustid"),                 # R19, Hinweis auf USt-IdNr.
+        ("DE", None, None, "unterrichtend", "CH", "unternehmer"),      # Tätigkeit braucht den Status
+        ("FR", None, True, "sonstige", None, "ustid"),                 # R29: EU-Unternehmer ohne USt-IdNr.
+        ("DE", None, False, "unterrichtend", "FR", "R18"),             # Workshop in Paris für Privatleute
+        ("FR", None, False, "unterrichtend", "online", "R18"),
+    ],
+)
+def test_abbruch_statt_falscher_entscheidung(land, ustid, unternehmer, einordnung, ort, meldung):
+    with pytest.raises(rules.RegelFehler, match=meldung):
+        rules.entscheide(kunde(land, ustid, unternehmer), leistung(einordnung, ort), ich())
+
+
+def test_reverse_charge_braucht_die_eigene_ustid():
+    with pytest.raises(rules.RegelFehler, match="Eigene USt-IdNr."):
+        rules.entscheide(kunde("FR", "FR1", True), leistung(), ich(ustid=None))
+
+
+def test_festgelegter_leistungsort_geht_durch_dieselben_regeln():
+    e = rules.entscheide(kunde("FR", "FR1", True), leistung(), ich(), festgelegt="CH")
+    assert (e.ort.land, e.ergebnis, e.ort.regeln) == ("CH", "nicht_steuerbar", ("R37",))
+    with pytest.raises(rules.RegelFehler, match="R18"):
+        rules.entscheide(kunde("CH", None, False), leistung(), ich(), festgelegt="FR")
 
 
 def test_gb_ist_drittland():
     assert "GB" not in rules.EU_LAENDER
+    assert rules.kategorie("GB") == rules.DRITTLAND
+    assert rules.kategorie("FR") == rules.EU
+    assert rules.kategorie("DE") == rules.INLAND
 
 
-def test_steuersatz_folgt_aus_dem_fall():
-    assert rules.steuersatz("A") == Decimal(19)
-    assert rules.steuersatz("B") == Decimal(0)
-    assert rules.steuersatz("C") == Decimal(0)
-    assert rules.steuersatz("D") == Decimal(19)
-
-
-def test_fall_d_erklaerung_nennt_den_weg_heraus():
-    eu = rules.fall_d_erklaerung(kunde("FR", None, True))
-    assert "ustid" in eu and "Fall B" in eu
-    drittland = rules.fall_d_erklaerung(kunde("CH", None, False))
-    assert "unternehmer: true" in drittland and "Fall C" in drittland
-    assert "begruendung" in drittland
+@pytest.mark.parametrize(
+    "leistung_bis, frist",
+    [(date(2026, 6, 10), date(2026, 7, 15)), (date(2026, 12, 31), date(2027, 1, 15))],
+)
+def test_frist_reverse_charge(leistung_bis, frist):
+    assert rules.frist_reverse_charge(leistung_bis) == frist
 
 
 # ---------------------------------------------------------------- Hinweistexte
 
-def test_hinweis_a_und_d_haben_keinen_text():
-    assert rules.hinweis("A", "DE", "de") is None
-    assert rules.hinweis("D", "CH", "de") is None
+def hinweis(land, ustid, unternehmer, einordnung="sonstige", ort=None, sprache="de"):
+    e = rules.entscheide(kunde(land, ustid, unternehmer), leistung(einordnung, ort), ich())
+    return rules.hinweis(e, sprache)
 
 
-def test_hinweis_b_reverse_charge():
-    de = rules.hinweis("B", "FR", "de")["de"]
-    assert "Steuerschuldnerschaft des Leistungsempfängers" in de   # Wortlaut nach § 14a Abs. 5 UStG
-    assert "Art. 196" in de
-    en = rules.hinweis("B", "FR", "en")["en"]
-    assert "Reverse charge" in en and "Art. 196" in en
+def test_hinweis_inland_hat_keinen_text():
+    assert hinweis("DE", None, True) is None
+    assert hinweis("CH", None, False) is None
 
 
-def test_hinweis_c_nennt_den_leistungsort():
-    de = rules.hinweis("C", "GB", "de")["de"]
-    assert "Leistungsort: Vereinigtes Königreich" in de
-    assert "§ 3a Abs. 2 UStG" in de
-    assert "Place of supply: United Kingdom" in rules.hinweis("C", "GB", "en")["en"]
-    assert "Vereinigte Staaten" in rules.hinweis("C", "US", "de")["de"]
-    assert "United States" in rules.hinweis("C", "US", "en")["en"]
+def test_hinweis_reverse_charge():
+    de = hinweis("FR", "FR1", True)["de"]
+    assert "Steuerschuldnerschaft des Leistungsempfängers" in de   # Wortlaut nach § 14a Abs. 1 UStG
+    assert "§ 14a Abs. 1 UStG" in de and "Art. 196" in de
+    en = hinweis("FR", "FR1", True, sprache="en")["en"]
+    assert "Reverse charge" in en and "Art. 196" in en and "§ 14a (1)" in en
+
+
+def test_hinweis_nicht_steuerbar_nennt_den_leistungsort():
+    de = hinweis("GB", None, True)["de"]
+    assert de == ("Leistungsort: Vereinigtes Königreich. Die Leistung ist in Deutschland nicht "
+                  "steuerbar (§ 3a Abs. 2 UStG).")
+    # Die vom Steuerberater gesehene englische Fassung bleibt wörtlich gleich.
+    assert hinweis("GB", None, True, sprache="en")["en"] == (
+        "Place of supply: United Kingdom. Not subject to German VAT; the reverse charge may apply "
+        "in the recipient's country.")
+    assert "Vereinigte Staaten" in hinweis("US", None, True)["de"]
+
+
+def test_hinweis_privatperson_ohne_reverse_charge_nachsatz():
+    en = hinweis("CH", None, False, "unterrichtend", "CH", sprache="en")["en"]
+    assert en == "Place of supply: Switzerland. Not subject to German VAT."
+    de = hinweis("CH", None, False, "beratung")["de"]
+    assert "Leistungsort: Schweiz" in de and "(§ 3a Abs. 4 UStG)" in de
+    assert "(§ 3a Abs. 3 Nr. 3 UStG)" in hinweis("DE", None, False, "unterrichtend", "CH")["de"]
 
 
 def test_hinweis_hat_genau_eine_sprache():
     """Eine Sprache je Rechnung – die Vorlage setzt keine zweisprachigen Labels."""
-    assert set(rules.hinweis("C", "US", "de")) == {"de"}
-    assert set(rules.hinweis("C", "US", "en")) == {"en"}
+    assert set(hinweis("US", None, True)) == {"de"}
+    assert set(hinweis("US", None, True, sprache="en")) == {"en"}
 
 
 def test_unbekanntes_land_sagt_was_zu_tun_ist():
     with pytest.raises(rules.RegelFehler, match="LAENDER"):
-        rules.hinweis("C", "XX", "de")
+        hinweis("XX", None, True)
 
 
 def test_jedes_eu_land_hat_einen_namen():

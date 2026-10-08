@@ -35,6 +35,9 @@ RECHNUNG = """\
 kunde: sample-ltd
 datum: 2026-09-23
 leistungsdatum: 2026-06-10
+leistung:
+  taetigkeit: Teilnahme als Panelist
+  einordnung: sonstige
 positionen:
   - beschreibung: Teilnahme als Panelist
     menge: 1

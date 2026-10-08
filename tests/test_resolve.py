@@ -14,9 +14,13 @@ RECHNUNG = """\
 kunde: {kunde}
 datum: 2026-09-22
 leistungsdatum: 2026-06-10
+leistung:
+{leistung}
 positionen:
 {positionen}
 """
+
+SONSTIGE = "  taetigkeit: Teilnahme als Panelist\n  einordnung: sonstige"
 
 EINE_POSITION = """\
   - beschreibung: Teilnahme als Panelist
@@ -41,10 +45,10 @@ def cfg(**env) -> config.Config:
     return config.laden(env={**{k: v for k, v in env.items()}}, pfad=config.REPO / "fehlt.toml")
 
 
-def lege_an(gewerbe, kunde="sample-ltd", positionen=EINE_POSITION, **extra) -> str:
+def lege_an(gewerbe, kunde="sample-ltd", positionen=EINE_POSITION, leistung=SONSTIGE, **extra) -> str:
     c = config.laden()
     ordner, nummer = r.neu(c, kunde, date(2026, 6, 10), date(2026, 9, 22))
-    text = RECHNUNG.format(kunde=kunde, positionen=positionen)
+    text = RECHNUNG.format(kunde=kunde, positionen=positionen, leistung=leistung)
     for schluessel, wert in extra.items():
         text += f"{schluessel}: {wert}\n"
     (ordner / r.INPUT_DATEI).write_text(text, encoding="utf-8")
@@ -61,14 +65,17 @@ def test_beispiel_stammdaten_sind_gueltig(gewerbe):
 
 
 @pytest.mark.parametrize(
-    "kuerzel, fall",
-    [("muster-gmbh", "A"), ("privat-de", "A"), ("exemple-sarl", "B"),
-     ("sample-ltd", "C"), ("sample-inc", "C"), ("privat-ch", "D")],
+    "kuerzel, ergebnis",
+    [("muster-gmbh", "inland"), ("privat-de", "inland"), ("exemple-sarl", "reverse_charge"),
+     ("sample-ltd", "nicht_steuerbar"), ("sample-inc", "nicht_steuerbar"), ("privat-ch", "inland")],
 )
-def test_jeder_beispielkunde_ergibt_seinen_fall(gewerbe, kuerzel, fall):
+def test_jeder_beispielkunde_ergibt_sein_ergebnis(gewerbe, kuerzel, ergebnis):
     from rechnung import rules
-    kunde = r.lade_kunde(config.laden(), kuerzel)
-    assert rules.steuerfall(kunde) == fall
+    from rechnung.models import Leistung
+    c = config.laden()
+    kunde = r.lade_kunde(c, kuerzel)
+    leistung = Leistung(taetigkeit="Beratung", einordnung="sonstige")
+    assert rules.entscheide(kunde, leistung, r.lade_stammdaten(c)).ergebnis == ergebnis
     assert kunde.kuerzel == kuerzel
 
 
@@ -109,7 +116,8 @@ def test_nummer_zaehlt_weiter(gewerbe, monkeypatch):
 
 def test_neu_legt_ordner_und_geruest_an(gewerbe):
     c = config.laden()
-    ordner, nummer = r.neu(c, "sample-inc", date(2026, 6, 10), date(2026, 9, 22))
+    ordner, nummer = r.neu(c, "sample-inc", date(2026, 6, 10), date(2026, 9, 22),
+                           taetigkeit="Panel: Zukunft der Arbeit", einordnung="unterrichtend", ort="GB")
     assert ordner == gewerbe / "rechnung-ausgang" / "2026" / nummer
     assert (ordner / "belege").is_dir()
     text = (ordner / r.INPUT_DATEI).read_text(encoding="utf-8")
@@ -118,14 +126,29 @@ def test_neu_legt_ordner_und_geruest_an(gewerbe):
     assert "leistungsdatum: 2026-06-10" in text
     eingabe = Input.model_validate(__import__("yaml").safe_load(text))
     assert eingabe.positionen[0].einheit == "pauschal"
+    assert eingabe.leistung.taetigkeit == "Panel: Zukunft der Arbeit"
+    assert eingabe.leistung.ort == "GB"
+
+
+def test_neu_ohne_leistung_laesst_sie_leer_und_listet_die_begriffe(gewerbe):
+    """Die Einordnung ist eine Wertung – sie wird nicht geraten, die Liste steht in der Datei."""
+    from rechnung import rules
+    ordner, _ = r.neu(config.laden(), "muster-gmbh", date(2026, 6, 10), date(2026, 9, 22))
+    text = (ordner / r.INPUT_DATEI).read_text(encoding="utf-8")
+    assert r.TAETIGKEIT_PFLICHT in text and r.EINORDNUNG_PFLICHT in text
+    for wort in rules.EINORDNUNGEN:
+        assert wort in text
+    assert "Nr. 6" in text and "Nr. 11–13" in text   # was fehlt, steht ausdrücklich da
 
 
 # ---------------------------------------------------------------- Rechnen
 
-def test_fall_c_null_prozent_und_hinweis(gewerbe):
+def test_nicht_steuerbar_null_prozent_und_hinweis(gewerbe):
     nummer = lege_an(gewerbe, "sample-ltd")
     ergebnis, ziel = r.resolve(config.laden(), nummer)
-    assert ergebnis.steuerfall == "C"
+    assert ergebnis.ergebnis == "nicht_steuerbar"
+    assert ergebnis.leistungsort == "GB"
+    assert ergebnis.leistung.einordnung == "sonstige"
     assert ergebnis.netto == Decimal("1000.00")
     assert ergebnis.ust_betrag == Decimal("0.00")
     assert ergebnis.brutto == Decimal("1000.00")
@@ -133,10 +156,10 @@ def test_fall_c_null_prozent_und_hinweis(gewerbe):
     assert ziel.is_file()
 
 
-def test_fall_a_neunzehn_prozent(gewerbe):
+def test_inland_neunzehn_prozent(gewerbe):
     nummer = lege_an(gewerbe, "muster-gmbh")
     ergebnis, _ = r.resolve(config.laden(), nummer)
-    assert ergebnis.steuerfall == "A"
+    assert ergebnis.ergebnis == "inland"
     assert ergebnis.ust_betrag == Decimal("190.00")
     assert ergebnis.brutto == Decimal("1190.00")
     assert ergebnis.hinweis is None
@@ -178,31 +201,78 @@ def test_rundung_je_zeile_und_summe(gewerbe):
     assert ergebnis.ust_betrag == Decimal("20.00")          # 105.26 * 0.19 = 20.0 (gerundet)
 
 
-def test_fall_d_bricht_ab(gewerbe):
-    nummer = lege_an(gewerbe, "privat-ch")
-    with pytest.raises(r.ResolveFehler) as e:
-        r.resolve(config.laden(), nummer)
-    assert "Steuerfall D erkannt" in str(e.value)
-    assert "begruendung" in str(e.value)
-
-
-def test_fall_d_mit_begruendung_laeuft(gewerbe):
-    nummer = lege_an(gewerbe, "privat-ch", steuerfall="D", begruendung="Privatkunde, 19 % korrekt")
+def test_privatperson_drittland_vortrag_ist_nicht_steuerbar(gewerbe):
+    """Früher Fall D mit 19 %: ein Vortrag in Zürich für eine Privatperson (§ 3a Abs. 3 Nr. 3)."""
+    leistung = "  taetigkeit: Vortrag\n  einordnung: unterrichtend\n  ort: CH"
+    nummer = lege_an(gewerbe, "privat-ch", leistung=leistung)
     ergebnis, _ = r.resolve(config.laden(), nummer)
-    assert ergebnis.steuerfall == "D"
-    assert ergebnis.steuerfall_manuell is True
+    assert ergebnis.ergebnis == "nicht_steuerbar"
+    assert ergebnis.leistungsort == "CH"
+    assert ergebnis.ust_betrag == Decimal("0.00")
+    assert "§ 3a Abs. 3 Nr. 3 UStG" in ergebnis.hinweis["de"]
+
+
+def test_privatperson_drittland_sonstige_ist_inland(gewerbe):
+    nummer = lege_an(gewerbe, "privat-ch")
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    assert ergebnis.ergebnis == "inland"
     assert ergebnis.ust_betrag == Decimal("190.00")
 
 
-def test_override_ohne_begruendung_schlaegt_fehl(gewerbe):
-    nummer = lege_an(gewerbe, "privat-ch", steuerfall="D")
+def test_leistung_fehlt_nennt_den_weg(gewerbe):
+    c = config.laden()
+    ordner, nummer = r.neu(c, "muster-gmbh", date(2026, 6, 10), date(2026, 9, 22))
+    with pytest.raises(r.ResolveFehler, match="taetigkeit fehlt"):
+        r.resolve(c, nummer)
+
+
+def test_ort_fehlt_bei_taetigkeit(gewerbe):
+    nummer = lege_an(gewerbe, "privat-ch", leistung="  taetigkeit: Vortrag\n  einordnung: unterrichtend")
+    with pytest.raises(r.ResolveFehler, match="ort fehlt"):
+        r.resolve(config.laden(), nummer)
+
+
+def test_alter_steuerfall_wird_erklaert(gewerbe):
+    nummer = lege_an(gewerbe, "privat-ch", steuerfall="D", begruendung="Privatkunde")
+    with pytest.raises(r.ResolveFehler, match="gibt es nicht mehr"):
+        r.resolve(config.laden(), nummer)
+
+
+def test_leistungsort_festgelegt_mit_begruendung(gewerbe):
+    nummer = lege_an(gewerbe, "exemple-sarl", leistungsort="CH",
+                     begruendung="Leistung an die Niederlassung in Zürich")
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    assert ergebnis.leistungsort == "CH"
+    assert ergebnis.leistungsort_manuell is True
+    assert ergebnis.ergebnis == "nicht_steuerbar"
+
+
+def test_leistungsort_ohne_begruendung_schlaegt_fehl(gewerbe):
+    nummer = lege_an(gewerbe, "privat-ch", leistungsort="DE")
     with pytest.raises(r.ResolveFehler, match="begruendung"):
         r.resolve(config.laden(), nummer)
 
 
-def test_begruendung_ohne_steuerfall_schlaegt_fehl(gewerbe):
+def test_begruendung_ohne_leistungsort_schlaegt_fehl(gewerbe):
     nummer = lege_an(gewerbe, "muster-gmbh", begruendung="einfach so")
-    with pytest.raises(r.ResolveFehler, match="steuerfall"):
+    with pytest.raises(r.ResolveFehler, match="leistungsort"):
+        r.resolve(config.laden(), nummer)
+
+
+def test_reverse_charge_fristwarnung(gewerbe):
+    """Leistung im Juni, Rechnung im September: nach dem 15. Juli, also eine Warnung (R30)."""
+    nummer = lege_an(gewerbe, "exemple-sarl")
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    assert ergebnis.ergebnis == "reverse_charge"
+    assert len(ergebnis.warnungen) == 1 and "14a Abs. 1 Satz 2" in ergebnis.warnungen[0]
+
+
+def test_reverse_charge_ohne_eigene_ustid_bricht_ab(gewerbe):
+    from rechnung import rules
+    ich = gewerbe / "stammdaten" / "ich.yaml"
+    ich.write_text(ich.read_text(encoding="utf-8").replace("ustid: DE123456789\n", ""), encoding="utf-8")
+    nummer = lege_an(gewerbe, "exemple-sarl")
+    with pytest.raises(rules.RegelFehler, match="Eigene USt-IdNr."):
         r.resolve(config.laden(), nummer)
 
 
@@ -217,14 +287,14 @@ def test_fremdwaehrung_ohne_ust_laeuft(gewerbe):
     nummer = lege_an(gewerbe, "sample-inc")     # Delaware, Währung USD aus der Kundendatei
     ergebnis, _ = r.resolve(config.laden(), nummer)
     assert ergebnis.waehrung == "USD"
-    assert ergebnis.steuerfall == "C"
+    assert ergebnis.ergebnis == "nicht_steuerbar"
     assert "United States" in ergebnis.hinweis["en"]
 
 
 def test_positions_steuersatz_bei_null_prozent_bricht_ab(gewerbe):
     positionen = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: 1000.00\n    steuersatz: 19")
     nummer = lege_an(gewerbe, "sample-ltd", positionen)
-    with pytest.raises(r.ResolveFehler, match="Steuerfall C"):
+    with pytest.raises(r.ResolveFehler, match="nicht_steuerbar"):
         r.resolve(config.laden(), nummer)
 
 
@@ -381,7 +451,8 @@ def test_neu_ohne_leistungsdatum_laesst_das_feld_leer(gewerbe):
 
 def test_neu_mit_leistungsdatum_traegt_es_ein(gewerbe):
     c = config.laden()
-    ordner, nummer = r.neu(c, "sample-ltd", date(2026, 6, 10), date(2026, 9, 22))
+    ordner, nummer = r.neu(c, "sample-ltd", date(2026, 6, 10), date(2026, 9, 22),
+                           taetigkeit="Panel", einordnung="sonstige")
     assert "leistungsdatum: 2026-06-10\n" in (ordner / r.INPUT_DATEI).read_text(encoding="utf-8")
     ergebnis, _ = r.resolve(c, nummer)
     assert ergebnis.leistungsdatum == date(2026, 6, 10)

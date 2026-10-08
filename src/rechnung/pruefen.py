@@ -119,9 +119,9 @@ def befunde(r: Resolved, text: str) -> list[Befund]:
             liste.append(Befund("Hinweis auf Steuerbefreiung / Nichtsteuerbarkeit", hinweis,
                                 enthaelt(n, hinweis), "§ 14 Abs. 4 Nr. 8"))
 
-    if r.steuerfall == "B":
+    if r.ergebnis == "reverse_charge":
         liste.append(Befund("USt-IdNr. des Kunden (Reverse Charge)", k.ustid or "",
-                            enthaelt(n, k.ustid or ""), "§ 14a Abs. 1 und 5"))
+                            enthaelt(n, k.ustid or ""), "§ 14a Abs. 1"))
         liste.append(Befund("USt-IdNr. des Ausstellers (Reverse Charge)", a.ustid or "",
                             enthaelt(n, a.ustid or ""), "§ 14a Abs. 1"))
 

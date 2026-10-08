@@ -1,17 +1,18 @@
-"""Die Regeln: Steuerfall, Steuersatz, Hinweistext, Fälligkeit, Rechnungsnummer.
+"""Die Regeln: Leistungsort, Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Rechnungsnummer.
 
-Regelbesteuerung. Die Kleinunternehmerregelung (§ 19 UStG) wird bewusst nicht unterstützt.
+Umsetzung von RULES.md; die Regel-IDs (R1 …) im Code verweisen dorthin.
 Jede Funktion hier hat einen Test in tests/test_rules.py.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
-from rechnung.models import Kunde, Steuerfall
+from rechnung.models import TAETIGKEITEN, Ergebnis, Kunde, Leistung, Stammdaten
 
 # EU-Mitgliedstaaten, Stand 2026-09-23. Vereinigtes Königreich seit 2021 Drittland.
 # Bei einer Änderung: Datum hier nachziehen.
@@ -20,7 +21,7 @@ EU_LAENDER: frozenset[str] = frozenset({
     "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
 })
 
-# Ländernamen für den Steuerhinweis (Fall C nennt den Leistungsort im Klartext).
+# Ländernamen für den Steuerhinweis (nicht_steuerbar nennt den Leistungsort im Klartext).
 LAENDER: dict[str, tuple[str, str]] = {
     "AE": ("Vereinigte Arabische Emirate", "United Arab Emirates"),
     "AT": ("Österreich", "Austria"),
@@ -88,76 +89,178 @@ def land_name(land: str, sprache: str = "de") -> str:
     return LAENDER[land][0 if sprache == "de" else 1]
 
 
-def steuerfall(kunde: Kunde) -> Steuerfall:
-    """A Inland · B EU-Unternehmen mit USt-IdNr. · C Drittland-Unternehmen · D sonst."""
-    if kunde.land == "DE":
-        return "A"
-    if kunde.land in EU_LAENDER and kunde.ustid:
-        return "B"
-    if kunde.land not in EU_LAENDER and kunde.unternehmer:
-        return "C"
-    return "D"
+# ---------------------------------------------------------------- Leistungsort (RULES.md R1–R9)
+
+INLAND, EU, DRITTLAND = "inland", "eu", "drittland"
+TAETIGKEIT, KATALOG, GRUNDREGEL = "taetigkeit", "katalog", "grundregel"
+
+# Einordnung -> (Gruppe, Fundstelle). Die Wörter sind die Begriffe aus § 3a UStG; RULES.md Teil 4
+# führt dieselbe Tabelle, tests/test_rules.py hält beide und models.Einordnung zusammen.
+EINORDNUNGEN: dict[str, tuple[str, str]] = {
+    **{wort: (TAETIGKEIT, "§ 3a Abs. 3 Nr. 3 UStG") for wort in TAETIGKEITEN},
+    "rechte": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 1 UStG"),
+    "werbung": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 2 UStG"),
+    "beratung": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 3 UStG"),
+    "datenverarbeitung": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 4 UStG"),
+    "informationen": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 5 UStG"),
+    "personal": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 7 UStG"),
+    "verzicht-recht": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 8 UStG"),
+    "verzicht-taetigkeit": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 9 UStG"),
+    "vermietung": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 10 UStG"),
+    "energienetze": (KATALOG, "§ 3a Abs. 4 Satz 2 Nr. 14 UStG"),
+    "sonstige": (GRUNDREGEL, "§ 3a Abs. 1 und 2 UStG"),
+}
 
 
-def fall_d_erklaerung(kunde: Kunde) -> str:
-    """Sagt, was fehlt – Fall D ist meist ein Datenfehler, kein gewollter Fall."""
+def kategorie(land: str) -> str:
+    """R1: Inland, übriges Gemeinschaftsgebiet oder Drittlandsgebiet (§ 1 Abs. 2a UStG)."""
+    if land == "DE":
+        return INLAND
+    return EU if land in EU_LAENDER else DRITTLAND
+
+
+def ist_unternehmer(kunde: Kunde) -> bool | None:
+    """`unternehmer` aus der Kundendatei; ein EU-Kunde mit USt-IdNr. gilt als Unternehmer (R3)."""
+    if kunde.unternehmer is not None:
+        return kunde.unternehmer
+    if kunde.ustid and kategorie(kunde.land) == EU:
+        return True
+    return None
+
+
+@dataclass(frozen=True)
+class Ort:
+    """Der Leistungsort und wie er zustande kam."""
+
+    land: str
+    regeln: tuple[str, ...]
+    fundstelle: str | None   # für den Hinweistext; None bei manueller Festlegung
+
+
+def unternehmer_fehlt(kunde: Kunde) -> str:
     kuerzel = kunde.kuerzel or kunde.firma
-    if kunde.land in EU_LAENDER:
-        grund = f"Kunde {kuerzel}, Land {kunde.land} (EU), aber keine ustid gesetzt"
-        weg = (
-            f"Wenn der Kunde Unternehmer mit USt-IdNr. ist, `ustid:` in "
-            f"stammdaten/kunden/{kuerzel}.yaml ergänzen – das ergibt Fall B mit 0 % "
-            f"(Reverse Charge)."
-        )
+    zeilen = [
+        f"Kunde {kuerzel}, Land {kunde.land}: `unternehmer` ist nicht gesetzt. Davon hängt der "
+        f"Leistungsort ab (§ 3a Abs. 1 und 2 UStG). In stammdaten/kunden/{kuerzel}.yaml eintragen:",
+        "  unternehmer: true     # bezieht die Leistung für sein Unternehmen",
+        "  unternehmer: false    # Privatperson",
+    ]
+    if kategorie(kunde.land) == EU:
+        zeilen.append("Ein Unternehmer in der EU braucht außerdem `ustid:` (§ 14a Abs. 1 UStG).")
+    return "\n".join(zeilen)
+
+
+def leistungsort(kunde: Kunde, leistung: Leistung) -> Ort:
+    """Leistungsort aus Status des Kunden, Einordnung der Leistung und Ort (R3–R8, RULES.md Teil 4)."""
+    gruppe, fundstelle = EINORDNUNGEN[leistung.einordnung]
+    unternehmer = ist_unternehmer(kunde)
+    if unternehmer:
+        return Ort(kunde.land, ("R3",), "§ 3a Abs. 2 UStG")
+    if unternehmer is None:
+        # Im Inland führt jede Antwort zum Inland – außer eine Tätigkeit wird woanders erbracht.
+        if kunde.land == "DE" and gruppe != TAETIGKEIT:
+            return Ort("DE", ("R3", "R4"), None)
+        raise RegelFehler(unternehmer_fehlt(kunde))
+    if gruppe == TAETIGKEIT:
+        assert leistung.ort is not None   # models.Leistung verlangt ihn
+        if leistung.ort == "online":
+            return Ort(kunde.land, ("R6",), fundstelle)
+        return Ort(leistung.ort, ("R5",), fundstelle)
+    if gruppe == KATALOG and kategorie(kunde.land) == DRITTLAND:
+        return Ort(kunde.land, ("R7",), "§ 3a Abs. 4 UStG")
+    return Ort("DE", ("R8",) if gruppe == KATALOG else ("R4",), "§ 3a Abs. 1 UStG")
+
+
+# ---------------------------------------------------------------- Ergebnis (R10–R12, R18, R29)
+
+@dataclass(frozen=True)
+class Entscheidung:
+    ort: Ort
+    ergebnis: Ergebnis
+    satz: Decimal
+    unternehmer: bool | None
+    regeln: tuple[str, ...]
+
+
+def entscheide(
+    kunde: Kunde, leistung: Leistung, aussteller: Stammdaten, festgelegt: str | None = None
+) -> Entscheidung:
+    """Vom Leistungsort zu Ergebnis und Satz. `festgelegt` ist ein manuell gesetzter Leistungsort (R37)."""
+    ort = Ort(festgelegt, ("R37",), None) if festgelegt else leistungsort(kunde, leistung)
+    unternehmer = ist_unternehmer(kunde)
+    regeln = ["R1", "R2", *ort.regeln, "R9"]
+    k = kategorie(ort.land)
+    if k == INLAND:
+        ergebnis: Ergebnis = "inland"
+        regeln.append("R10")
+    elif k == EU:
+        if not unternehmer:
+            raise RegelFehler(
+                f"Leistungsort {ort.land} ist ein anderer EU-Staat, der Kunde ist kein Unternehmer: Die "
+                f"Umsatzsteuer wäre dort zu erklären. Das deckt das Werkzeug nicht ab (RULES.md R18)."
+            )
+        _ustids_vorhanden(kunde, aussteller)
+        ergebnis = "reverse_charge"
+        regeln += ["R11", "R28", "R29", "R30"]
     else:
-        fehlt = "unternehmer: false" if kunde.unternehmer is False else "unternehmer fehlt"
-        grund = f"Kunde {kuerzel}, Land {kunde.land} (Drittland), {fehlt}"
-        weg = (
-            f"Wenn der Kunde Unternehmer ist, `unternehmer: true` in "
-            f"stammdaten/kunden/{kuerzel}.yaml ergänzen – das ergibt Fall C mit 0 % "
-            f"(nicht steuerbar, § 3a Abs. 2 UStG)."
+        ergebnis = "nicht_steuerbar"
+        regeln.append("R31")
+    satz = REGELSATZ if ergebnis == "inland" else NULLSATZ
+    if satz == NULLSATZ:
+        regeln.append("R12")
+    return Entscheidung(ort, ergebnis, satz, unternehmer, tuple(regeln))
+
+
+def _ustids_vorhanden(kunde: Kunde, aussteller: Stammdaten) -> None:
+    """R29: Bei Steuerschuldnerschaft des Empfängers stehen beide USt-IdNrn. auf der Rechnung."""
+    kuerzel = kunde.kuerzel or kunde.firma
+    if not kunde.ustid:
+        raise RegelFehler(
+            f"Kunde {kuerzel}, Land {kunde.land} (EU): `ustid` fehlt. Bei Steuerschuldnerschaft des "
+            f"Leistungsempfängers gehört seine USt-IdNr. auf die Rechnung (§ 14a Abs. 1 UStG). In "
+            f"stammdaten/kunden/{kuerzel}.yaml ergänzen; ist der Kunde Privatperson: unternehmer: false."
         )
-    return (
-        f"Steuerfall D erkannt: {grund}. Das bedeutet 19 % deutsche Umsatzsteuer.\n"
-        f"{weg}\n"
-        f"Wenn D wirklich richtig ist, in rechnung.yaml eintragen:\n"
-        f"  steuerfall: D\n"
-        f"  begruendung: <warum 19 % deutsche USt korrekt sind>"
-    )
+    if not aussteller.ustid:
+        raise RegelFehler(
+            "Eigene USt-IdNr. fehlt in stammdaten/ich.yaml: Bei Steuerschuldnerschaft des "
+            "Leistungsempfängers gehört sie auf die Rechnung (§ 14a Abs. 1 UStG)."
+        )
 
 
-def steuersatz(fall: Steuerfall) -> Decimal:
-    """Satz, der aus dem Fall folgt. In Fall A darf eine Position auf 7 % abweichen."""
-    return NULLSATZ if fall in ("B", "C") else REGELSATZ
+def frist_reverse_charge(leistung_bis: date) -> date:
+    """R30: Rechnung bis zum 15. des Monats, der auf den Monat der Leistung folgt (§ 14a Abs. 1 Satz 2)."""
+    if leistung_bis.month == 12:
+        return date(leistung_bis.year + 1, 1, 15)
+    return date(leistung_bis.year, leistung_bis.month + 1, 15)
 
 
-def hinweis(fall: Steuerfall, land: str, sprache: str = "de") -> dict[str, str] | None:
+# ---------------------------------------------------------------- Pflichttexte (R28, R31)
+
+def hinweis(e: Entscheidung, sprache: str = "de") -> dict[str, str] | None:
     """Textbaustein für Block 8, in der Sprache der Rechnung.
 
-    None, wenn Umsatzsteuer ausgewiesen wird (Fall A und D). Der Rückgabewert bleibt ein Dict
-    mit genau einem Schlüssel, damit die Sprache im eingefrorenen Ergebnis sichtbar bleibt.
+    None, wenn Umsatzsteuer ausgewiesen wird. Der Rückgabewert bleibt ein Dict mit genau einem
+    Schlüssel, damit die Sprache im eingefrorenen Ergebnis sichtbar bleibt.
     """
-    if fall == "B":
-        # § 14a Abs. 5 UStG verlangt für die ausgehende Rechnung wörtlich
-        # "Steuerschuldnerschaft des Leistungsempfängers"; die Steuerschuld des Kunden
-        # folgt aus Art. 196 MwStSystRL. § 13b UStG regelt den umgekehrten Fall
-        # (deutscher Empfänger schuldet die Steuer) und steht deshalb hier nicht.
+    if e.ergebnis == "reverse_charge":
+        # § 14a Abs. 1 Satz 1 UStG verlangt für einen Umsatz in einem anderen Mitgliedstaat wörtlich
+        # "Steuerschuldnerschaft des Leistungsempfängers"; die Steuerschuld des Kunden folgt aus
+        # Art. 196 MwStSystRL. § 14a Abs. 5 und § 13b UStG regeln den umgekehrten Fall
+        # (inländischer Empfänger schuldet die Steuer) und stehen deshalb hier nicht.
         texte = {
             "de": ("Steuerschuldnerschaft des Leistungsempfängers "
-                   "(§ 14a Abs. 5 UStG, Art. 196 MwStSystRL)."),
+                   "(§ 14a Abs. 1 UStG, Art. 196 MwStSystRL)."),
             "en": ("Reverse charge: VAT is owed by the recipient "
-                   "(Art. 196 VAT Directive 2006/112/EC, § 14a (5) German VAT Act)."),
+                   "(Art. 196 VAT Directive 2006/112/EC, § 14a (1) German VAT Act)."),
         }
-    elif fall == "C":
+    elif e.ergebnis == "nicht_steuerbar":
+        fundstelle = f" ({e.ort.fundstelle})" if e.ort.fundstelle else ""
+        # Der Nachsatz zum Reverse Charge passt nur, wenn der Kunde Unternehmer ist (R31).
+        nachsatz = "; the reverse charge may apply in the recipient's country." if e.unternehmer else "."
         texte = {
-            "de": (
-                f"Leistungsort: {land_name(land, 'de')}. Die Leistung ist in Deutschland "
-                f"nicht steuerbar (§ 3a Abs. 2 UStG)."
-            ),
-            "en": (
-                f"Place of supply: {land_name(land, 'en')}. Not subject to German VAT; "
-                f"the reverse charge may apply in the recipient's country."
-            ),
+            "de": (f"Leistungsort: {land_name(e.ort.land, 'de')}. Die Leistung ist in Deutschland "
+                   f"nicht steuerbar{fundstelle}."),
+            "en": f"Place of supply: {land_name(e.ort.land, 'en')}. Not subject to German VAT{nachsatz}",
         }
     else:
         return None
@@ -225,5 +328,5 @@ def waehrung_erlaubt(waehrung: str, saetze: list[Decimal]) -> None:
         raise RegelFehler(
             f"Währung {waehrung} mit Umsatzsteuerausweis: Dann muss der Steuerbetrag zusätzlich "
             f"in Euro angegeben werden (amtlicher Umrechnungskurs, § 16 Abs. 6 UStG). Das kann "
-            f"das Werkzeug noch nicht. Entweder in EUR fakturieren oder den Steuerfall prüfen."
+            f"das Werkzeug noch nicht. Entweder in EUR fakturieren oder die Einordnung prüfen."
         )

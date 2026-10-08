@@ -21,6 +21,9 @@ RECHNUNG = """\
 kunde: {kunde}
 datum: 2026-09-23
 leistungsdatum: 2026-06-10
+leistung:
+  taetigkeit: Teilnahme als Panelist
+  einordnung: sonstige
 positionen:
   - beschreibung: {beschreibung}
     menge: 1

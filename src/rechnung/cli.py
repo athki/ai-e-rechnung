@@ -95,6 +95,11 @@ def neu(
     datum: Annotated[str, typer.Option(help="Rechnungsdatum JJJJ-MM-TT, Default: heute")] = "",
     sprache: Annotated[str, typer.Option(help="de | en")] = "",
     waehrung: Annotated[str, typer.Option(help="EUR | USD | GBP")] = "",
+    taetigkeit: Annotated[str, typer.Option(help="Was geleistet wird, in eigenen Worten.")] = "",
+    einordnung: Annotated[str, typer.Option(
+        help="Begriff aus § 3a UStG, z. B. beratung, unterrichtend, sonstige (Liste: RULES.md Teil 4). "
+             "Ohne Angabe bleibt das Feld in rechnung.yaml leer und ist dort auszufüllen.")] = "",
+    ort: Annotated[str, typer.Option(help="Nur bei Tätigkeitsleistungen: Land (z. B. GB) oder online.")] = "",
 ) -> None:
     """Legt Ordner und vorbefülltes rechnung.yaml für eine neue Rechnung an."""
     cfg = _config()
@@ -107,9 +112,12 @@ def neu(
         raise _abbruch(ValueError(f"sprache muss eine von {config.SPRACHEN} sein"))
     if waehrung and waehrung not in config.WAEHRUNGEN:
         raise _abbruch(ValueError(f"waehrung muss eine von {config.WAEHRUNGEN} sein"))
+    if einordnung and einordnung not in rules.EINORDNUNGEN:
+        raise _abbruch(ValueError(f"einordnung muss eine von {', '.join(rules.EINORDNUNGEN)} sein"))
     try:
         ordner, nummer = resolve_mod.neu(
-            cfg, kunde, leistung, rechnungsdatum, sprache or None, waehrung or None
+            cfg, kunde, leistung, rechnungsdatum, sprache or None, waehrung or None,
+            taetigkeit or None, einordnung or None, ort or None,
         )
     except (resolve_mod.ResolveFehler, config.ConfigFehler, rules.RegelFehler) as e:
         raise _abbruch(e) from e
@@ -117,6 +125,9 @@ def neu(
     typer.echo(f"  {ordner / resolve_mod.INPUT_DATEI}")
     if leistung is None:
         typer.secho("  leistungsdatum ist noch leer – Pflicht, in rechnung.yaml eintragen.",
+                    fg=typer.colors.YELLOW)
+    if not (taetigkeit and einordnung):
+        typer.secho("  leistung: ist noch unvollständig – Pflicht, in rechnung.yaml eintragen.",
                     fg=typer.colors.YELLOW)
     typer.echo(f"\nAusfüllen, dann: rechnung resolve {nummer}")
 
@@ -128,8 +139,12 @@ def _zeige(r: Resolved, ziel: Path) -> None:
                + (f" bis {r.leistungsdatum_bis}" if r.leistungsdatum_bis else ""))
     typer.echo(f"  Fällig          {r.faelligkeit}")
     typer.echo(f"  Sprache         {r.sprache}")
-    fall = f"{r.steuerfall}{' (manuell gesetzt)' if r.steuerfall_manuell else ''}"
-    typer.echo(f"  Steuerfall      {fall}")
+    typer.echo(f"  Leistung        {r.leistung.taetigkeit}")
+    typer.echo(f"                  {r.leistung.einordnung}"
+               + (f", erbracht: {r.leistung.ort}" if r.leistung.ort else ""))
+    ort = f"{r.leistungsort}{' (manuell festgelegt)' if r.leistungsort_manuell else ''}"
+    typer.echo(f"  Leistungsort    {ort}")
+    typer.echo(f"  Ergebnis        {r.ergebnis}")
     typer.echo()
     for p in r.positionen:
         typer.echo(f"  {p.pos}  {p.beschreibung}")
@@ -144,12 +159,14 @@ def _zeige(r: Resolved, ziel: Path) -> None:
         typer.echo()
         for text in r.hinweis.values():
             typer.echo(f"  {text}")
+    for warnung in r.warnungen:
+        typer.secho(f"\n  Achtung: {warnung}", fg=typer.colors.YELLOW)
     typer.echo(f"\n  geschrieben: {ziel}")
 
 
 @app.command()
 def resolve(nummer: Annotated[str, typer.Argument(help="Rechnungsnummer, z. B. 2026-0001")]) -> None:
-    """Löst rechnung.yaml auf: Steuerfall, Summen, Fälligkeit, und schreibt rechnung.resolved.json."""
+    """Löst rechnung.yaml auf: Leistungsort, Ergebnis, Summen, Fälligkeit; schreibt rechnung.resolved.json."""
     cfg = _config()
     try:
         ergebnis, ziel = resolve_mod.resolve(cfg, nummer)
@@ -263,22 +280,25 @@ def festschreiben(
     typer.echo("  `rechnung bauen` verweigert ab jetzt den Neubau dieser Rechnung.")
 
 
-# Die Demo baut vier Rechnungen, eine je Steuerfall, aus stammdaten.example/.
+# Die Demo baut je Ergebnis mindestens eine Rechnung aus stammdaten.example/.
 DEMO: list[dict] = [
-    {"kuerzel": "muster-gmbh", "fall": "A", "sprache": "de",
+    {"kuerzel": "muster-gmbh", "sprache": "de",
+     "leistung": ("Beratung zum Marktzugang mit Workshop", "beratung", None),
      "beschreibung": "Beratung Marktzugang, Workshop in Berlin",
      "menge": "8", "einheit": "stunde", "einzelpreis": "150.00"},
-    {"kuerzel": "exemple-sarl", "fall": "B", "sprache": "en",
+    {"kuerzel": "exemple-sarl", "sprache": "en",
+     "leistung": ("Policy briefing for the management team", "beratung", None),
      "beschreibung": "Policy briefing, Paris",
      "menge": "1", "einheit": "pauschal", "einzelpreis": "2400.00"},
-    {"kuerzel": "sample-ltd", "fall": "C", "sprache": "en",
+    {"kuerzel": "sample-ltd", "sprache": "en",
+     "leistung": ("Panel participation at a policy forum", "unterrichtend", "GB"),
      "beschreibung": "Panel participation, Sample Policy Forum, London",
      "menge": "2", "einheit": "stunde", "einzelpreis": "200.00",
      "zweite": ("Travel: flight FRA--LON--FRA, receipt attached", "1", "pauschal", "287.30")},
-    {"kuerzel": "privat-ch", "fall": "D", "sprache": "de",
+    {"kuerzel": "privat-ch", "sprache": "de",
+     "leistung": ("Vortrag vor Publikum", "unterrichtend", "CH"),
      "beschreibung": "Vortrag, Zürich",
-     "menge": "1", "einheit": "pauschal", "einzelpreis": "900.00",
-     "steuerfall": "D", "begruendung": "Privatperson im Drittland, Leistungsort Inland (§ 3a Abs. 1 UStG)"},
+     "menge": "1", "einheit": "pauschal", "einzelpreis": "900.00"},
 ]
 
 
@@ -287,7 +307,7 @@ def demo(
     ziel: Annotated[str, typer.Option(help="Zielordner")] = "demo-output",
     pruefe: Annotated[bool, typer.Option("--pruefen", help="Jede gebaute Rechnung gleich pruefen.")] = False,
 ) -> None:
-    """Baut vier Beispielrechnungen (Steuerfall A–D) aus stammdaten.example/ in einen Ordner."""
+    """Baut Beispielrechnungen, je Ergebnis mindestens eine, aus stammdaten.example/ in einen Ordner."""
     import shutil
     import tempfile
     from datetime import date
@@ -325,12 +345,12 @@ def demo(
                 raise _abbruch(e) from e
             # Der ganze Rechnungsordner wandert ins Ziel, nicht nur die PDF: damit kann
             # `rechnung pruefen <ordner>` die Demo-Rechnungen nachträglich prüfen.
-            name = f"fall-{eintrag['fall'].lower()}-{eintrag['kuerzel']}"
+            name = f"{ergebnis.ergebnis.replace('_', '-')}-{eintrag['kuerzel']}"
             zielordner = ziel_pfad / name
             if zielordner.exists():
                 shutil.rmtree(zielordner)
             shutil.copytree(ordner, zielordner)
-            typer.echo(f" {SYMBOL[doctor_mod.OK]} Fall {eintrag['fall']}  {name}/rechnung.pdf"
+            typer.echo(f" {SYMBOL[doctor_mod.OK]} {name}/rechnung.pdf"
                        f"  ({ergebnis.waehrung} {ergebnis.brutto})")
             if pruefe:
                 befunde = pruefen_mod.pruefe(ergebnis, zielordner / pruefen_mod.PDF_DATEI)
@@ -340,7 +360,7 @@ def demo(
                            + ("" if not fehlend else "  fehlt: " + ", ".join(b.angabe for b in fehlend)))
                 if fehlend:
                     raise typer.Exit(1)
-    typer.secho(f"\nVier Rechnungen in {ziel_pfad}", fg=typer.colors.GREEN, bold=True)
+    typer.secho(f"\n{len(DEMO)} Rechnungen in {ziel_pfad}", fg=typer.colors.GREEN, bold=True)
 
 
 def _demo_yaml(eintrag: dict) -> str:
@@ -356,8 +376,10 @@ def _demo_yaml(eintrag: dict) -> str:
         "leistungsdatum: 2026-06-10",
         f"sprache: {eintrag['sprache']}",
     ]
-    if "steuerfall" in eintrag:
-        zeilen += [f"steuerfall: {eintrag['steuerfall']}", f"begruendung: {t(eintrag['begruendung'])}"]
+    taetigkeit, einordnung, ort = eintrag["leistung"]
+    zeilen += ["leistung:", f"  taetigkeit: {t(taetigkeit)}", f"  einordnung: {einordnung}"]
+    if ort:
+        zeilen.append(f"  ort: {ort}")
     zeilen += [
         "positionen:",
         f"  - beschreibung: {t(eintrag['beschreibung'])}",
