@@ -18,6 +18,8 @@ Aufruf:
   sperrliste.py staged             gestagte Dateien (pre-commit)
   sperrliste.py nachricht <datei>  Commit-Message (commit-msg)
   sperrliste.py alle               alle Dateien, die Git verfolgt, im Arbeitsstand
+  sperrliste.py push <remote>      jeder Commit, der hochgehen soll (pre-push, Refs auf stdin):
+                                   geänderte Dateien, Commit-Message, Autor und Committer
 
 Die Meldung nennt Datei, Fundzeile und die Zeile der Sperrliste – nie den Begriff selbst.
 """
@@ -144,12 +146,49 @@ def alle() -> list[tuple[str, bytes]]:
     return [(n.decode(), Path(n.decode()).read_bytes()) for n in namen if n and Path(n.decode()).is_file()]
 
 
+NULL = "0" * 40
+
+
+def zu_pushende_commits(remote: str, zeilen: list[str]) -> list[str]:
+    """Commits, die das Ziel noch nicht hat – aus den Zeilen, die Git dem pre-push-Hook gibt."""
+    commits: list[str] = []
+    for zeile in zeilen:
+        teile = zeile.split()
+        if len(teile) != 4 or teile[1].strip("0") == "":
+            continue                                    # unbekannt oder Branch wird gelöscht
+        lokal, fern = teile[1], teile[3]
+        neu_beim_ziel = ["rev-list", lokal, "--not", f"--remotes={remote}"]
+        try:
+            ausgabe = _git(*(neu_beim_ziel if fern.strip("0") == "" else ["rev-list", f"{fern}..{lokal}"]))
+        except subprocess.CalledProcessError:
+            ausgabe = _git(*neu_beim_ziel)              # Ziel weiter als unser Stand: lieber mehr prüfen
+        commits += ausgabe.decode().split()
+    return list(dict.fromkeys(commits))
+
+
+def pruefe_commit(sha: str, begriffe: list[Begriff]) -> list[str]:
+    kurz = sha[:10]
+    meldungen = []
+    for art, format_ in (("Autor/Committer", "%an%n%ae%n%cn%n%ce"), ("Commit-Message", "%B")):
+        text = _git("show", "-s", f"--format={format_}", sha).decode("utf-8", errors="replace")
+        for zeile, _ in treffer(text, begriffe):
+            meldungen.append(f"Commit {kurz}: {art} – Begriff aus Zeile {zeile} der Sperrliste")
+    eltern = _git("rev-list", "--parents", "-n", "1", sha).decode().split()[1:]
+    vergleich = [eltern[0], sha] if eltern else ["--root", sha]
+    namen = _git("diff-tree", "-r", "--no-commit-id", "--name-only", "-z", "--diff-filter=ACMR",
+                 *vergleich).split(b"\0")
+    for n in filter(None, namen):
+        name = n.decode()
+        meldungen += pruefe_inhalt(f"Commit {kurz}: {name}", _git("show", f"{sha}:{name}"), begriffe)
+    return meldungen
+
+
 def main(argv: list[str]) -> int:
     pfad = sperrliste_pfad()
     if not pfad.is_file():
         return 0
     begriffe = lade(pfad)
-    if not argv or argv[0] not in ("staged", "nachricht", "alle"):
+    if not argv or argv[0] not in ("staged", "nachricht", "alle", "push"):
         print(__doc__, file=sys.stderr)
         return 2
 
@@ -159,6 +198,9 @@ def main(argv: list[str]) -> int:
         text = "\n".join(z for z in text.splitlines() if not z.startswith("#"))
         for zeile, fund in treffer(text, begriffe):
             meldungen.append(f"Commit-Message: Zeile {fund or '?'} – Begriff aus Zeile {zeile} der Sperrliste")
+    elif argv[0] == "push":
+        for sha in zu_pushende_commits(argv[1] if len(argv) > 1 else "", sys.stdin.read().splitlines()):
+            meldungen += pruefe_commit(sha, begriffe)
     else:
         for name, daten in (staged() if argv[0] == "staged" else alle()):
             meldungen += pruefe_inhalt(name, daten, begriffe)

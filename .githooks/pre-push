@@ -1,0 +1,3 @@
+#!/bin/sh
+# Prüft vor jedem Push alle Commits, die hochgehen, gegen die Sperrliste. Einschalten: make hooks
+exec python3 -I "$(git rev-parse --show-toplevel)/.githooks/sperrliste.py" push "$1"

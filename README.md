@@ -118,7 +118,8 @@ make schatten       # Pflicht vor jedem Commit: Image bauen, Demo bauen und prü
 make hooks          # Commit-Wächter einschalten (test und schatten tun das mit)
 ```
 
-Der Commit-Wächter prüft jeden Commit samt Commit-Message gegen eine private Sperrliste
+Der Commit-Wächter prüft jeden Commit samt Commit-Message – und vor jedem Push noch einmal alles, was
+hochgeht, samt Autor – gegen eine private Sperrliste
 (`sperrliste.txt` neben der Config oder `RECHNUNG_SPERRLISTE`): eigener Name, Anschrift, Steuernummer,
 IBAN, Kundennamen. So landen keine echten Daten im Repo, auch nicht im Text einer PDF. Das Format
 steht in `.githooks/sperrliste.py`. Ohne Sperrliste ist er still; mit Sperrliste meldet

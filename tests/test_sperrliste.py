@@ -159,3 +159,63 @@ def test_ohne_sperrliste_still(repo, tmp_path, monkeypatch):
     git(repo, "add", "a.txt")
     aus = git(repo, "commit", "-m", "ohne Liste", check=False)
     assert aus.returncode == 0 and aus.stderr == ""
+
+
+# ---------------------------------------------------------------- pre-push
+
+@pytest.fixture
+def ziel(repo, tmp_path):
+    bare = tmp_path / "ziel.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    git(repo, "remote", "add", "origin", str(bare))
+    return bare
+
+
+def commit_ohne_waechter(repo, datei, inhalt, nachricht="Änderung", autor=None):
+    """Wie ein Commit, der am pre-commit vorbeigekommen ist (--no-verify)."""
+    (repo / datei).write_text(inhalt, encoding="utf-8")
+    git(repo, "add", datei)
+    args = ["commit", "-q", "--no-verify", "-m", nachricht]
+    if autor:
+        args += ["--author", autor]
+    git(repo, *args)
+
+
+def test_push_sauber_geht_durch(repo, ziel, liste):
+    commit_ohne_waechter(repo, "a.txt", "Max Mustermann\n")
+    assert git(repo, "push", "-q", "origin", "HEAD:main", check=False).returncode == 0
+
+
+def test_push_mit_gesperrtem_inhalt_wird_abgewiesen(repo, ziel, liste):
+    commit_ohne_waechter(repo, "a.txt", "sauber\n")
+    git(repo, "push", "-q", "origin", "HEAD:main")
+    commit_ohne_waechter(repo, "b.txt", "IBAN DE00123456789012345678\n")
+    commit_ohne_waechter(repo, "c.txt", "wieder sauber\n")
+    aus = git(repo, "push", "origin", "HEAD:main", check=False)
+    assert aus.returncode != 0
+    assert "b.txt" in aus.stderr and "Zeile 4 der Sperrliste" in aus.stderr
+    assert "a.txt" not in aus.stderr                        # schon beim Ziel, nicht noch einmal geprüft
+    assert "DE00" not in aus.stderr
+
+
+def test_push_prueft_message_und_autor(repo, ziel, liste):
+    commit_ohne_waechter(repo, "a.txt", "sauber\n", nachricht="Rechnung ZZ-2026-0001",
+                         autor="Erika Geheimnis <erika@example.com>")
+    aus = git(repo, "push", "origin", "HEAD:main", check=False)
+    assert aus.returncode != 0
+    assert "Commit-Message" in aus.stderr and "Autor/Committer" in aus.stderr
+
+
+def test_push_auch_ohne_eingeschalteten_pre_commit(repo, ziel, liste):
+    """Gelöschte Datei aus einem früheren Commit: der Commit mit dem Inhalt zählt trotzdem."""
+    commit_ohne_waechter(repo, "geheim.txt", "Erika Geheimnis\n")
+    git(repo, "rm", "-q", "geheim.txt")
+    git(repo, "commit", "-q", "--no-verify", "-m", "weg damit")
+    aus = git(repo, "push", "origin", "HEAD:main", check=False)
+    assert aus.returncode != 0 and "geheim.txt" in aus.stderr
+
+
+def test_push_loeschen_eines_branches_prueft_nichts(repo, ziel, liste):
+    commit_ohne_waechter(repo, "a.txt", "sauber\n")
+    git(repo, "push", "-q", "origin", "HEAD:main", "HEAD:alt")
+    assert git(repo, "push", "-q", "origin", "--delete", "alt", check=False).returncode == 0

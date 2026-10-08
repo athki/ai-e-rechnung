@@ -130,9 +130,10 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
   `neu`, `resolve`, `bauen`, `pruefen`, `festschreiben`, `demo`, `doctor`)
 - Sprache der Rechnung: `de` oder `en`, eine je Rechnung (die Vorlage setzt jedes feste Label einsprachig);
   Datums-, Zahlen- und Währungsformat folgen der Sprache
-- Commit-Wächter: `make hooks` schaltet `.githooks/` ein; jeder Commit und jede Commit-Message wird gegen
-  die Sperrliste neben der Config geprüft (`sperrliste.txt` oder `RECHNUNG_SPERRLISTE`), auch Text und
-  Metadaten von PDFs. Ohne Sperrliste still. `make test` und `make schatten` schalten ihn mit ein;
+- Commit-Wächter: `make hooks` schaltet `.githooks/` ein. Gegen die Sperrliste neben der Config
+  (`sperrliste.txt` oder `RECHNUNG_SPERRLISTE`) prüft er jeden Commit und jede Commit-Message, vor jedem
+  Push noch einmal jeden Commit, der hochgeht, samt Autor; bei PDFs auch Text und Metadaten. Ohne
+  Sperrliste still. `make test` und `make schatten` schalten ihn mit ein;
   `rechnung doctor` ist rot, wenn eine Sperrliste da ist und der Wächter aus ist.
 - Kein Netzwerkzugriff im Kern. Künftige AI-Funktionen kommen in ein eigenes, optional importierbares Modul.
 
