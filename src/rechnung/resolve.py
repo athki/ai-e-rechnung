@@ -357,6 +357,11 @@ def input_hash(ordner: Path) -> str:
     return hashlib.sha256((ordner / INPUT_DATEI).read_bytes()).hexdigest()
 
 
+def regel_trace(entscheidung: rules.Entscheidung, waehrung: str) -> list[str]:
+    """R35: die Regeln der Steuerentscheidung, dazu die Betragsregeln und, bei Fremdwährung, R34."""
+    return [*entscheidung.regeln, "R32", "R33", *(["R34"] if waehrung != "EUR" else [])]
+
+
 def rechne(
     eingabe: Input,
     stammdaten: Stammdaten,
@@ -439,6 +444,7 @@ def rechne(
         leistungsort_manuell=eingabe.leistungsort is not None,
         begruendung=eingabe.begruendung,
         ergebnis=entscheidung.ergebnis,
+        regeln=regel_trace(entscheidung, waehrung),
         hinweis=rules.hinweis(entscheidung, sprache),
         referenz=eingabe.referenz or kunde.referenz,
         einleitung=eingabe.einleitung,

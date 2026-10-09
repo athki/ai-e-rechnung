@@ -119,13 +119,116 @@ def kategorie(land: str) -> str:
     return EU if land in EU_LAENDER else DRITTLAND
 
 
-def ist_unternehmer(kunde: Kunde) -> bool | None:
-    """`unternehmer` aus der Kundendatei; ein EU-Kunde mit USt-IdNr. gilt als Unternehmer (R3)."""
-    if kunde.unternehmer is not None:
-        return kunde.unternehmer
-    if kunde.ustid and kategorie(kunde.land) == EU:
-        return True
-    return None
+# ---------------------------------------------------------------- Der Entscheidungskern
+#
+# Die Steuerentscheidung hängt nur von wenigen Merkmalen ab. `kern()` rechnet ausschließlich mit
+# ihnen: keine Ländercodes, keine Texte, keine Ausnahmen. So ist die Menge aller Eingaben endlich
+# und klein, und das Lean-Modell (RULES.md, Schritt 8.6) kann sie vollständig gegen diese Funktion
+# prüfen. `entscheide()` übersetzt Kunde, Leistung und Aussteller in Merkmale und das Ergebnis
+# zurück in Länder und Meldungen.
+
+ORT_KUNDE, ORT_TAETIGKEIT, ORT_AUSSTELLER, ORT_FESTGELEGT = "kunde", "taetigkeit", "aussteller", "festgelegt"
+
+
+@dataclass(frozen=True)
+class Merkmale:
+    """Alles, wovon die Steuerentscheidung abhängt (RULES.md Teil 4)."""
+
+    kunde: str                    # Kategorie des Kundenlands: inland | eu | drittland
+    unternehmer: bool | None      # aus der Kundendatei; None = nicht angegeben
+    kunde_ustid: bool             # Kunde hat eine USt-IdNr.
+    gruppe: str                   # Gruppe der Einordnung: taetigkeit | katalog | grundregel
+    taetigkeit_ort: str | None    # nur bei taetigkeit: inland | eu | drittland | online
+    kleinunternehmer: bool        # Aussteller nach § 19 UStG
+    aussteller_ustid: bool        # Aussteller hat eine USt-IdNr.
+    festgelegt: str | None        # manuell festgelegter Leistungsort: inland | eu | drittland (R37)
+
+
+@dataclass(frozen=True)
+class KernErgebnis:
+    """Leistungsort als Quelle und Kategorie, dazu Ergebnis, Satz und angewandte Regeln."""
+
+    ort_quelle: str               # kunde | taetigkeit | aussteller | festgelegt
+    ort: str                      # inland | eu | drittland
+    ergebnis: Ergebnis
+    satz: int                     # 19 oder 0; 7 % wählt der Mensch je Position (R10)
+    regeln: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Abbruch:
+    """Das Werkzeug entscheidet nicht und sagt, warum (Grundsatz: strenger, nie anders)."""
+
+    regel: str                    # R18, R19 oder R29
+    grund: str                    # unternehmer_fehlt | eu_privat | kunde_ustid_fehlt | eigene_ustid_fehlt
+
+
+def kern(m: Merkmale) -> KernErgebnis | Abbruch:
+    """Die Entscheidungstabelle aus RULES.md Teil 4, als reine Funktion über Merkmale."""
+    # R3-Annahme: Ein EU-Kunde mit USt-IdNr. gilt als Unternehmer, wenn nichts anderes angegeben ist.
+    unternehmer = m.unternehmer
+    if unternehmer is None and m.kunde == EU and m.kunde_ustid:
+        unternehmer = True
+
+    # Leistungsort (R3–R8, R37)
+    if m.festgelegt is not None:
+        quelle, ort, ort_regeln = ORT_FESTGELEGT, m.festgelegt, ("R37",)
+    elif unternehmer:
+        quelle, ort, ort_regeln = ORT_KUNDE, m.kunde, ("R3",)
+    elif unternehmer is None:
+        # Im Inland führt jede Antwort zum Inland – außer eine Tätigkeit wird woanders erbracht (R19).
+        if m.kunde != INLAND or m.gruppe == TAETIGKEIT:
+            return Abbruch("R19", "unternehmer_fehlt")
+        quelle, ort, ort_regeln = ORT_AUSSTELLER, INLAND, ("R3", "R4")
+    elif m.gruppe == TAETIGKEIT:
+        if m.taetigkeit_ort == "online":
+            quelle, ort, ort_regeln = ORT_KUNDE, m.kunde, ("R6",)
+        else:
+            assert m.taetigkeit_ort is not None   # models.Leistung verlangt den Ort
+            quelle, ort, ort_regeln = ORT_TAETIGKEIT, m.taetigkeit_ort, ("R5",)
+    elif m.gruppe == KATALOG and m.kunde == DRITTLAND:
+        quelle, ort, ort_regeln = ORT_KUNDE, m.kunde, ("R7",)
+    else:
+        quelle, ort, ort_regeln = ORT_AUSSTELLER, INLAND, ("R8",) if m.gruppe == KATALOG else ("R4",)
+
+    regeln = ["R1", "R2", *ort_regeln, "R9"]
+    ku = m.kleinunternehmer
+    if ort == INLAND:
+        ergebnis: Ergebnis = "kleinunternehmer" if ku else "inland"
+        regeln += ["R13", "R16"] if ku else ["R10"]
+    elif ort == EU:
+        if not unternehmer:
+            return Abbruch("R18", "eu_privat")
+        ergebnis = "reverse_charge"
+        if ku:
+            # § 19 Abs. 1 Satz 2 UStG schließt § 14a Abs. 1 Satz 3 aus: keine USt-IdNrn. nötig (R15).
+            regeln += ["R11", "R15", "R28", "R30"]
+        else:
+            if not m.kunde_ustid:
+                return Abbruch("R29", "kunde_ustid_fehlt")
+            if not m.aussteller_ustid:
+                return Abbruch("R29", "eigene_ustid_fehlt")
+            regeln += ["R11", "R28", "R29", "R30"]
+    else:
+        ergebnis = "nicht_steuerbar"
+        regeln += ["R17", "R31"] if ku else ["R31"]
+    satz = 19 if ergebnis == "inland" else 0
+    if satz == 0:
+        regeln.append("R14" if ku else "R12")
+    return KernErgebnis(quelle, ort, ergebnis, satz, tuple(regeln))
+
+
+# ---------------------------------------------------------------- Übersetzung: Daten ↔ Merkmale
+
+# Fundstelle für den Hinweistext, je nachdem, welche Regel den Leistungsort bestimmt hat (R31).
+FUNDSTELLE: dict[str, str] = {
+    "R3": "§ 3a Abs. 2 UStG",
+    "R4": "§ 3a Abs. 1 UStG",
+    "R5": "§ 3a Abs. 3 Nr. 3 UStG",
+    "R6": "§ 3a Abs. 3 Nr. 3 UStG",
+    "R7": "§ 3a Abs. 4 UStG",
+    "R8": "§ 3a Abs. 1 UStG",
+}
 
 
 @dataclass(frozen=True)
@@ -137,42 +240,6 @@ class Ort:
     fundstelle: str | None   # für den Hinweistext; None bei manueller Festlegung
 
 
-def unternehmer_fehlt(kunde: Kunde) -> str:
-    kuerzel = kunde.kuerzel or kunde.firma
-    zeilen = [
-        f"Kunde {kuerzel}, Land {kunde.land}: `unternehmer` ist nicht gesetzt. Davon hängt der "
-        f"Leistungsort ab (§ 3a Abs. 1 und 2 UStG). In stammdaten/kunden/{kuerzel}.yaml eintragen:",
-        "  unternehmer: true     # bezieht die Leistung für sein Unternehmen",
-        "  unternehmer: false    # Privatperson",
-    ]
-    if kategorie(kunde.land) == EU:
-        zeilen.append("Ein Unternehmer in der EU braucht außerdem `ustid:` (§ 14a Abs. 1 UStG).")
-    return "\n".join(zeilen)
-
-
-def leistungsort(kunde: Kunde, leistung: Leistung) -> Ort:
-    """Leistungsort aus Status des Kunden, Einordnung der Leistung und Ort (R3–R8, RULES.md Teil 4)."""
-    gruppe, fundstelle = EINORDNUNGEN[leistung.einordnung]
-    unternehmer = ist_unternehmer(kunde)
-    if unternehmer:
-        return Ort(kunde.land, ("R3",), "§ 3a Abs. 2 UStG")
-    if unternehmer is None:
-        # Im Inland führt jede Antwort zum Inland – außer eine Tätigkeit wird woanders erbracht.
-        if kunde.land == "DE" and gruppe != TAETIGKEIT:
-            return Ort("DE", ("R3", "R4"), None)
-        raise RegelFehler(unternehmer_fehlt(kunde))
-    if gruppe == TAETIGKEIT:
-        assert leistung.ort is not None   # models.Leistung verlangt ihn
-        if leistung.ort == "online":
-            return Ort(kunde.land, ("R6",), fundstelle)
-        return Ort(leistung.ort, ("R5",), fundstelle)
-    if gruppe == KATALOG and kategorie(kunde.land) == DRITTLAND:
-        return Ort(kunde.land, ("R7",), "§ 3a Abs. 4 UStG")
-    return Ort("DE", ("R8",) if gruppe == KATALOG else ("R4",), "§ 3a Abs. 1 UStG")
-
-
-# ---------------------------------------------------------------- Ergebnis (R10–R12, R18, R29)
-
 @dataclass(frozen=True)
 class Entscheidung:
     ort: Ort
@@ -182,61 +249,79 @@ class Entscheidung:
     regeln: tuple[str, ...]
 
 
+def merkmale(kunde: Kunde, leistung: Leistung, aussteller: Stammdaten, festgelegt: str | None = None) -> Merkmale:
+    ort = leistung.ort
+    return Merkmale(
+        kunde=kategorie(kunde.land),
+        unternehmer=kunde.unternehmer,
+        kunde_ustid=bool(kunde.ustid),
+        gruppe=EINORDNUNGEN[leistung.einordnung][0],
+        taetigkeit_ort=None if ort is None else ("online" if ort == "online" else kategorie(ort)),
+        kleinunternehmer=aussteller.kleinunternehmer,
+        aussteller_ustid=bool(aussteller.ustid),
+        festgelegt=None if festgelegt is None else kategorie(festgelegt),
+    )
+
+
 def entscheide(
     kunde: Kunde, leistung: Leistung, aussteller: Stammdaten, festgelegt: str | None = None
 ) -> Entscheidung:
-    """Vom Leistungsort zu Ergebnis und Satz. `festgelegt` ist ein manuell gesetzter Leistungsort (R37).
+    """Steuerentscheidung für eine Rechnung: Merkmale bilden, `kern()` fragen, zurückübersetzen.
 
-    Für Kleinunternehmer (§ 19 UStG) bestimmt dieselbe Tabelle den Leistungsort; steuerfrei ist nur,
-    was im Inland steuerbar ist (R13), Steuer weist ein Kleinunternehmer nie aus (R14).
+    `festgelegt` ist ein manuell gesetzter Leistungsort (R37). Bricht mit RegelFehler ab, wenn der
+    Kern nicht entscheidet; die Meldung nennt Kunde, Feld und Ausweg.
     """
-    ort = Ort(festgelegt, ("R37",), None) if festgelegt else leistungsort(kunde, leistung)
-    unternehmer = ist_unternehmer(kunde)
-    ku = aussteller.kleinunternehmer
-    regeln = ["R1", "R2", *ort.regeln, "R9"]
-    k = kategorie(ort.land)
-    if k == INLAND and ku:
-        ergebnis: Ergebnis = "kleinunternehmer"
-        regeln += ["R13", "R16"]
-    elif k == INLAND:
-        ergebnis = "inland"
-        regeln.append("R10")
-    elif k == EU:
-        if not unternehmer:
-            raise RegelFehler(
-                f"Leistungsort {ort.land} ist ein anderer EU-Staat, der Kunde ist kein Unternehmer: Die "
-                f"Umsatzsteuer wäre dort zu erklären. Das deckt das Werkzeug nicht ab (RULES.md R18)."
-            )
-        ergebnis = "reverse_charge"
-        if ku:
-            # § 19 Abs. 1 Satz 2 UStG schließt § 14a Abs. 1 Satz 3 aus: keine USt-IdNrn. nötig (R15).
-            regeln += ["R11", "R15", "R28", "R30"]
-        else:
-            _ustids_vorhanden(kunde, aussteller)
-            regeln += ["R11", "R28", "R29", "R30"]
-    else:
-        ergebnis = "nicht_steuerbar"
-        regeln += ["R17", "R31"] if ku else ["R31"]
-    satz = REGELSATZ if ergebnis == "inland" else NULLSATZ
-    if satz == NULLSATZ:
-        regeln.append("R14" if ku else "R12")
-    return Entscheidung(ort, ergebnis, satz, unternehmer, tuple(regeln))
+    m = merkmale(kunde, leistung, aussteller, festgelegt)
+    k = kern(m)
+    if isinstance(k, Abbruch):
+        raise RegelFehler(_meldung(k, kunde, festgelegt or leistung.ort))
+    land = {
+        ORT_KUNDE: kunde.land,
+        ORT_TAETIGKEIT: leistung.ort,
+        ORT_AUSSTELLER: "DE",   # der Aussteller betreibt sein Unternehmen vom Inland aus (R4)
+        ORT_FESTGELEGT: festgelegt,
+    }[k.ort_quelle]
+    assert land is not None
+    ort_regeln = tuple(r for r in k.regeln if r in FUNDSTELLE or r == "R37")
+    fundstelle = None if k.ort_quelle == ORT_FESTGELEGT else FUNDSTELLE[ort_regeln[-1]]
+    unternehmer = m.unternehmer if m.unternehmer is not None else (True if m.kunde == EU and m.kunde_ustid else None)
+    return Entscheidung(
+        ort=Ort(land, ort_regeln, fundstelle),
+        ergebnis=k.ergebnis,
+        satz=Decimal(k.satz),
+        unternehmer=unternehmer,
+        regeln=k.regeln,
+    )
 
 
-def _ustids_vorhanden(kunde: Kunde, aussteller: Stammdaten) -> None:
-    """R29: Bei Steuerschuldnerschaft des Empfängers stehen beide USt-IdNrn. auf der Rechnung."""
+def _meldung(a: Abbruch, kunde: Kunde, ort: str | None) -> str:
     kuerzel = kunde.kuerzel or kunde.firma
-    if not kunde.ustid:
-        raise RegelFehler(
+    if a.grund == "unternehmer_fehlt":
+        zeilen = [
+            f"Kunde {kuerzel}, Land {kunde.land}: `unternehmer` ist nicht gesetzt. Davon hängt der "
+            f"Leistungsort ab (§ 3a Abs. 1 und 2 UStG). In stammdaten/kunden/{kuerzel}.yaml eintragen:",
+            "  unternehmer: true     # bezieht die Leistung für sein Unternehmen",
+            "  unternehmer: false    # Privatperson",
+        ]
+        if kategorie(kunde.land) == EU:
+            zeilen.append("Ein Unternehmer in der EU braucht außerdem `ustid:` (§ 14a Abs. 1 UStG).")
+        return "\n".join(zeilen)
+    if a.grund == "eu_privat":
+        return (
+            f"Leistungsort {ort if ort and ort != 'online' else kunde.land} ist ein anderer EU-Staat, der "
+            f"Kunde ist kein Unternehmer: Die Umsatzsteuer wäre dort zu erklären. Das deckt das Werkzeug "
+            f"nicht ab (RULES.md R18)."
+        )
+    if a.grund == "kunde_ustid_fehlt":
+        return (
             f"Kunde {kuerzel}, Land {kunde.land} (EU): `ustid` fehlt. Bei Steuerschuldnerschaft des "
             f"Leistungsempfängers gehört seine USt-IdNr. auf die Rechnung (§ 14a Abs. 1 UStG). In "
             f"stammdaten/kunden/{kuerzel}.yaml ergänzen; ist der Kunde Privatperson: unternehmer: false."
         )
-    if not aussteller.ustid:
-        raise RegelFehler(
-            "Eigene USt-IdNr. fehlt in stammdaten/ich.yaml: Bei Steuerschuldnerschaft des "
-            "Leistungsempfängers gehört sie auf die Rechnung (§ 14a Abs. 1 UStG)."
-        )
+    return (
+        "Eigene USt-IdNr. fehlt in stammdaten/ich.yaml: Bei Steuerschuldnerschaft des "
+        "Leistungsempfängers gehört sie auf die Rechnung (§ 14a Abs. 1 UStG)."
+    )
 
 
 def frist_reverse_charge(leistung_bis: date) -> date:

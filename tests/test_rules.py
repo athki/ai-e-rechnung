@@ -292,3 +292,90 @@ def test_fremdwaehrung_ohne_ust_ist_erlaubt():
 def test_fremdwaehrung_mit_ust_bricht_ab():
     with pytest.raises(rules.RegelFehler, match="Euro"):
         rules.waehrung_erlaubt("USD", [Decimal(19)])
+
+
+# ---------------------------------------------------------------- Entscheidungskern, vollständig
+#
+# Die Menge aller Merkmale ist endlich. Diese Tests laufen über jede Kombination und prüfen
+# Eigenschaften, die RULES.md verspricht – ein Vorgriff auf die Lean-Beweise (Schritt 8.5/8.6).
+
+import itertools
+import re
+
+KATEGORIEN = (rules.INLAND, rules.EU, rules.DRITTLAND)
+RULES_MD = (Path(__file__).parent.parent / "RULES.md").read_text(encoding="utf-8")
+AKTIVE_REGELN = {
+    m.group(1) for m in re.finditer(r"^#### (R\d+) – (?!\(entfallen\))", RULES_MD, flags=re.M)
+}
+
+
+def alle_merkmale():
+    for kunde, unternehmer, kunde_ustid, gruppe, ku, eigene, festgelegt in itertools.product(
+        KATEGORIEN, (True, False, None), (True, False), (rules.TAETIGKEIT, rules.KATALOG, rules.GRUNDREGEL),
+        (True, False), (True, False), (None, *KATEGORIEN),
+    ):
+        orte = (*KATEGORIEN, "online") if gruppe == rules.TAETIGKEIT else (None,)
+        for ort in orte:
+            yield rules.Merkmale(kunde, unternehmer, kunde_ustid, gruppe, ort, ku, eigene, festgelegt)
+
+
+ALLE = list(alle_merkmale())
+
+
+def test_kern_ist_total():
+    """Jede Kombination ergibt genau eine Entscheidung oder einen begründeten Abbruch."""
+    assert len(ALLE) == 3 * 3 * 2 * (4 + 1 + 1) * 2 * 2 * 4
+    for m in ALLE:
+        k = rules.kern(m)
+        assert isinstance(k, (rules.KernErgebnis, rules.Abbruch)), m
+        if isinstance(k, rules.Abbruch):
+            assert k.regel in {"R18", "R19", "R29"}, m
+
+
+def test_kern_satz_und_ergebnis_passen_zum_leistungsort():
+    for m in ALLE:
+        k = rules.kern(m)
+        if isinstance(k, rules.Abbruch):
+            continue
+        erwartet = {
+            rules.INLAND: "kleinunternehmer" if m.kleinunternehmer else "inland",
+            rules.EU: "reverse_charge",
+            rules.DRITTLAND: "nicht_steuerbar",
+        }[k.ort]
+        assert k.ergebnis == erwartet, m                              # R2, R10, R11, R13
+        assert (k.satz == 19) == (k.ergebnis == "inland"), m          # R12, R14
+        if m.festgelegt is not None:
+            assert k.ort == m.festgelegt and k.ort_quelle == rules.ORT_FESTGELEGT, m   # R37
+
+
+def test_kern_unternehmer_immer_sitz_des_kunden():
+    """R3: bei Unternehmern ist die Einordnung gleichgültig."""
+    for m in ALLE:
+        if m.unternehmer and m.festgelegt is None:
+            k = rules.kern(m)
+            if isinstance(k, rules.KernErgebnis):
+                assert (k.ort, k.ort_quelle) == (m.kunde, rules.ORT_KUNDE), m
+
+
+def test_kern_kleinunternehmer_weist_nie_steuer_aus():
+    """R14, auch bei festgelegtem Leistungsort."""
+    for m in ALLE:
+        k = rules.kern(m)
+        if m.kleinunternehmer and isinstance(k, rules.KernErgebnis):
+            assert k.satz == 0 and "R14" in k.regeln, m
+
+
+def test_kern_nennt_nur_regeln_aus_rules_md():
+    for m in ALLE:
+        k = rules.kern(m)
+        regeln = (k.regel,) if isinstance(k, rules.Abbruch) else k.regeln
+        assert set(regeln) <= AKTIVE_REGELN, (m, set(regeln) - AKTIVE_REGELN)
+
+
+def test_jede_regel_id_im_code_steht_in_rules_md():
+    """Der Code verweist nur auf Regeln, die es in RULES.md gibt und die nicht entfallen sind."""
+    quelle = Path(rules.__file__).parent
+    for datei in ("rules.py", "resolve.py", "models.py"):
+        ids = set(re.findall(r"\bR(\d+)\b", (quelle / datei).read_text(encoding="utf-8")))
+        fehlend = {f"R{i}" for i in ids} - AKTIVE_REGELN
+        assert not fehlend, (datei, fehlend)

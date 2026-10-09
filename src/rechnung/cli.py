@@ -145,6 +145,7 @@ def _zeige(r: Resolved, ziel: Path) -> None:
     ort = f"{r.leistungsort}{' (manuell festgelegt)' if r.leistungsort_manuell else ''}"
     typer.echo(f"  Leistungsort    {ort}")
     typer.echo(f"  Ergebnis        {r.ergebnis}")
+    typer.echo(f"  Regeln          {' '.join(r.regeln)}  (RULES.md)")
     typer.echo()
     for p in r.positionen:
         typer.echo(f"  {p.pos}  {p.beschreibung}")

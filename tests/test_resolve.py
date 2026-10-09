@@ -149,6 +149,7 @@ def test_nicht_steuerbar_null_prozent_und_hinweis(gewerbe):
     assert ergebnis.ergebnis == "nicht_steuerbar"
     assert ergebnis.leistungsort == "GB"
     assert ergebnis.leistung.einordnung == "sonstige"
+    assert ergebnis.regeln == ["R1", "R2", "R3", "R9", "R31", "R12", "R32", "R33"]   # R35
     assert ergebnis.netto == Decimal("1000.00")
     assert ergebnis.ust_betrag == Decimal("0.00")
     assert ergebnis.brutto == Decimal("1000.00")

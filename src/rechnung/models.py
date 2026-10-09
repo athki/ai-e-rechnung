@@ -317,6 +317,7 @@ class Resolved(Basis):
     leistungsort_manuell: bool = False
     begruendung: str | None = None
     ergebnis: Ergebnis
+    regeln: list[str]                       # angewandte Regeln aus RULES.md (R35)
     hinweis: dict[str, str] | None = None   # {"de": ..., "en": ...}, nur wenn kein USt-Ausweis
     referenz: str | None = None
     einleitung: str | None = None
