@@ -1,6 +1,6 @@
 [project]
 name = "ai-e-rechnung"
-version = "0.1.0"
+version = "0.2.0"
 description = "Rechnungen für ein deutsches Kleingewerbe: aus einem kurzen YAML eine vollständige Rechnung als PDF (LaTeX)."
 readme = "README.md"
 license = "MIT"
