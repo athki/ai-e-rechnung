@@ -8,7 +8,7 @@ PDFs, was sich verschoben hat. Neu erzeugt werden sie mit
 rechnung demo --pruefen
 ```
 
-und danach aus `demo-output/<name>/` hierher kopiert, die PDF als `<name>.pdf`. Die Muster zeigen die
+und danach aus `demo-output/<name>/` hierher kopiert, die Rechnung als `<name>.pdf`. Die Muster zeigen die
 Standardvorlage: Wer einen eigenen Vorlagen-Ordner konfiguriert hat, baut sie ohne Config,
 `RECHNUNG_CONFIG=/dev/null rechnung demo --pruefen`. Die `.yaml` daneben ist jeweils die Eingabe, aus
 der die PDF entstanden ist.
@@ -24,5 +24,9 @@ der die PDF entstanden ist.
 
 Für die letzte setzt die Demo im Beispiel-Aussteller `kleinunternehmer: true`; die Eingabe selbst
 sieht aus wie jede andere.
+
+`nicht-steuerbar-sample-ltd` geht vorher durch zwei Pro-forma-Revisionen (die zweite ergänzt die
+Referenz „PO 4711“); die Demo legt sie in `demo-output/nicht-steuerbar-sample-ltd/pro-forma/1/` und
+`…/2/` ab. Als Muster liegt hier die zweite: `nicht-steuerbar-sample-ltd.pro-forma.pdf`.
 
 Alle sechs bestehen `rechnung pruefen`, also den Nachweis der Pflichtangaben im PDF-Text.

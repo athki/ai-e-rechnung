@@ -5,7 +5,9 @@
 % note, is decided outside (rechnung.yaml -> resolve()).
 %
 % Document data (preamble, after the packages):
-%   \InvoiceKind{invoice|creditnote|cancellation|quote}   default: invoice
+%   \InvoiceKind{invoice|creditnote|cancellation|quote|proforma}   default: invoice
+%     proforma: banner on every page, "(not an invoice)" after the heading, provisional labels,
+%     a request to check instead of the payment sentence
 %   \InvoiceNumber{2026-0001}   \InvoiceDate{22 September 2026}   \InvoiceCurrency{EUR}
 % Blocks (body, in this order):
 %   \invoiceaddress{recipient lines}{\metarow{label}{value}... \metasep \metarow...}   block 2 + 3
@@ -44,7 +46,9 @@
 %   \ifdefined\ifNewToggle\else\newif\ifNewToggle \NewToggletrue\fi
 % tests/test_vorlage.py fails if one is missing; `rechnung doctor` names
 % the settings a custom defaults.sty does not know yet.
-% (none yet)
+\providecommand{\InvoiceBannerTop}{8mm}
+\providecommand{\InvoiceBannerSize}{\fontsize{9}{11}\selectfont}
+\@ifundefinedcolor{BannerInk}{\colorlet{BannerInk}{Accent}}{}
 
 % ------------------------------------------------------------
 % Language, fixed strings, unit dictionary
@@ -58,14 +62,24 @@
   \csdef{InvStr@kind@creditnote}{Gutschrift Nr.}%
   \csdef{InvStr@kind@cancellation}{Stornorechnung Nr.}%
   \csdef{InvStr@kind@quote}{Angebot Nr.}%
+  \csdef{InvStr@kind@proforma}{Pro-forma-Rechnung Nr.}%
   \csdef{InvStr@numlabel@invoice}{Rechnungsnummer}%
   \csdef{InvStr@numlabel@creditnote}{Gutschriftsnummer}%
   \csdef{InvStr@numlabel@cancellation}{Rechnungsnummer}%
   \csdef{InvStr@numlabel@quote}{Angebotsnummer}%
+  \csdef{InvStr@numlabel@proforma}{Re.-Nr. (vorl.)}%
   \csdef{InvStr@stampkind@invoice}{Rechnung Nr.}%
   \csdef{InvStr@stampkind@creditnote}{Gutschrift Nr.}%
   \csdef{InvStr@stampkind@cancellation}{Stornorechnung Nr.}%
   \csdef{InvStr@stampkind@quote}{Angebot Nr.}%
+  \csdef{InvStr@stampkind@proforma}{Pro-forma-Rechnung Nr.}%
+  % pro forma: banner, heading suffix, provisional labels, sentences
+  \csdef{InvStr@banner@proforma}{PRO FORMA -- KEINE RECHNUNG}%
+  \csdef{InvStr@suffix@proforma}{(keine Rechnung)}%
+  \csdef{InvStr@date@proforma}{Re.-Datum (vorl.)}%
+  \csdef{InvStr@due@proforma}{Fällig (vorl.)}%
+  \csdef{InvStr@payment@proforma}{Bitte prüfen Sie die Angaben. Die Rechnung folgt nach Ihrer Bestätigung.}%
+  \csdef{InvStr@nosignature@proforma}{Dieses Dokument wurde maschinell erstellt.}%
   % metadata labels
   \newcommand{\InvStrDate}{Rechnungsdatum}%
   \newcommand{\InvStrServiceDate}{Leistungsdatum}%
@@ -121,14 +135,23 @@
   \csdef{InvStr@kind@creditnote}{Credit note no.}%
   \csdef{InvStr@kind@cancellation}{Cancellation invoice no.}%
   \csdef{InvStr@kind@quote}{Quote no.}%
+  \csdef{InvStr@kind@proforma}{Pro Forma Invoice No.}%
   \csdef{InvStr@numlabel@invoice}{Invoice no.}%
   \csdef{InvStr@numlabel@creditnote}{Credit note no.}%
   \csdef{InvStr@numlabel@cancellation}{Invoice no.}%
   \csdef{InvStr@numlabel@quote}{Quote no.}%
+  \csdef{InvStr@numlabel@proforma}{Inv. no. (prov.)}%
   \csdef{InvStr@stampkind@invoice}{invoice no.}%
   \csdef{InvStr@stampkind@creditnote}{credit note no.}%
   \csdef{InvStr@stampkind@cancellation}{cancellation invoice no.}%
   \csdef{InvStr@stampkind@quote}{quote no.}%
+  \csdef{InvStr@stampkind@proforma}{pro forma invoice no.}%
+  \csdef{InvStr@banner@proforma}{PRO FORMA -- NOT AN INVOICE}%
+  \csdef{InvStr@suffix@proforma}{(not an invoice)}%
+  \csdef{InvStr@date@proforma}{Inv. date (prov.)}%
+  \csdef{InvStr@due@proforma}{Due (prov.)}%
+  \csdef{InvStr@payment@proforma}{Please check the details. The invoice will follow upon your confirmation.}%
+  \csdef{InvStr@nosignature@proforma}{This document was generated electronically.}%
   \newcommand{\InvStrDate}{Invoice date}%
   \newcommand{\InvStrServiceDate}{Date of service}%
   \newcommand{\InvStrServicePeriod}{Service period}%
@@ -198,6 +221,12 @@
 \newcommand{\InvStrKindLabel}{\csuse{InvStr@kind@\InvKind}}       % "Invoice no."  (heading, running header)
 \newcommand{\InvStrNumberLabel}{\csuse{InvStr@numlabel@\InvKind}} % "Invoice no."  (metadata label)
 \newcommand{\InvStrStampKind}{\csuse{InvStr@stampkind@\InvKind}}  % "invoice no."  (attachment stamp)
+% Per-kind overrides: a kind may replace a label or sentence; otherwise the language default applies.
+\newcommand{\inv@bykind}[2]{\ifcsdef{InvStr@#1@\InvKind}{\csuse{InvStr@#1@\InvKind}}{#2}}
+\newcommand{\InvStrDateLabel}{\inv@bykind{date}{\InvStrDate}}         % metadata: date
+\newcommand{\InvStrDueLabel}{\inv@bykind{due}{\InvStrDue}}            % metadata: due date
+\newcommand{\InvStrKindSuffix}{\ifcsdef{InvStr@suffix@\InvKind}{\ \csuse{InvStr@suffix@\InvKind}}{}}
+\newcommand{\InvStrBanner}{\ifcsdef{InvStr@banner@\InvKind}{\csuse{InvStr@banner@\InvKind}}{}}
 
 % ------------------------------------------------------------
 % Fonts (dispatch on \InvoiceFont)
@@ -276,6 +305,14 @@
       {\InvIssuerEmail\\\InvIssuerPhone\\\InvIssuerWeb};
   \end{tikzpicture}}
 
+% Banner (every page, only for kinds that define one, e.g. proforma): centred above the frame rule.
+\newcommand{\inv@banner}{%
+  \ifcsdef{InvStr@banner@\InvKind}{%
+    \begin{tikzpicture}[remember picture, overlay]
+      \node[anchor=north, inner sep=0pt, font=\InvHeadFont\InvoiceBannerSize, text=BannerInk]
+        at ([yshift=-\InvoiceBannerTop]current page.north) {\InvStrBanner};
+    \end{tikzpicture}}{}}
+
 % ------------------------------------------------------------
 % Footer (every page): accent frame rule, then bank · tax IDs · page
 % ------------------------------------------------------------
@@ -308,7 +345,7 @@
   \fancyhf{}%
   \renewcommand{\headrulewidth}{0pt}%
   \renewcommand{\footrulewidth}{0pt}%
-  \fancyhead[C]{\inv@letterhead}%
+  \fancyhead[C]{\inv@letterhead\inv@banner}%
   \fancyfoot[C]{\inv@footer}}
 \fancypagestyle{invoice}{%
   \fancyhf{}%
@@ -317,6 +354,7 @@
   \renewcommand{\footrulewidth}{0pt}%
   \fancyhead[L]{\InvRunFont\InvoiceRunningSize\color{InkSoft}\InvStrKindLabel\ \InvNumber\ \textperiodcentered\ \InvIssuerName}%
   \fancyhead[R]{\InvRunFont\InvoiceRunningSize\color{InkSoft}\InvDate}%
+  \fancyhead[C]{\inv@banner}%
   \fancyfoot[C]{\inv@footer}}
 \pagestyle{invoice}
 % Page 1 starts automatically: letterhead style, flow pushed down so that the
@@ -364,7 +402,7 @@
 % ------------------------------------------------------------
 % Block 4: heading — "<kind> <number>" by default, any text via the optional argument
 % ------------------------------------------------------------
-\newcommand{\invoiceheading}[1][\InvStrKindLabel\ \InvNumber]{%
+\newcommand{\invoiceheading}[1][\InvStrKindLabel\ \InvNumber\InvStrKindSuffix]{%
   \par\vspace{9mm}%
   {\InvHeadFont\InvoiceHeadingSize\color{InkMain}#1\par}%
   \nopagebreak\vspace{1.6mm}\nopagebreak
@@ -423,10 +461,10 @@
 % ------------------------------------------------------------
 % Block 8: payment sentence, closing, signature line, attachments list
 % ------------------------------------------------------------
-\newcommand{\invoicepayment}[2]{\par\InvStrPayment{#1}{#2}\par}
+\newcommand{\invoicepayment}[2]{\par\inv@bykind{payment}{\InvStrPayment{#1}{#2}}\par}
 \newcommand{\invoiceclosing}[1][\InvStrClosing]{%
   \ifInvoiceClosing\par\vspace{2mm}#1\\\InvIssuerPerson\par\fi
-  \ifInvoiceNoSignatureLine{\InvoiceSmallSize\color{InkSoft}\InvStrNoSignature\par}\fi}
+  \ifInvoiceNoSignatureLine{\InvoiceSmallSize\color{InkSoft}\inv@bykind{nosignature}{\InvStrNoSignature}\par}\fi}
 \newcommand{\attachmentrow}[2]{& #1 & #2\\}
 \newcommand{\invoiceattachments}[1]{%
   \par\vspace{3mm}%

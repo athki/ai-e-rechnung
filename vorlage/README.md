@@ -58,6 +58,12 @@ Stellschrauben, die ihr fehlen.
 - **Fußzeile dreispaltig**: Bank, Steuernummern, Seitenzahl. Die Seitenzahl erscheint nur, wenn die
   Rechnung mehr als eine Seite hat.
 - **Die USt-Zeile fehlt nie**, auch bei 0 % nicht; sie verweist dann auf den Hinweis darunter.
+  Einzige Ausnahme ist der Kleinunternehmer (§ 19 UStG): Entgelt in einer Summe, ohne Steuerzeile.
+- **Belegarten** über `\InvoiceKind`: `invoice`, `creditnote`, `cancellation`, `quote`, `proforma`. Die
+  Pro forma trägt auf jeder Seite die Kopfzeile „PRO FORMA – KEINE RECHNUNG“ (`\InvoiceBannerTop`,
+  `\InvoiceBannerSize`, Farbe `BannerInk`, Standard: die Akzentfarbe), „(keine Rechnung)“ im Betreff,
+  vorläufige Labels und die Bitte um Prüfung statt der Zahlungsaufforderung. Die Texte stehen in den
+  Wörterbüchern von `invoice.sty`.
 - **Eine Sprache je Rechnung** (`english` oder `ngerman`), gesetzt in Zeile 2 des Dokuments.
 - **PDF/A-tauglich gebaut**: eingebettete Schriften, keine Bitmap-Fonts. Der Schalter selbst kommt mit
   ZUGFeRD (geplant).

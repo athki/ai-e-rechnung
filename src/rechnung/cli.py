@@ -180,6 +180,8 @@ def resolve(nummer: Annotated[str, typer.Argument(help="Rechnungsnummer, z. B. 2
 def bauen(
     nummer: Annotated[str, typer.Argument(help="Rechnungsnummer, z. B. 2026-0001")],
     still: Annotated[bool, typer.Option("--still", help="Nur den Pfad der PDF ausgeben.")] = False,
+    pro_forma: Annotated[bool, typer.Option(
+        "--pro-forma", help="Pro forma statt Rechnung bauen (Arbeitskopie, wird überschrieben).")] = False,
 ) -> None:
     """Löst die Rechnung auf und baut daraus die PDF. Gebaut wird in einem Temp-Verzeichnis."""
     cfg = _config()
@@ -193,7 +195,7 @@ def bauen(
         ergebnis, json_ziel = resolve_mod.resolve(cfg, nummer)
         ordner = json_ziel.parent
         pdf = render_mod.baue_pdf(ergebnis, ordner, cfg.engine, belege_quelle=ordner / "belege",
-                                  eigene=cfg.vorlage)
+                                  eigene=cfg.vorlage, pro_forma=pro_forma)
     except (resolve_mod.ResolveFehler, render_mod.RenderFehler, config.ConfigFehler,
             rules.RegelFehler, festschreiben_mod.FestschreibFehler) as e:
         raise _abbruch(e) from e
@@ -201,7 +203,9 @@ def bauen(
         typer.echo(str(pdf))
         return
     _zeige(ergebnis, json_ziel)
-    typer.secho(f"\n  PDF: {pdf}", fg=typer.colors.GREEN, bold=True)
+    typer.secho(f"\n  {'Pro forma' if pro_forma else 'PDF'}: {pdf}", fg=typer.colors.GREEN, bold=True)
+    if pro_forma:
+        typer.echo(f"  Nach dem Versand: rechnung pro-forma {ordner.name} --gesendet-am JJJJ-MM-TT")
 
 
 def _ordner_oder_nummer(cfg: config.Config, wert: str) -> Path:
@@ -215,6 +219,8 @@ def _ordner_oder_nummer(cfg: config.Config, wert: str) -> Path:
 @app.command()
 def pruefen(
     nummer: Annotated[str, typer.Argument(help="Rechnungsnummer oder Pfad eines Rechnungsordners")],
+    pro_forma: Annotated[bool, typer.Option(
+        "--pro-forma", help="Die Arbeitskopie der Pro forma prüfen statt der Rechnung.")] = False,
 ) -> None:
     """Weist im Text der fertigen PDF nach, dass alle Pflichtangaben enthalten sind."""
     import json
@@ -226,7 +232,7 @@ def pruefen(
         ordner = _ordner_oder_nummer(cfg, nummer)
         ergebnis = Resolved.model_validate(
             json.loads((ordner / resolve_mod.RESOLVED_DATEI).read_text(encoding="utf-8")))
-        liste = pruefen_mod.pruefe(ergebnis, ordner / pruefen_mod.PDF_DATEI)
+        liste = pruefen_mod.pruefe(ergebnis, pruefen_mod.pdf_pfad(ordner, ergebnis, pro_forma), pro_forma)
     except (resolve_mod.ResolveFehler, pruefen_mod.PruefFehler, config.ConfigFehler, OSError) as e:
         raise _abbruch(e) from e
 
@@ -281,6 +287,38 @@ def festschreiben(
     typer.echo("  `rechnung bauen` verweigert ab jetzt den Neubau dieser Rechnung.")
 
 
+@app.command("pro-forma")
+def pro_forma(
+    nummer: Annotated[str, typer.Argument(help="Rechnungsnummer, z. B. 2026-0001")],
+    gesendet_am: Annotated[str, typer.Option(
+        "--gesendet-am",
+        help="Tag, an dem die Pro forma an den Kunden ging (JJJJ-MM-TT). Pflicht.")],
+) -> None:
+    """Friert die zuletzt gebaute Pro forma als nächste Revision ein (pro-forma/<n>/).
+
+    Die Pro forma ist keine Rechnung: Sie geht an den Kunden zur Prüfung. Das Werkzeug verschickt
+    nichts – es hält fest, was du verschickt hast, mit PDF und den Daten, aus denen sie entstand.
+    """
+    cfg = _config()
+    try:
+        gesendet = date.fromisoformat(gesendet_am)
+    except ValueError as e:
+        raise _abbruch(ValueError(f"--gesendet-am muss JJJJ-MM-TT sein: {e}")) from e
+    if gesendet > date.today():
+        raise _abbruch(ValueError(f"--gesendet-am liegt in der Zukunft ({gesendet})."))
+    try:
+        ordner = resolve_mod.finde_ordner(cfg, nummer)
+        eintrag = festschreiben_mod.pro_forma_festhalten(ordner, gesendet)
+    except (resolve_mod.ResolveFehler, festschreiben_mod.FestschreibFehler, config.ConfigFehler) as e:
+        raise _abbruch(e) from e
+    typer.secho(f"Pro forma {ordner.name}, Revision {eintrag['revision']} festgehalten",
+                fg=typer.colors.GREEN, bold=True)
+    typer.echo(f"  gesendet am  {eintrag['gesendet_am']}")
+    for datei in eintrag["hash"]:
+        typer.echo(f"  {datei}")
+    typer.echo("  Schreibgeschützt; die Hashes stehen in status.yaml, `rechnung pruefen` vergleicht sie.")
+
+
 # Die Demo baut je Ergebnis mindestens eine Rechnung aus stammdaten.example/.
 DEMO: list[dict] = [
     {"kuerzel": "muster-gmbh", "sprache": "de",
@@ -295,7 +333,9 @@ DEMO: list[dict] = [
      "leistung": ("Panel participation at a policy forum", "unterrichtend", "GB"),
      "beschreibung": "Panel participation, Sample Policy Forum, London",
      "menge": "2", "einheit": "stunde", "einzelpreis": "200.00",
-     "zweite": ("Travel: flight FRA--LON--FRA, receipt attached", "1", "pauschal", "287.30")},
+     "zweite": ("Travel: flight FRA--LON--FRA, receipt attached", "1", "pauschal", "287.30"),
+     # Vorher zwei Pro-forma-Revisionen; die zweite ergänzt die Referenz, die der Kunde nachgereicht hat.
+     "pro_forma": [("2026-06-11", ""), ("2026-06-15", 'referenz: "PO 4711"\n')]},
     {"kuerzel": "privat-ch", "sprache": "de",
      "leistung": ("Vortrag vor Publikum", "unterrichtend", "CH"),
      "beschreibung": "Vortrag, Zürich",
@@ -351,11 +391,19 @@ def demo(
                 shutil.copy2(config.REPO / "vorlage" / "attachments" / "sample-receipt.pdf",
                              ordner / "belege" / "flug.pdf")
             try:
+                for gesendet, nachtrag in eintrag.get("pro_forma", []):
+                    if nachtrag:
+                        with (ordner / resolve_mod.INPUT_DATEI).open("a", encoding="utf-8") as f:
+                            f.write(nachtrag)
+                    ergebnis, _ = resolve_mod.resolve(demo_cfg, nummer)
+                    render_mod.baue_pdf(ergebnis, ordner, cfg.engine, belege_quelle=ordner / "belege",
+                                        eigene=demo_cfg.vorlage, pro_forma=True)
+                    festschreiben_mod.pro_forma_festhalten(ordner, date.fromisoformat(gesendet))
                 ergebnis, json_ziel = resolve_mod.resolve(demo_cfg, nummer)
                 pdf = render_mod.baue_pdf(ergebnis, ordner, cfg.engine, belege_quelle=ordner / "belege",
                                           eigene=demo_cfg.vorlage)
             except (resolve_mod.ResolveFehler, render_mod.RenderFehler, rules.RegelFehler,
-                    config.ConfigFehler) as e:
+                    config.ConfigFehler, festschreiben_mod.FestschreibFehler) as e:
                 raise _abbruch(e) from e
             # Der ganze Rechnungsordner wandert ins Ziel, nicht nur die PDF: damit kann
             # `rechnung pruefen <ordner>` die Demo-Rechnungen nachträglich prüfen.
@@ -364,10 +412,10 @@ def demo(
             if zielordner.exists():
                 shutil.rmtree(zielordner)
             shutil.copytree(ordner, zielordner)
-            typer.echo(f" {SYMBOL[doctor_mod.OK]} {name}/rechnung.pdf"
+            typer.echo(f" {SYMBOL[doctor_mod.OK]} {name}/{pdf.name}"
                        f"  ({ergebnis.waehrung} {ergebnis.brutto})")
             if pruefe:
-                befunde = pruefen_mod.pruefe(ergebnis, zielordner / pruefen_mod.PDF_DATEI)
+                befunde = pruefen_mod.pruefe(ergebnis, zielordner / pdf.name)
                 fehlend = [b for b in befunde if not b.gefunden]
                 zeichen = SYMBOL[doctor_mod.FEHLER if fehlend else doctor_mod.OK]
                 typer.echo(f"   {zeichen} pruefen: {len(befunde) - len(fehlend)}/{len(befunde)} Pflichtangaben"

@@ -5,7 +5,7 @@ Rechnung als PDF, gesetzt mit LaTeX. Der Kern ist deterministisch. Leistungsort,
 und Rechnungsnummer rechnet das Werkzeug, nicht der Mensch und nicht die AI. Der Befehl heißt `rechnung`.
 
 ```
-rechnung.yaml ──resolve──▶ rechnung.resolved.json ──render──▶ rechnung.pdf
+rechnung.yaml ──resolve──▶ rechnung.resolved.json ──render──▶ rechnung_<nummer>.pdf
 ```
 
 **Stand:** PDF heute. ZUGFeRD (E-Rechnung nach EN 16931) ist geplant, die Vorlage ist dafür schon
@@ -26,7 +26,8 @@ docker run --rm -v "$PWD/probe":/gewerbe rechnung demo --pruefen --ziel /gewerbe
 
 Danach liegen in `probe/demo/` sechs Beispielrechnungen, je Ergebnis mindestens eine (Inland,
 EU mit Reverse Charge, Drittland, Kleinunternehmer), jede mit `rechnung.yaml`,
-`rechnung.resolved.json` und `rechnung.pdf`. `--pruefen` weist in jeder PDF die Pflichtangaben nach
+`rechnung.resolved.json` und der PDF; eine davon zusätzlich mit zwei gesendeten Pro-forma-Revisionen.
+`--pruefen` weist in jeder PDF die Pflichtangaben nach
 § 14 Abs. 4 UStG nach. Dieselben liegen als Muster in `docs/muster/`.
 
 ## Installation
@@ -48,7 +49,10 @@ rechnung neu --kunde sample-ltd
 #   legt <ausgang>/2026/2026-0001/ mit vorbefülltem rechnung.yaml an;
 #   leistungsdatum und leistung: (was, Einordnung nach § 3a UStG) dort eintragen – Pflicht
 rechnung resolve 2026-0001            # Leistungsort, Ergebnis, Summen, Regeln – schreibt das Ergebnis daneben
-rechnung bauen   2026-0001            # PDF
+rechnung bauen   2026-0001 --pro-forma   # optional: Pro forma zur Prüfung durch den Kunden
+rechnung pro-forma 2026-0001 --gesendet-am 2026-06-12
+#   hält die gesendete Pro forma als Revision fest (pro-forma/1/), schreibgeschützt
+rechnung bauen   2026-0001            # die Rechnung: rechnung_2026-0001.pdf bzw. invoice_2026-0001.pdf
 rechnung pruefen 2026-0001            # weist die Pflichtangaben im PDF-Text nach
 rechnung festschreiben 2026-0001 --gesendet-am 2026-06-18
 #   macht die Rechnung unveränderbar: Status, Schreibschutz, Hashes

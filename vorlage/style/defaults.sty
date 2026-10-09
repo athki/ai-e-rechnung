@@ -34,6 +34,7 @@
 \definecolor{InkSoft}{HTML}{6B6B6B}    % labels, letterhead lines, footer, secondary text
 \definecolor{RuleGrey}{HTML}{C8C8C8}   % every hairline between the two frame rules
 \definecolor{Accent}{HTML}{000000}     % black; frame rules, list markers, links – set your own colour here
+\colorlet{BannerInk}{Accent}            % pro forma banner ("PRO FORMA – NOT AN INVOICE")
 
 % ---------- Rules ----------
 % Rule of the page: accent frame rules at top and bottom, grey hairlines for
@@ -51,6 +52,7 @@
 \newcommand{\InvoiceFrameTop}{15mm}      % page 1: accent rule, measured from the top edge
 \newcommand{\InvoiceLetterheadTop}{19.5mm}   % page 1: issuer name line
 \newcommand{\InvoiceLetterheadLinesTop}{25.5mm} % page 1: grey address/contact lines
+\newcommand{\InvoiceBannerTop}{8mm}       % pro forma banner, every page, above the frame rule
 \newcommand{\InvoiceRecipientTop}{45mm}  % page 1: Anschriftfeld nach DIN 5008 Form B (Fensterumschlag)
 \newcommand{\InvoiceRecipientWidth}{80mm}
 \newcommand{\InvoiceMetaWidth}{70mm}
@@ -60,6 +62,7 @@
 % Body is the class size (11pt).
 \newcommand{\InvoiceLetterheadSize}{\fontsize{12}{15}\selectfont}   % issuer name line
 \newcommand{\InvoiceHeadingSize}{\fontsize{16}{19}\selectfont}      % "Invoice no. …"
+\newcommand{\InvoiceBannerSize}{\fontsize{9}{11}\selectfont}       % pro forma banner
 \newcommand{\InvoiceSenderLineSize}{\fontsize{6.5}{8}\selectfont}  % Ruecksendeangabe ueber dem Empfaenger
 \newcommand{\InvoiceSenderLineSkip}{2.2mm}
 \newcommand{\InvoiceLabelSize}{\fontsize{8.5}{11}\selectfont}       % letterhead lines, metadata labels, attachments label

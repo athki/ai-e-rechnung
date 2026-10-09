@@ -11,7 +11,7 @@
 \usepackage{style/invoice}
 \input{include/currency}
 
-\InvoiceKind{invoice}
+\InvoiceKind{\VAR{art}}
 \InvoiceNumber{\VAR{nummer}}
 \InvoiceDate{\VAR{datum}}
 \InvoiceCurrency{\VAR{waehrung}}
@@ -27,16 +27,16 @@
 }{%
 % Block 3: Metadaten in drei Abschnitten, getrennt durch graue Striche: die Rechnung selbst,
 % unsere Steuerdaten („Unsere …“), die des Kunden („Ihre …“): seine Referenz, seine USt-IdNr.
-% (bei Fall B stehen so beide Nummern auf der Rechnung) und sein Registereintrag (belegt ohne
+% (bei reverse_charge stehen so beide Nummern auf der Rechnung) und sein Registereintrag (belegt ohne
 % USt-IdNr. den Unternehmerstatus).
   \metarow{\InvStrNumberLabel}{\InvNumber}
-  \metarow{\InvStrDate}{\InvDate}
+  \metarow{\InvStrDateLabel}{\InvDate}
 \BLOCK{if leistungsdatum_bis}
   \metarow{\InvStrServicePeriod}{\VAR{leistungsdatum}--\VAR{leistungsdatum_bis}}
 \BLOCK{else}
   \metarow{\InvStrServiceDate}{\VAR{leistungsdatum}}
 \BLOCK{endif}
-  \metarow{\InvStrDue}{\VAR{faelligkeit}}
+  \metarow{\InvStrDueLabel}{\VAR{faelligkeit}}
   \metasep
 \BLOCK{if aussteller.steuernummer}
   \metarow{\InvStrOurTaxNo}{\InvIssuerTaxNo}

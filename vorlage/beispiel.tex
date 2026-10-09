@@ -16,7 +16,7 @@
 \usepackage{style/invoice}
 \input{include/currency}
 
-\InvoiceKind{invoice}                    % invoice | creditnote | cancellation | quote
+\InvoiceKind{invoice}                    % invoice | creditnote | cancellation | quote | proforma
 \InvoiceNumber{2026-0001}
 \InvoiceDate{17 June 2026}
 \InvoiceCurrency{EUR}
@@ -31,9 +31,9 @@
   London EC1A 1AA\\
   United Kingdom}{%
   \metarow{\InvStrNumberLabel}{\InvNumber}
-  \metarow{\InvStrDate}{\InvDate}
+  \metarow{\InvStrDateLabel}{\InvDate}
   \metarow{\InvStrServiceDate}{10 June 2026}
-  \metarow{\InvStrDue}{1 July 2026}
+  \metarow{\InvStrDueLabel}{1 July 2026}
   \metasep
   \metarow{\InvStrOurTaxNo}{\InvIssuerTaxNo}
   \metarow{\InvStrOurVatId}{\InvIssuerVatId}

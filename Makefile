@@ -43,3 +43,4 @@ schatten: hooks schatten-image
 		nicht-steuerbar-privat-ch inland-privat-de kleinunternehmer-muster-gmbh; do \
 		$(DOCKER_RUN) pruefen /gewerbe/demo-output/$$rechnung || exit 1; \
 	done
+	$(DOCKER_RUN) pruefen --pro-forma /gewerbe/demo-output/nicht-steuerbar-sample-ltd

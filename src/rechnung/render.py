@@ -23,7 +23,16 @@ from rechnung import rules, vorlage
 from rechnung.models import Resolved
 
 VORLAGE = vorlage.STANDARD
-PDF_DATEI = "rechnung.pdf"
+# Dateinamen der PDFs: Präfix nach Sprache, Nummer am Ende – die Datei, die man verschickt, sagt,
+# was sie ist. rechnung.yaml und rechnung.resolved.json behalten feste Namen.
+PRAEFIX = {"de": "rechnung", "en": "invoice"}
+
+
+def pdf_name(nummer: str, sprache: str, pro_forma: bool = False, revision: int | None = None) -> str:
+    """rechnung_MM-2026-0001.pdf, invoice-pro-forma_…, invoice-pro-forma-2_… (gesendete Revision)."""
+    art = "-pro-forma" if pro_forma else ""
+    rev = f"-{revision}" if revision else ""
+    return f"{PRAEFIX[sprache]}{art}{rev}_{nummer}.pdf"
 
 # Unsere Einheiten in die Wörterbuchschlüssel der Vorlage (Singular/Plural).
 EINHEIT_LATEX: dict[str, tuple[str, str]] = {
@@ -88,7 +97,7 @@ def _umgebung(eigene: Path | None = None) -> Environment:
     )
 
 
-def kontext(r: Resolved) -> dict:
+def kontext(r: Resolved, pro_forma: bool = False) -> dict:
     """Alles, was die Vorlage braucht – fertig formatiert und maskiert."""
     sprache = r.sprache
 
@@ -122,6 +131,8 @@ def kontext(r: Resolved) -> dict:
 
     return {
         "sprache": sprache,
+        # Belegart der Vorlage; die Pro forma ändert nur Kennzeichnung und Sätze, nie die Zahlen.
+        "art": "proforma" if pro_forma else "invoice",
         "sprache_latex": SPRACHE_LATEX[sprache],
         "nummer": escape(r.nummer),
         "datum": datum(r.datum, sprache),
@@ -182,7 +193,7 @@ def _iban_gruppiert(iban: str) -> str:
 
 
 def baue_verzeichnis(r: Resolved, ziel: Path, belege_quelle: Path | None = None,
-                     eigene: Path | None = None) -> Path:
+                     eigene: Path | None = None, pro_forma: bool = False) -> Path:
     """Legt im Zielverzeichnis eine vollständige, für sich kompilierbare Rechnung an.
 
     Erst die Standardvorlage, dann der eigene Vorlagen-Ordner darüber (gleiche Namen ersetzt er),
@@ -205,7 +216,7 @@ def baue_verzeichnis(r: Resolved, ziel: Path, belege_quelle: Path | None = None,
     (ziel / "include" / "issuer.tex").write_text(
         env.get_template("issuer.tex.j2").render(**kontext_aussteller(r)), encoding="utf-8")
     (ziel / "rechnung.tex").write_text(
-        env.get_template("rechnung.tex.j2").render(**kontext(r)), encoding="utf-8")
+        env.get_template("rechnung.tex.j2").render(**kontext(r, pro_forma)), encoding="utf-8")
 
     for beleg in r.belege:
         if belege_quelle is None:
@@ -221,8 +232,13 @@ def baue_verzeichnis(r: Resolved, ziel: Path, belege_quelle: Path | None = None,
 
 
 def baue_pdf(r: Resolved, ziel_ordner: Path, engine: str = "pdflatex",
-             belege_quelle: Path | None = None, eigene: Path | None = None) -> Path:
-    """Baut die PDF in einem Temp-Verzeichnis und legt nur sie in den Zielordner."""
+             belege_quelle: Path | None = None, eigene: Path | None = None,
+             pro_forma: bool = False) -> Path:
+    """Baut die PDF in einem Temp-Verzeichnis und legt nur sie in den Zielordner.
+
+    Mit `pro_forma` entsteht die Arbeitskopie der Pro forma; sie wird bei jedem Bau überschrieben.
+    Eingefroren wird sie erst mit `rechnung pro-forma` (festschreiben.pro_forma_festhalten).
+    """
     if vorlage.nachweis(eigene) != r.vorlage_eigen:
         raise RenderFehler(
             "Der eigene Vorlagen-Ordner hat sich seit dem Auflösen geändert – erst neu auflösen, "
@@ -230,7 +246,7 @@ def baue_pdf(r: Resolved, ziel_ordner: Path, engine: str = "pdflatex",
         )
     with tempfile.TemporaryDirectory(prefix="rechnung-build-") as tmp:
         tmp_pfad = Path(tmp)
-        tex = baue_verzeichnis(r, tmp_pfad, belege_quelle, eigene)
+        tex = baue_verzeichnis(r, tmp_pfad, belege_quelle, eigene, pro_forma)
         cmd = [
             "latexmk", {"pdflatex": "-pdf", "lualatex": "-lualatex", "xelatex": "-xelatex"}[engine],
             "-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape",
@@ -248,10 +264,15 @@ def baue_pdf(r: Resolved, ziel_ordner: Path, engine: str = "pdflatex",
             raise RenderFehler(_fehlermeldung(aus.stdout, tmp_pfad))
 
         ziel_ordner.mkdir(parents=True, exist_ok=True)
-        ziel = ziel_ordner / PDF_DATEI
+        ziel = ziel_ordner / pdf_name(r.nummer, r.sprache, pro_forma)
         if ziel.exists() and not _beschreibbar(ziel):
             raise RenderFehler(f"{ziel} ist schreibgeschützt – festgeschriebene Rechnungen werden nicht neu gebaut.")
         shutil.copy2(pdf, ziel)
+        # Sprache gewechselt: die Datei mit dem anderen Präfix ist veraltet.
+        for sprache in PRAEFIX:
+            alt = ziel_ordner / pdf_name(r.nummer, sprache, pro_forma)
+            if alt != ziel and alt.exists() and _beschreibbar(alt):
+                alt.unlink()
     return ziel
 
 

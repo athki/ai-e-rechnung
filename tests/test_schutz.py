@@ -28,6 +28,7 @@ def hook(tmp_path, werkzeug, gewerbe=None, **tool_input):
     "/g/rechnung-ausgang/2026/2026-0001/belege/flug.PDF",
     "/g/rechnung-ausgang/2026/2026-0001/status.yaml",
     "/g/stammdaten/ich.yaml",
+    "/g/rechnung-ausgang/2026/2026-0001/pro-forma/1/rechnung.yaml",
 ])
 @pytest.mark.parametrize("werkzeug", ["Write", "Edit", "MultiEdit"])
 def test_geschuetzte_pfade_blockiert(tmp_path, werkzeug, pfad):
@@ -80,6 +81,8 @@ def test_festgeschriebene_rechnung_ist_gesperrt(tmp_path):
     "chmod u+w /g/2026-0001/rechnung.pdf",
     """python3 -c "from pathlib import Path; Path('/g/2026-0001/status.yaml').write_text('x')" """,
     "cp entwurf.pdf '/g/2026-0001/rechnung.pdf'",
+    "rm -rf /g/2026-0001/pro-forma/1",
+    "echo x > /g/2026-0001/pro-forma/1/rechnung.yaml",
 ])
 def test_bash_schreiben_blockiert(tmp_path, befehl):
     assert hook(tmp_path, "Bash", command=befehl).returncode == 2
@@ -98,6 +101,8 @@ def test_bash_schreiben_blockiert(tmp_path, befehl):
     "cat /g/2026-0001/status.yaml 2>/dev/null",
     "uv run rechnung bauen 2026-0001 > /dev/null 2>&1",
     "ls /g/2026-0001 > liste.txt",
+    "ls /g/2026-0001/pro-forma/1",
+    "uv run rechnung pro-forma 2026-0001 --gesendet-am 2026-06-11",
 ])
 def test_bash_lesen_erlaubt(tmp_path, befehl):
     assert hook(tmp_path, "Bash", command=befehl).returncode == 0
@@ -106,7 +111,7 @@ def test_bash_lesen_erlaubt(tmp_path, befehl):
 def test_settings_json_deny_regeln():
     settings = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))
     deny = settings["permissions"]["deny"]
-    for muster in ["rechnung.resolved.json", "*.pdf", "status.yaml", "stammdaten/ich.yaml"]:
+    for muster in ["rechnung.resolved.json", "*.pdf", "status.yaml", "stammdaten/ich.yaml", "pro-forma/**"]:
         assert f"Write(//**/{muster})" in deny
         assert f"Edit(//**/{muster})" in deny
     befehl = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]

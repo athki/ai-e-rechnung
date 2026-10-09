@@ -76,6 +76,8 @@ konsolidierte Fassung), abgerufen am 2026-10-08.
 - **Steuersätze:** 19 % und 7 %, 0 % nur als Folge von Nichtsteuerbarkeit, Steuerschuldnerschaft des
   Leistungsempfängers oder Steuerbefreiung nach § 19.
 - **Währung:** EUR; USD und GBP nur ohne deutschen Steuerausweis.
+- **Pro forma:** ein Entwurf der Rechnung zur Prüfung durch den Kunden, aus denselben Daten, deutlich
+  als „keine Rechnung“ gekennzeichnet (R38).
 
 ### Außen vor
 
@@ -309,6 +311,13 @@ Nicht im Wortlaut zitiert, weil keine Rechtsnorm, aber Grundlage einzelner Annah
   Schicksal der Hauptleistung. Grundlage für **R9**.
 - **Nachweis der Unternehmereigenschaft (UStAE Abschn. 3a.2):** bei EU-Kunden über die USt-IdNr., bei
   Drittland-Kunden über eine Bescheinigung oder andere Belege. Grundlage der Annahmen zu **R3**.
+
+### Q15 – § 14 Abs. 1 Satz 1 UStG: Was eine Rechnung ist
+
+> Rechnung ist jedes Dokument, mit dem über eine Lieferung oder sonstige Leistung abgerechnet wird,
+> gleichgültig, wie dieses Dokument im Geschäftsverkehr bezeichnet wird.
+
+Daraus folgt: **R38**.
 
 ---
 
@@ -735,6 +744,32 @@ der Regel-Trace (R35) zeigt, welche Regeln eine Rechnung angewandt hat.
 - **Werkzeug:** `leistungsort` + `begruendung` in `rechnung.yaml`.
 - **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
 
+### Pro forma
+
+#### R38 – Eine Pro forma rechnet nicht ab
+
+- **Quelle:** Q15 (§ 14 Abs. 1 Satz 1 UStG), Q10 (§ 14c UStG).
+- **Regel:** Eine Pro forma ist keine Rechnung, weil mit ihr nicht abgerechnet wird: Sie fordert
+  nicht zur Zahlung auf, sondern zur Prüfung, und kündigt die Rechnung an. Die Bezeichnung allein
+  genügt dafür nicht – nach § 14 Abs. 1 kommt es nicht darauf an, wie ein Dokument heißt. Deshalb:
+  - jede Seite trägt die Kopfzeile „PRO FORMA – KEINE RECHNUNG“ / „PRO FORMA – NOT AN INVOICE“, der
+    Betreff „(keine Rechnung)“ / „(not an invoice)“, Nummer, Datum und Fälligkeit sind als vorläufig
+    bezeichnet;
+  - statt der Zahlungsaufforderung steht „Bitte prüfen Sie die Angaben. Die Rechnung folgt nach Ihrer
+    Bestätigung.“ / „Please check the details. The invoice will follow upon your confirmation.“;
+  - Pro forma und Rechnung entstehen aus denselben Daten nach denselben Regeln: Die Kennzeichnung
+    ändert nie Leistungsort, Ergebnis, Satz oder Beträge;
+  - eine echte Rechnung trägt keine Pro-forma-Kennzeichnung.
+- **Annahmen:** Eine so gekennzeichnete Pro forma, die keine Zahlung verlangt, ist kein Dokument, mit
+  dem abgerechnet wird – auch wenn sie Steuerbeträge zeigt. Bleibt sie die einzige Abrechnung (die
+  Rechnung folgt nie), könnte sie als Rechnung gelten; dann gälte für einen ausgewiesenen
+  Steuerbetrag § 14c. Die Pro forma trägt die Nummer der späteren Rechnung; eine Pro forma ohne
+  Rechnung hinterlässt eine Lücke in den Nummern, die zu erklären ist (R23).
+- **Werkzeug:** `rechnung bauen --pro-forma`, `rechnung pro-forma <nr> --gesendet-am`
+  (Revisionen in `pro-forma/<n>/`), Belegart `proforma` in der Vorlage; `rechnung pruefen` weist die
+  Kennzeichnung an der Pro forma nach und ihr Fehlen an der Rechnung.
+- **Status:** Annahme – ungeprüft.
+
 ---
 
 ## Teil 4 – Zuordnung zum Werkzeug
@@ -837,6 +872,7 @@ welche Regeln angewandt wurden (`regeln`, R35).
 | R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |
 | R20–R29 im PDF | `pruefen.befunde()` | `tests/test_pruefen.py`, `rechnung pruefen` |
 | R23 | `rules.naechste_lfd()` | `test_naechste_lfd_*` |
+| R38 | `render.baue_pdf(…, pro_forma=True)`, Belegart `proforma` in `invoice.sty`, `festschreiben.pro_forma_festhalten()`, `pruefen.befunde(…, pro_forma)` | `test_pro_forma_ist_gekennzeichnet_und_rechnung_nicht`, `test_pro_forma_revisionen_werden_eingefroren` |
 | IDs im Code | – | `test_jede_regel_id_im_code_steht_in_rules_md` |
 
 Das sind Tests, keine Beweise. Die Beweise kommen mit dem Lean-Modell; es prüft `kern()` dann über
@@ -876,3 +912,6 @@ alle Eingaben gegen bewiesene Theoreme mit denselben IDs.
     Katalog des § 14 Abs. 4 auch an, wenn der Leistungsort im Drittland liegt. Spricht etwas dagegen?
 12. **Manuelle Festlegung (R37):** Gibt es Fälle, in denen Sie einen anderen Leistungsort als den
     aus der Tabelle empfehlen würden? Oder soll es diese Möglichkeit gar nicht geben?
+13. **Pro forma (R38):** Genügt die Kennzeichnung („keine Rechnung“, vorläufige Nummer, Bitte um Prüfung
+    statt Zahlungsaufforderung), damit die Pro forma nicht als Rechnung gilt – auch wenn sie
+    Steuerbeträge zeigt? Was gilt, wenn auf eine Pro forma nie eine Rechnung folgt?

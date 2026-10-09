@@ -20,7 +20,15 @@ from pathlib import Path
 from rechnung import render
 from rechnung.models import Resolved
 
-PDF_DATEI = "rechnung.pdf"
+# Kennzeichnung der Pro forma, wie sie die Vorlage setzt (invoice.sty, Belegart proforma).
+KENNZEICHNUNG = {
+    "de": ("PRO FORMA", "KEINE RECHNUNG", "(keine Rechnung)"),
+    "en": ("PRO FORMA", "NOT AN INVOICE", "(not an invoice)"),
+}
+
+
+def pdf_pfad(ordner: Path, r: Resolved, pro_forma: bool = False) -> Path:
+    return ordner / render.pdf_name(r.nummer, r.sprache, pro_forma)
 
 
 class PruefFehler(Exception):
@@ -74,7 +82,7 @@ def geld(betrag: Decimal, waehrung: str, sprache: str) -> str:
     return f"{waehrung} {zahl}"
 
 
-def befunde(r: Resolved, text: str) -> list[Befund]:
+def befunde(r: Resolved, text: str, pro_forma: bool = False) -> list[Befund]:
     """Jede Pflichtangabe als einzelner Befund – die Meldung soll sagen, was genau fehlt."""
     n = normalisiere(text)
     a, k = r.aussteller, r.kunde
@@ -127,8 +135,17 @@ def befunde(r: Resolved, text: str) -> list[Befund]:
         liste.append(Befund("USt-IdNr. des Ausstellers (Reverse Charge)", a.ustid or "",
                             enthaelt(n, a.ustid or ""), "§ 14a Abs. 1"))
 
+    # Eine Pro forma muss als solche erkennbar sein, eine Rechnung darf es nicht (RULES.md R38).
+    if pro_forma:
+        for teil in KENNZEICHNUNG[r.sprache]:
+            liste.append(Befund(f"Pro-forma-Kennzeichnung „{teil}“", teil, enthaelt(n, teil), "§ 14 Abs. 1, § 14c"))
+    else:
+        klein = n.lower()
+        liste.append(Befund("Keine Pro-forma-Kennzeichnung", "kein „pro forma“ im Text",
+                            "pro forma" not in klein and "pro-forma" not in klein, "§ 14 Abs. 1"))
+
     return liste
 
 
-def pruefe(r: Resolved, pdf: Path) -> list[Befund]:
-    return befunde(r, pdf_text(pdf))
+def pruefe(r: Resolved, pdf: Path, pro_forma: bool = False) -> list[Befund]:
+    return befunde(r, pdf_text(pdf), pro_forma)

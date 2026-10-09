@@ -4,6 +4,7 @@
 #
 # Gesperrt:
 #   **/rechnung.resolved.json, **/*.pdf, **/status.yaml   (abgeleitet bzw. vom Werkzeug gepflegt)
+#   **/pro-forma/**   (gesendete Pro-forma-Revisionen, eingefroren)
 #   <gewerbe>/<stammdaten>/ich.yaml und **/stammdaten/ich.yaml
 #   jede Datei in einem Rechnungsordner, dessen status.yaml "festgeschrieben" sagt
 #
@@ -45,6 +46,7 @@ gesperrt() {
         */rechnung.resolved.json|rechnung.resolved.json) echo "rechnung.resolved.json ist abgeleitet"; return ;;
         *.pdf|*.PDF) echo "PDFs sind abgeleitet"; return ;;
         */status.yaml|status.yaml) echo "status.yaml pflegt nur 'rechnung festschreiben'"; return ;;
+        */pro-forma/*|pro-forma/*) echo "gesendete Pro-forma-Revisionen sind eingefroren"; return ;;
         */stammdaten/ich.yaml) echo "stammdaten/ich.yaml pflegt nur der Nutzer"; return ;;
     esac
     if [[ -n "$ich_yaml" && "$pfad" == "$ich_yaml" ]]; then
@@ -73,7 +75,7 @@ case "$werkzeug" in
         # Lesen bleibt erlaubt (cat, pdftotext, grep), und ein geschützter Name irgendwo im
         # Befehlstext – etwa in einem Regex oder in einem Dokument, das geschrieben wird –
         # ist für sich genommen kein Grund. Ein zu grober Hook wird abgeschaltet und schützt dann nichts.
-        ziel='([^[:space:];|&"'"'"']*(rechnung\.resolved\.json|\.pdf|\.PDF|status\.yaml|ich\.yaml))'
+        ziel='([^[:space:];|&"'"'"']*(rechnung\.resolved\.json|\.pdf|\.PDF|status\.yaml|ich\.yaml|pro-forma/[^[:space:];|&"'"'"']*))'
         # 1) Umleitung auf ein geschütztes Ziel   2) tee   3) dateiverändernde Befehle
         # 4) sed/perl -i   5) Python-Schreibaufrufe (undurchsichtig, deshalb großzügig gesperrt)
         muster=(
@@ -84,7 +86,7 @@ case "$werkzeug" in
             "(write_text|write_bytes|shutil\.(copy|move)|os\.(remove|rename))[^;|&]*"
         )
         # Ein geschützter Name als Pfad in Anführungszeichen – nicht bloß als Wort in einem Text.
-        zielpfad="[\"'][^\"']*/[^\"']*(rechnung\.resolved\.json|\.pdf|status\.yaml|ich\.yaml)"
+        zielpfad="[\"'][^\"']*/[^\"']*(rechnung\.resolved\.json|\.pdf|status\.yaml|ich\.yaml|pro-forma/)"
         for m in "${muster[@]}"; do
             if grep -qE "$m" <<<"$befehl"; then
                 # Python ist undurchsichtig: blocken, sobald ein geschützter PFAD auftaucht.

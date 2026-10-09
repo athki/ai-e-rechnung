@@ -18,3 +18,4 @@ positionen:
 belege:
   - datei: flug.pdf
     text: "Flight receipt FRA-LON-FRA (position 2)"
+referenz: "PO 4711"

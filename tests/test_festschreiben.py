@@ -64,7 +64,9 @@ def test_festschreiben_haelt_beide_daten_fest(gewerbe):
     assert daten["gesendet_am"] == "2026-09-20"
     assert daten["festgeschrieben_am"] == "2026-09-22"
     gespeichert = yaml.safe_load((ordner / "status.yaml").read_text(encoding="utf-8"))
-    assert gespeichert["hash"]["rechnung.pdf"] == festschreiben.hash_datei(ordner / "rechnung.pdf")
+    pdf = festschreiben._pdf(ordner)
+    assert pdf.name == f"invoice_{ordner.name}.pdf"          # Präfix nach Sprache, Nummer im Namen
+    assert gespeichert["hash"][pdf.name] == festschreiben.hash_datei(pdf)
     assert len(gespeichert["hash"]) == 3
 
 
@@ -74,7 +76,7 @@ def test_festschreiben_entzieht_die_schreibrechte(gewerbe):
     festschreiben.festschreiben(ordner, date(2026, 9, 20))
 
     assert festschreiben.ist_festgeschrieben(ordner)
-    assert not os.access(ordner / "rechnung.pdf", os.W_OK)
+    assert not os.access(festschreiben._pdf(ordner), os.W_OK)
     assert not os.access(ordner / "rechnung.resolved.json", os.W_OK)
 
 
@@ -140,11 +142,86 @@ def test_aenderung_nach_dem_festschreiben_faellt_auf(gewerbe):
     festschreiben.festschreiben(ordner, date(2026, 9, 20))
     assert festschreiben.pruefe_unveraendert(ordner) == []
 
-    festschreiben.schreibschutz_aufheben(ordner / "rechnung.pdf")
-    (ordner / "rechnung.pdf").write_bytes(b"%PDF-1.7 etwas anderes")
+    pdf = festschreiben._pdf(ordner)
+    festschreiben.schreibschutz_aufheben(pdf)
+    pdf.write_bytes(b"%PDF-1.7 etwas anderes")
 
     assert festschreiben.pruefe_unveraendert(ordner) == [
-        "rechnung.pdf wurde nach dem Festschreiben geändert"]
+        f"{pdf.name} wurde nach dem Einfrieren geändert"]
+
+
+# ---------------------------------------------------------------- Pro forma
+
+def pro_forma_bauen(ordner, nummer):
+    cfg = config.laden()
+    ergebnis, _ = r.resolve(cfg, nummer)
+    return render.baue_pdf(ergebnis, ordner, cfg.engine, pro_forma=True)
+
+
+@BRAUCHT_LATEX
+def test_pro_forma_revisionen_werden_eingefroren(gewerbe):
+    ordner, nummer = gebaute_rechnung()
+    arbeitskopie = pro_forma_bauen(ordner, nummer)
+    assert arbeitskopie.name == f"invoice-pro-forma_{nummer}.pdf"
+
+    erste = festschreiben.pro_forma_festhalten(ordner, date(2026, 9, 18), am=date(2026, 9, 18))
+    assert erste["revision"] == 1
+    rev1 = ordner / "pro-forma" / "1"
+    assert sorted(p.name for p in rev1.iterdir()) == [
+        f"invoice-pro-forma-1_{nummer}.pdf", "rechnung.resolved.json", "rechnung.yaml"]
+    assert all(not os.access(p, os.W_OK) for p in rev1.iterdir())
+
+    # Änderung, neu bauen, zweite Revision; die erste bleibt unberührt.
+    eingabe = ordner / "rechnung.yaml"
+    eingabe.write_text(eingabe.read_text(encoding="utf-8") + 'referenz: "PO 4711"\n', encoding="utf-8")
+    pro_forma_bauen(ordner, nummer)
+    zweite = festschreiben.pro_forma_festhalten(ordner, date(2026, 9, 20))
+    assert zweite["revision"] == 2
+    status = festschreiben.status_lesen(ordner)
+    assert status["status"] == "entwurf"
+    assert [e["gesendet_am"] for e in status["pro_forma"]] == ["2026-09-18", "2026-09-20"]
+    assert "PO 4711" not in (rev1 / "rechnung.yaml").read_text(encoding="utf-8")
+    assert festschreiben.pruefe_unveraendert(ordner) == []
+
+    # Danach die echte Rechnung: festschreiben behält die Pro-forma-Revisionen in status.yaml.
+    cfg = config.laden()
+    ergebnis, _ = r.resolve(cfg, nummer)
+    render.baue_pdf(ergebnis, ordner, cfg.engine)
+    daten = festschreiben.festschreiben(ordner, date(2026, 9, 22))
+    assert len(daten["pro_forma"]) == 2
+    with pytest.raises(festschreiben.FestschreibFehler, match="festgeschrieben"):
+        festschreiben.pro_forma_festhalten(ordner, date(2026, 9, 23))
+
+
+@BRAUCHT_LATEX
+def test_pro_forma_veraltet_wird_nicht_eingefroren(gewerbe):
+    ordner, nummer = gebaute_rechnung()
+    pro_forma_bauen(ordner, nummer)
+    eingabe = ordner / "rechnung.yaml"
+    eingabe.write_text(eingabe.read_text(encoding="utf-8") + 'referenz: "neu"\n', encoding="utf-8")
+    with pytest.raises(festschreiben.FestschreibFehler, match="passt nicht mehr"):
+        festschreiben.pro_forma_festhalten(ordner, date(2026, 9, 18))
+
+
+def test_pro_forma_ohne_arbeitskopie_sagt_was_fehlt(gewerbe):
+    cfg = config.laden()
+    ordner, nummer = r.neu(cfg, "sample-ltd", date(2026, 6, 10), date(2026, 9, 23),
+                           taetigkeit="Panel", einordnung="sonstige")
+    r.resolve(cfg, nummer)
+    with pytest.raises(festschreiben.FestschreibFehler, match="--pro-forma"):
+        festschreiben.pro_forma_festhalten(ordner, date(2026, 9, 18))
+
+
+@BRAUCHT_LATEX
+def test_geaenderte_pro_forma_revision_faellt_auf(gewerbe):
+    ordner, nummer = gebaute_rechnung()
+    pro_forma_bauen(ordner, nummer)
+    festschreiben.pro_forma_festhalten(ordner, date(2026, 9, 18))
+    kopie = ordner / "pro-forma" / "1" / "rechnung.yaml"
+    festschreiben.schreibschutz_aufheben(kopie)
+    kopie.write_text("geändert", encoding="utf-8")
+    assert festschreiben.pruefe_unveraendert(ordner) == [
+        "pro-forma/1/rechnung.yaml wurde nach dem Einfrieren geändert"]
 
 
 def test_festschreiben_ohne_pdf_sagt_was_fehlt(gewerbe):

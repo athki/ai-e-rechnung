@@ -206,7 +206,47 @@ def test_bauen_erzeugt_pdf_und_sonst_nichts(gewerbe):
     assert pdf.is_file() and pdf.stat().st_size > 10_000
     # Im Rechnungsordner liegen nur yaml, resolved.json, pdf und belege/ – kein .tex, .aux, .log.
     inhalt = sorted(p.name for p in ordner.iterdir())
-    assert inhalt == ["belege", "rechnung.pdf", "rechnung.resolved.json", "rechnung.yaml"]
+    assert inhalt == ["belege", f"invoice_{nummer}.pdf", "rechnung.resolved.json", "rechnung.yaml"]
+
+
+@BRAUCHT_LATEX
+def test_pro_forma_ist_gekennzeichnet_und_rechnung_nicht(gewerbe):
+    """Gleiche Daten, gleiche Zahlen – nur Kennzeichnung und Sätze unterscheiden sich (R38)."""
+    from rechnung import pruefen
+    nummer = lege_an("sample-ltd")
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    ordner = r.finde_ordner(config.laden(), nummer)
+
+    pf = render.baue_pdf(ergebnis, ordner, pro_forma=True)
+    echt = render.baue_pdf(ergebnis, ordner)
+    assert pf.name == f"invoice-pro-forma_{nummer}.pdf" and echt.name == f"invoice_{nummer}.pdf"
+
+    pf_befunde = pruefen.pruefe(ergebnis, pf, pro_forma=True)
+    assert all(b.gefunden for b in pf_befunde), [b.angabe for b in pf_befunde if not b.gefunden]
+    text = pruefen.normalisiere(pruefen.pdf_text(pf))
+    for teil in ("Pro Forma Invoice No.", "(not an invoice)", "Inv. no. (prov.)", "Inv. date (prov.)",
+                 "Due (prov.)", "Please check the details."):
+        assert pruefen.enthaelt(text, teil), teil
+    assert "Payable by" not in text
+
+    assert all(b.gefunden for b in pruefen.pruefe(ergebnis, echt))
+    # Eine Pro forma als Rechnung geprüft fällt durch – die Kennzeichnung ist drin.
+    falsch = {b.angabe: b.gefunden for b in pruefen.befunde(ergebnis, pruefen.pdf_text(pf))}
+    assert falsch["Keine Pro-forma-Kennzeichnung"] is False
+
+
+@BRAUCHT_LATEX
+def test_sprachwechsel_raeumt_die_alte_pdf_weg(gewerbe):
+    nummer = lege_an("sample-ltd")
+    ordner = r.finde_ordner(config.laden(), nummer)
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    render.baue_pdf(ergebnis, ordner)
+    eingabe = ordner / "rechnung.yaml"
+    eingabe.write_text(eingabe.read_text(encoding="utf-8") + "sprache: de\n", encoding="utf-8")
+    deutsch, _ = r.resolve(config.laden(), nummer)
+    render.baue_pdf(deutsch, ordner)
+    pdfs = sorted(p.name for p in ordner.glob("*.pdf"))
+    assert pdfs == [f"rechnung_{nummer}.pdf"]
 
 
 @BRAUCHT_LATEX

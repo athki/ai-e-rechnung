@@ -18,6 +18,8 @@ uv run rechnung <kommando>
 uv run rechnung neu --kunde <kuerzel>
 # rechnung.yaml ausfüllen (leistungsdatum und leistung: sind Pflicht), Belege nach belege/ legen
 uv run rechnung resolve       MM-2026-0001     # zeigt Leistungsort, Ergebnis, Summen; schreibt rechnung.resolved.json
+uv run rechnung bauen         MM-2026-0001 --pro-forma   # optional: Pro forma an den Kunden, dann
+uv run rechnung pro-forma     MM-2026-0001 --gesendet-am 2026-06-12   # festhalten, was raus ist
 uv run rechnung bauen         MM-2026-0001     # erzeugt die PDF
 uv run rechnung pruefen       MM-2026-0001     # weist die Pflichtangaben im PDF nach
 # PDF selbst per Mail verschicken
@@ -213,7 +215,31 @@ uv run rechnung bauen MM-2026-0001
 ```
 
 Ruft `resolve` selbst noch einmal auf und erzeugt die PDF. Gebaut wird in einem Temp-Verzeichnis;
-im Rechnungsordner landen nur `rechnung.pdf` und `rechnung.resolved.json`. Beliebig oft wiederholbar.
+im Rechnungsordner landen nur die PDF (`rechnung_MM-2026-0001.pdf`, englisch `invoice_…`) und
+`rechnung.resolved.json`. Beliebig oft wiederholbar.
+
+### 6a. Pro forma (optional)
+
+Eine Pro forma geht an den Kunden, damit er alles prüfen kann, bevor die Rechnung mit ihren
+Rechtsfolgen ausgestellt wird. Sie entsteht aus derselben `rechnung.yaml` nach denselben Regeln:
+
+```sh
+uv run rechnung bauen     MM-2026-0001 --pro-forma    # rechnung-pro-forma_MM-2026-0001.pdf, beliebig oft
+uv run rechnung pruefen   MM-2026-0001 --pro-forma    # Pflichtangaben plus Kennzeichnung
+# PDF selbst an den Kunden schicken
+uv run rechnung pro-forma MM-2026-0001 --gesendet-am 2026-06-12
+```
+
+Jede Seite trägt „PRO FORMA – KEINE RECHNUNG“, der Betreff „(keine Rechnung)“, Nummer, Datum und
+Fälligkeit heißen „vorläufig“, und statt der Zahlungsaufforderung steht die Bitte um Prüfung.
+`rechnung pro-forma` hält fest, was du verschickt hast: `pro-forma/1/` mit der PDF und Kopien von
+`rechnung.yaml` und `rechnung.resolved.json`, schreibgeschützt, dazu ein Eintrag in `status.yaml`. Will
+der Kunde etwas geändert haben: `rechnung.yaml` anpassen, neu bauen, wieder senden – das wird
+`pro-forma/2/`. Ist alles bestätigt, das Rechnungsdatum in `rechnung.yaml` auf den Tag der echten
+Rechnung setzen und normal weiter mit Schritt 6.
+
+Wichtig: Der Name allein macht ein Dokument nicht zur Nicht-Rechnung (§ 14 Abs. 1 UStG). Folgt auf
+eine Pro forma nie eine Rechnung, ist das zu erklären (RULES.md R38).
 
 ### 7. Prüfen
 
@@ -261,6 +287,7 @@ Werkzeug noch nicht gebaut (geplant).
 | `Währung USD mit Umsatzsteuerausweis …` | Fremdwährung mit deutscher USt | In EUR fakturieren; Umrechnung ist noch nicht gebaut |
 | `Beleg fehlt: …` | Datei steht im YAML, liegt aber nicht in `belege/` | Datei hinlegen oder Eintrag löschen |
 | `Rechnung … ist festgeschrieben` | Neubau einer eingefrorenen Rechnung | Storno und neue Rechnung |
+| `… passt nicht mehr zu rechnung.yaml` | `rechnung pro-forma` nach einer Änderung ohne neuen Bau | `bauen --pro-forma`, ansehen, dann festhalten |
 | `Land XX ist in rules.LAENDER nicht hinterlegt` | Neues Land | In `src/rechnung/rules.py` eintragen |
 
 ### YAML-Fallen
@@ -360,14 +387,14 @@ Vertrag wie für einen Menschen. Er steht ausführlich in `CLAUDE.md`, hier das 
 **Eine AI darf:** `rechnung.yaml` anlegen und ändern, Kundendateien als Vorschlag anlegen (der Mensch
 bestätigt, weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen), Code und Vorlage ändern.
 
-**Eine AI darf nicht:** `rechnung.resolved.json`, PDFs, `status.yaml` oder `ich.yaml` schreiben,
+**Eine AI darf nicht:** `rechnung.resolved.json`, PDFs, `status.yaml`, `pro-forma/` oder `ich.yaml` schreiben,
 Rechnungsnummern vergeben, Beträge ausrechnen, festgeschriebene Rechnungen anfassen. Das ist
 zusätzlich technisch erzwungen, über einen PreToolUse-Hook und Deny-Regeln.
 
 **Gut automatisierbar**, weil deterministisch und mit klaren Exit-Codes: `neu`, `resolve`, `bauen`,
 `pruefen`, `doctor`. Jeder Fehler ist eine Meldung, die sagt, was zu tun ist.
 
-**Nicht automatisieren:** `festschreiben`. Es verlangt zu wissen, wann die Rechnung tatsächlich beim
+**Nicht automatisieren:** `festschreiben` und `pro-forma`. Es verlangt zu wissen, wann die Rechnung tatsächlich beim
 Kunden war, und es ist unumkehrbar.
 
 **Sinnvoller Ablauf für einen Assistenten:** `neu` → `rechnung.yaml` füllen → `resolve` ausführen und

@@ -23,14 +23,16 @@ Code oder Build-Artefakte.
   rechnung-ausgang/JJJJ/<nummer>/
     rechnung.yaml            # Input (einzige Datei, die Menschen und AI schreiben)
     rechnung.resolved.json   # abgeleitet, eingefroren
-    rechnung.pdf             # abgeleitet
-    status.yaml              # nach dem Festschreiben: Status, Datum, Hashes
+    rechnung_<nummer>.pdf    # abgeleitet; englisch invoice_<nummer>.pdf
+    rechnung-pro-forma_<nummer>.pdf   # Arbeitskopie der Pro forma, bei jedem Bau überschrieben
+    pro-forma/<n>/           # gesendete Pro-forma-Revision: PDF, rechnung.yaml, resolved.json, schreibgeschützt
+    status.yaml              # ab der ersten gesendeten Pro forma bzw. dem Festschreiben: Status, Daten, Hashes
     belege/
   steuerberater/JJJJ/        # Export-Ziel
   rechnung-eingang/, bank/, vertraege/ …   # nicht Sache des Werkzeugs
 ```
 
-Builds laufen in einem temporären Verzeichnis (`tempfile.mkdtemp()`); nur `rechnung.pdf` und
+Builds laufen in einem temporären Verzeichnis (`tempfile.mkdtemp()`); nur die PDF und
 `rechnung.resolved.json` werden in den Rechnungsordner kopiert. Kein `.aux`, `.log`, `.tex` dort, nie.
 
 Ohne Gewerbe-Wurzel läuft alles gegen `stammdaten.example/` im Repo (Demo-Modus).
@@ -39,7 +41,7 @@ Ohne Gewerbe-Wurzel läuft alles gegen `stammdaten.example/` im Repo (Demo-Modus
 ## Pipeline
 
 ```
-rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()──▶ rechnung.pdf
+rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()──▶ rechnung_<nummer>.pdf
 ```
 
 - Alle Logik in `resolve.py` und `rules.py`. Das Template druckt nur Felder; keine Entscheidungen in LaTeX.
@@ -66,6 +68,15 @@ rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()─�
   ist (§ 14 UStG), und das Werkzeug verschickt nichts, es hält nur fest, wann du verschickt hast.
   Vorher darf beliebig oft gebaut und geprüft werden. Danach verweigert `bauen` den Neubau, und
   `pruefen` meldet jede nachträgliche Änderung an den eingefrorenen Dateien.
+- Pro forma (RULES.md R38): `rechnung bauen <nr> --pro-forma` baut aus denselben Daten eine Pro forma
+  (Belegart `proforma`: Kopfzeile „PRO FORMA – KEINE RECHNUNG“, „(keine Rechnung)“ im Betreff, Labels
+  „Re.-Nr. (vorl.)“ usw., Bitte um Prüfung statt Zahlungsaufforderung) und überschreibt die Arbeitskopie.
+  `rechnung pro-forma <nr> --gesendet-am JJJJ-MM-TT` friert sie als nächste Revision in `pro-forma/<n>/`
+  ein (PDF plus Kopien von yaml und resolved.json, Hashes in `status.yaml`). `festschreiben` friert nur
+  die echte Rechnung ein; danach gibt es keine Pro forma mehr. Das Datum der Rechnung stellt der Mensch
+  vor dem echten Bau in `rechnung.yaml` um.
+- Dateinamen der PDFs tragen die Nummer, das Präfix folgt der Sprache (`rechnung_…` / `invoice_…`);
+  ein Sprachwechsel räumt die Datei mit dem anderen Präfix weg.
 - `rechnung pruefen <nr>` nimmt auch den Pfad eines Rechnungsordners – so prüft der Container die
   Demo-Rechnungen. `rechnung demo --pruefen` baut und prüft in einem Zug.
 
@@ -118,14 +129,15 @@ LaTeX, pdflatex, neutral in Schwarz. Sie enthält keine Steuerlogik und druckt n
 `rechnung pruefen <nr>` extrahiert den Text (`pdftotext`) und prüft, dass enthalten sind: Rechnungsnummer,
 Rechnungsdatum, Leistungsdatum, Name und Anschrift des Ausstellers, Name und Anschrift des Kunden,
 Steuernummer oder USt-IdNr., jede Positionsbeschreibung, Netto, USt-Betrag (beim Kleinunternehmer
-entfällt die Steuerzeile), Brutto, bei Satz 0 der Steuerhinweis-Text und bei `reverse_charge` beide USt-IdNrn. Die vollständige Liste mit Paragraphen steht in `pruefen.py`.
+entfällt die Steuerzeile), Brutto, bei Satz 0 der Steuerhinweis-Text und bei `reverse_charge` beide USt-IdNrn.; an der Pro forma zusätzlich die
+Kennzeichnung, an der Rechnung ihr Fehlen (`pruefen --pro-forma` prüft die Arbeitskopie). Die vollständige Liste mit Paragraphen steht in `pruefen.py`.
 
 ## Was die AI darf und was nicht
 
 Darf: `rechnung.yaml` anlegen und ändern; `stammdaten/kunden/*.yaml` als Vorschlag anlegen (der Mensch bestätigt,
 weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen); Code, Tests und Vorlage im Repo ändern.
 
-Darf nicht: `resolved.json`, PDFs, `status.yaml` oder `stammdaten/ich.yaml` schreiben; Rechnungsnummern vergeben;
+Darf nicht: `resolved.json`, PDFs, `status.yaml`, `pro-forma/` oder `stammdaten/ich.yaml` schreiben; Rechnungsnummern vergeben;
 Beträge ausrechnen; festgeschriebene Rechnungen anfassen; echte Daten in Tests, Fixtures oder Commits.
 
 Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Regeln in
@@ -142,7 +154,7 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
 - Tests: `pytest`; jede Regel in `rules.py` hat einen Test; End-to-End-Tests bauen die Ergebnisse aus
   `stammdaten.example/`; Tests laufen ohne Config und ohne Gewerbe-Ordner (Temp-Verzeichnis)
 - Feldnamen und CLI-Kommandos auf Deutsch (`kunde`, `positionen`, `leistungsdatum`, `netto`, `brutto`,
-  `neu`, `resolve`, `bauen`, `pruefen`, `festschreiben`, `demo`, `doctor`)
+  `neu`, `resolve`, `bauen`, `pruefen`, `pro-forma`, `festschreiben`, `demo`, `doctor`)
 - Sprache der Rechnung: `de` oder `en`, eine je Rechnung (die Vorlage setzt jedes feste Label einsprachig);
   Datums-, Zahlen- und Währungsformat folgen der Sprache
 - Commit-Wächter: `make hooks` schaltet `.githooks/` ein. Gegen die Sperrliste neben der Config

@@ -8,6 +8,8 @@
       "Edit(//**/*.pdf)",
       "Write(//**/status.yaml)",
       "Edit(//**/status.yaml)",
+      "Write(//**/pro-forma/**)",
+      "Edit(//**/pro-forma/**)",
       "Write(//**/stammdaten/ich.yaml)",
       "Edit(//**/stammdaten/ich.yaml)"
     ]
