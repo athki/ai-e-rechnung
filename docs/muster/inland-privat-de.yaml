@@ -1,0 +1,12 @@
+kunde: privat-de
+datum: 2026-06-17
+leistungsdatum: 2026-06-10
+sprache: de
+leistung:
+  taetigkeit: "Bewerbungscoaching"
+  einordnung: beratung
+positionen:
+  - beschreibung: "Bewerbungscoaching, zwei Sitzungen"
+    menge: 2
+    einheit: stunde
+    einzelpreis: 90.00

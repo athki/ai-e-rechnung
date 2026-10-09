@@ -300,6 +300,15 @@ DEMO: list[dict] = [
      "leistung": ("Vortrag vor Publikum", "unterrichtend", "CH"),
      "beschreibung": "Vortrag, Zürich",
      "menge": "1", "einheit": "pauschal", "einzelpreis": "900.00"},
+    {"kuerzel": "privat-de", "sprache": "de",
+     "leistung": ("Bewerbungscoaching", "beratung", None),
+     "beschreibung": "Bewerbungscoaching, zwei Sitzungen",
+     "menge": "2", "einheit": "stunde", "einzelpreis": "90.00"},
+    # Derselbe Aussteller als Kleinunternehmer (§ 19 UStG): die Demo setzt es nur für diese Rechnung.
+    {"kuerzel": "muster-gmbh", "sprache": "de", "kleinunternehmer": True,
+     "leistung": ("Beratung zum Marktzugang", "beratung", None),
+     "beschreibung": "Beratung Marktzugang",
+     "menge": "4", "einheit": "stunde", "einzelpreis": "120.00"},
 ]
 
 
@@ -328,7 +337,11 @@ def demo(
             pfad=gewerbe / "keine.toml",
         )
         config.init(demo_cfg)
+        ich = gewerbe / "stammdaten" / "ich.yaml"
+        ich_text = ich.read_text(encoding="utf-8")
         for eintrag in DEMO:
+            ich.write_text(ich_text + ("kleinunternehmer: true\n" if eintrag.get("kleinunternehmer") else ""),
+                           encoding="utf-8")
             ordner, nummer = resolve_mod.neu(
                 demo_cfg, eintrag["kuerzel"], date(2026, 6, 10), date(2026, 6, 17), eintrag["sprache"]
             )

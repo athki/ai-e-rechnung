@@ -1,6 +1,6 @@
 # Vorlage
 
-Die LaTeX-Vorlage der Rechnung. Sie enthält **keine Steuerlogik**: Welcher Steuerfall gilt, welcher
+Die LaTeX-Vorlage der Rechnung. Sie enthält **keine Steuerlogik**: Welches Ergebnis gilt, welcher
 Satz, welcher Hinweis, wie die Summen sich aufteilen – all das entscheidet `resolve.py`. Die Vorlage
 druckt, was sie bekommt. Das macht sie prüfbar: Was auf dem Blatt steht, stand in den Daten.
 
@@ -22,7 +22,7 @@ fonts/              Platz für eigene, offen lizenzierte Fonts; genutzt werden X
 ```sh
 make beispiel        # das statische Beispiel, schnell, für Designrunden
 make beispiel-neu    # vollständig, inklusive Beleg; nach Änderungen in style/ nötig
-rechnung demo        # vier echte Rechnungen (Fall A–D) durch die Jinja-Vorlage
+rechnung demo        # sechs echte Rechnungen, je Ergebnis mindestens eine, durch die Jinja-Vorlage
 ```
 
 Wer am Design arbeitet, ändert `beispiel.tex` und `style/` – und zieht die Änderung danach in

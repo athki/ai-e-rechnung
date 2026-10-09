@@ -17,7 +17,7 @@ doctor:
 hooks:
 	git config core.hooksPath .githooks
 
-# Beispielrechnung der Vorlage (feste Werte, Steuerfall C) – die Designrunde in Sekunden.
+# Beispielrechnung der Vorlage (feste Werte, Unternehmen im Drittland, nicht steuerbar) – die Designrunde in Sekunden.
 beispiel:
 	cd vorlage && latexmk -pdf -interaction=nonstopmode -halt-on-error -no-shell-escape beispiel.tex
 
@@ -32,13 +32,14 @@ schatten-image:
 	docker build -t $(IMAGE) .
 
 # Image bauen, dann im Container: init gegen einen leeren Gewerbe-Ordner, doctor,
-# die vier Demo-Rechnungen und `rechnung pruefen` auf jeder einzelnen.
+# die Demo-Rechnungen und `rechnung pruefen` auf jeder einzelnen.
 # Pflicht: keine Änderung ist fertig, solange das hier rot ist.
 schatten: hooks schatten-image
 	rm -rf "$(SCHATTEN_GEWERBE)" && mkdir -p "$(SCHATTEN_GEWERBE)"
 	$(DOCKER_RUN) init
 	$(DOCKER_RUN) doctor
 	$(DOCKER_RUN) demo --ziel /gewerbe/demo-output
-	@for fall in a-muster-gmbh b-exemple-sarl c-sample-ltd d-privat-ch; do \
-		$(DOCKER_RUN) pruefen /gewerbe/demo-output/fall-$$fall || exit 1; \
+	@for rechnung in inland-muster-gmbh reverse-charge-exemple-sarl nicht-steuerbar-sample-ltd \
+		nicht-steuerbar-privat-ch inland-privat-de kleinunternehmer-muster-gmbh; do \
+		$(DOCKER_RUN) pruefen /gewerbe/demo-output/$$rechnung || exit 1; \
 	done

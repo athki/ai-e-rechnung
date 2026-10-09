@@ -1,0 +1,12 @@
+kunde: muster-gmbh
+datum: 2026-06-17
+leistungsdatum: 2026-06-10
+sprache: de
+leistung:
+  taetigkeit: "Beratung zum Marktzugang"
+  einordnung: beratung
+positionen:
+  - beschreibung: "Beratung Marktzugang"
+    menge: 4
+    einheit: stunde
+    einzelpreis: 120.00

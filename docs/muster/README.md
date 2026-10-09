@@ -1,6 +1,6 @@
 # Muster
 
-Vier Rechnungen, eine je Steuerfall, gebaut aus `stammdaten.example/` mit erfundenen Daten.
+Sechs Rechnungen, je Ergebnis mindestens eine, gebaut aus `stammdaten.example/` mit erfundenen Daten.
 Sie liegen hier als visuelle Referenz: Wer die Vorlage ändert, sieht im Diff der neu gebauten
 PDFs, was sich verschoben hat. Neu erzeugt werden sie mit
 
@@ -8,16 +8,21 @@ PDFs, was sich verschoben hat. Neu erzeugt werden sie mit
 rechnung demo --pruefen
 ```
 
-und danach aus `demo-output/<fall>/` hierher kopiert. Die Muster zeigen die Standardvorlage: Wer
-einen eigenen Vorlagen-Ordner konfiguriert hat, baut sie ohne Config,
-`RECHNUNG_CONFIG=/dev/null rechnung demo --pruefen`. Die `.yaml` daneben ist jeweils die
-Eingabe, aus der die PDF entstanden ist.
+und danach aus `demo-output/<name>/` hierher kopiert, die PDF als `<name>.pdf`. Die Muster zeigen die
+Standardvorlage: Wer einen eigenen Vorlagen-Ordner konfiguriert hat, baut sie ohne Config,
+`RECHNUNG_CONFIG=/dev/null rechnung demo --pruefen`. Die `.yaml` daneben ist jeweils die Eingabe, aus
+der die PDF entstanden ist.
 
-| Datei | Fall | Kunde | Sprache | Ergebnis |
+| Datei | Kunde | Einordnung | Sprache | Ergebnis |
 | --- | --- | --- | --- | --- |
-| `fall-a-muster-gmbh` | A | Unternehmen im Inland | de | 1.200,00 netto + 19 % = 1.428,00 EUR |
-| `fall-b-exemple-sarl` | B | Unternehmen in der EU mit USt-IdNr. | en | 2.400,00 EUR, 0 %, Reverse Charge, beide USt-IdNrn. |
-| `fall-c-sample-ltd` | C | Unternehmen im Drittland | en | 2 Std. × 200,00 + Flug 287,30 = 687,30 EUR, 0 %, § 3a Abs. 2 UStG, Flugbeleg angehängt |
-| `fall-d-privat-ch` | D | Privatperson im Drittland | de | 900,00 netto + 19 % = 1.071,00 EUR, nur mit Begründung im YAML |
+| `inland-muster-gmbh` | Unternehmen im Inland | `beratung` | de | 1.200,00 netto + 19 % = 1.428,00 EUR |
+| `reverse-charge-exemple-sarl` | Unternehmen in der EU mit USt-IdNr. | `beratung` | en | 2.400,00 EUR, 0 %, Reverse Charge, beide USt-IdNrn. |
+| `nicht-steuerbar-sample-ltd` | Unternehmen im Drittland | `unterrichtend`, GB | en | 2 Std. × 200,00 + Flug 287,30 = 687,30 EUR, 0 %, § 3a Abs. 2 UStG, Flugbeleg angehängt |
+| `nicht-steuerbar-privat-ch` | Privatperson im Drittland | `unterrichtend`, CH | de | Vortrag in Zürich: 900,00 EUR, 0 %, § 3a Abs. 3 Nr. 3 UStG |
+| `inland-privat-de` | Privatperson im Inland | `beratung` | de | 180,00 netto + 19 % = 214,20 EUR |
+| `kleinunternehmer-muster-gmbh` | Unternehmen im Inland | `beratung` | de | 480,00 EUR, steuerfrei nach § 19 UStG, keine Steuerzeile |
 
-Alle vier bestehen `rechnung pruefen`, also den Nachweis der Pflichtangaben im PDF-Text.
+Für die letzte setzt die Demo im Beispiel-Aussteller `kleinunternehmer: true`; die Eingabe selbst
+sieht aus wie jede andere.
+
+Alle sechs bestehen `rechnung pruefen`, also den Nachweis der Pflichtangaben im PDF-Text.

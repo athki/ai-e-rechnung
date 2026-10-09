@@ -16,8 +16,8 @@ uv run rechnung <kommando>
 
 ```sh
 uv run rechnung neu --kunde <kuerzel>
-# rechnung.yaml ausfüllen (leistungsdatum ist Pflicht), Belege nach belege/ legen
-uv run rechnung resolve       MM-2026-0001     # zeigt Steuerfall und Summen, schreibt rechnung.resolved.json
+# rechnung.yaml ausfüllen (leistungsdatum und leistung: sind Pflicht), Belege nach belege/ legen
+uv run rechnung resolve       MM-2026-0001     # zeigt Leistungsort, Ergebnis, Summen; schreibt rechnung.resolved.json
 uv run rechnung bauen         MM-2026-0001     # erzeugt die PDF
 uv run rechnung pruefen       MM-2026-0001     # weist die Pflichtangaben im PDF nach
 # PDF selbst per Mail verschicken
@@ -51,13 +51,14 @@ fasst es nicht an.
 Jeder Kunde ist eine Datei: `<gewerbe>/stammdaten/kunden/<kuerzel>.yaml`. Das Kürzel ist der
 Dateiname ohne Endung und zugleich der Wert, der später in `rechnung.yaml` steht.
 
-**Drei Felder entscheiden über die Umsatzsteuer**, deshalb hier genau hinsehen:
+**Drei Felder bestimmen zusammen mit der Einordnung der Leistung den Leistungsort**, deshalb hier
+genau hinsehen:
 
 | Feld | Wirkung |
 | --- | --- |
 | `land` | ISO-Code, z. B. `DE`, `FR`, `GB`, `US`. Bestimmt Inland, EU oder Drittland |
-| `ustid` | USt-IdNr. Bei EU-Kunden entscheidet sie über Reverse Charge |
-| `unternehmer` | `true`/`false`. Bei Drittlandskunden entscheidet sie über Steuerbarkeit |
+| `unternehmer` | `true`/`false`. Bei Unternehmern ist der Leistungsort ihr Sitz; bei Privatpersonen hängt er von der Einordnung ab. Fehlt die Angabe, bricht `resolve` ab (außer im Inland) |
+| `ustid` | USt-IdNr. Bei EU-Unternehmern Pflicht (Reverse Charge, § 14a Abs. 1 UStG); ein EU-Kunde mit `ustid` gilt als Unternehmer |
 
 Vollständige Kundendatei:
 
@@ -70,12 +71,12 @@ adresse:
   plz: EC1A 1AA
   ort: London
 land: GB                             # Pflicht
-ustid: GB123456789                   # bei EU-Kunden für Fall B nötig; erscheint als "Ihre USt-IdNr."
+ustid: GB123456789                   # bei EU-Unternehmern Pflicht; erscheint als "Ihre USt-IdNr."
 register:                            # optional, belegt die Unternehmereigenschaft; "Ihre Register-Nr."
   name: Companies House
   nummer: "01234567"
 referenz: Sample Panel 2026          # optional, erscheint als "Ihre Referenz"
-unternehmer: true                    # bei Drittlandskunden wichtig
+unternehmer: true                    # true | false – bestimmt mit der Einordnung den Leistungsort
 sprache: en                          # de | en, Default aus der Config
 waehrung: EUR                        # EUR | USD | GBP, Default aus der Config
 ```
@@ -87,7 +88,8 @@ uv run rechnung neu --kunde sample-ltd
 ```
 
 Optional: `--datum` (Rechnungsdatum, Default heute), `--sprache`, `--waehrung`,
-`--leistungsdatum` (füllt das Feld vor; gedacht für Skripte und AI).
+`--leistungsdatum`, `--taetigkeit`, `--einordnung`, `--ort` (füllen die Felder vor; gedacht für
+Skripte und AI).
 
 Ohne `--leistungsdatum` bleibt das Feld in `rechnung.yaml` **leer**:
 
@@ -96,7 +98,8 @@ leistungsdatum:             # PFLICHT: Tag der Leistung, JJJJ-MM-TT
 ```
 
 Das Werkzeug setzt hier nie still das Rechnungsdatum ein – das Leistungsdatum ist eine
-Pflichtangabe, und `resolve` bricht ab, solange es fehlt.
+Pflichtangabe, und `resolve` bricht ab, solange es fehlt. Genauso bleibt der Block `leistung:` leer,
+mit der Liste der erlaubten Begriffe als Kommentar darunter (siehe Schritt 3).
 
 Das Werkzeug vergibt die Nummer selbst, aus dem höchsten vorhandenen Ordner des Jahres plus eins,
 und legt an:
@@ -116,6 +119,10 @@ kunde: sample-ltd                    # Pflicht, Kürzel der Kundendatei
 datum: 2026-06-17                    # Rechnungsdatum
 leistungsdatum: 2026-06-10           # Pflicht
 leistungsdatum_bis:                  # nur bei einem Zeitraum
+leistung:                            # Pflicht – daraus folgt der Leistungsort
+  taetigkeit: Teilnahme als Panelist  # was du tatsächlich leistest, in eigenen Worten
+  einordnung: unterrichtend          # ein Begriff aus § 3a UStG, Liste unten
+  ort: GB                            # nur bei Tätigkeitsleistungen: Land oder online
 sprache: en                          # überschreibt Kunde und Config
 waehrung: EUR                        # überschreibt Kunde und Config
 zahlungsziel_tage: 14                # überschreibt die Config
@@ -135,9 +142,23 @@ belege:                              # optional
     text: Flugbeleg FRA-LON-FRA (Position 2)
   - hotel.pdf                        # Kurzform: nur der Dateiname
 
-steuerfall: D                        # nur im Ausnahmefall, siehe unten
+leistungsort: CH                     # nur im Ausnahmefall: Leistungsort festlegen
 begruendung: …                       # dann Pflicht
 ```
+
+**Die Einordnung** ist der Begriff aus dem Gesetz, der deine Leistung am besten beschreibt. Maßgeblich
+ist die Hauptleistung; Nebenleistungen wie Reisekosten folgen ihr. Die vollständige Liste steht als
+Kommentar in jeder neuen `rechnung.yaml` und in `RULES.md`, Teil 4:
+
+| Gruppe | Begriffe | Leistungsort bei Privatpersonen |
+| --- | --- | --- |
+| Tätigkeit (§ 3a Abs. 3 Nr. 3) | `kulturell`, `kuenstlerisch`, `wissenschaftlich`, `unterrichtend`, `sportlich`, `unterhaltend` | wo die Leistung erbracht wird (`ort:`); online: Wohnsitz des Kunden |
+| Katalog (§ 3a Abs. 4) | `rechte`, `werbung`, `beratung`, `datenverarbeitung`, `informationen`, `personal`, `verzicht-recht`, `verzicht-taetigkeit`, `vermietung`, `energienetze` | im Drittland: Wohnsitz des Kunden; sonst Inland |
+| Grundregel (§ 3a Abs. 1) | `sonstige` | Inland |
+
+Bei Unternehmern als Kunden ist der Leistungsort immer ihr Sitz; die Einordnung wird trotzdem
+festgehalten. Katalog Nr. 6 (Finanz- und Versicherungsumsätze) und elektronische Dienstleistungen
+an Privatpersonen in der EU deckt das Werkzeug nicht ab.
 
 Die Reihenfolge, in der Angaben gewinnen: **Rechnung schlägt Kunde schlägt Config.**
 
@@ -181,8 +202,9 @@ als zusätzliche Seite ans PDF gehängt und mit „Anlage 1 zu Rechnung Nr. …�
 uv run rechnung resolve MM-2026-0001
 ```
 
-Zeigt Steuerfall, Sätze, Summen, Fälligkeit und den Hinweistext. **Hier schaust du genau hin**,
-besonders auf den Steuerfall: Er folgt aus der Kundendatei, nicht aus deiner Absicht.
+Zeigt Leistungsort, Ergebnis, angewandte Regeln, Sätze, Summen, Fälligkeit und den Hinweistext.
+**Hier schaust du genau hin**, besonders auf Leistungsort und Ergebnis: Sie folgen aus Kundendatei
+und Einordnung, nicht aus deiner Absicht.
 
 ### 6. Bauen
 
@@ -230,7 +252,12 @@ Werkzeug noch nicht gebaut (geplant).
 | `positionen.0.einzelpreis: … (Wert: {354.82})` | Platzhalter-Klammern stehen gelassen | Klammern entfernen: `einzelpreis: 354.82` |
 | `einleitung: enthält den Platzhalter {Event} …` | `{…}` aus einer Vorlage nicht ersetzt | echten Text einsetzen |
 | `leistungdatum: Extra inputs are not permitted` | Feldname vertippt | Tippfehler korrigieren |
-| `Steuerfall D erkannt …` | Bei Drittlandskunden fehlt `unternehmer: true`, bei EU-Kunden die `ustid` | Kundendatei ergänzen, oder D mit `begruendung:` bestätigen |
+| `leistung: taetigkeit fehlt …` / `einordnung fehlt …` | Block nach `rechnung neu` noch leer | Tätigkeit und Begriff aus der Liste eintragen |
+| `ort fehlt: bei „unterrichtend“ …` | Tätigkeitsleistung ohne Ort | `ort:` mit Ländercode oder `online` |
+| `` `unternehmer` ist nicht gesetzt `` | Kundendatei sagt nicht, ob Unternehmer oder Privatperson | `unternehmer: true` oder `false` in der Kundendatei |
+| `` `ustid` fehlt `` / `Eigene USt-IdNr. fehlt` | Reverse Charge braucht beide USt-IdNrn. | in Kunden- bzw. eigener Stammdatei ergänzen |
+| `Leistungsort … ist ein anderer EU-Staat …` | Privatperson, Leistung in einem anderen EU-Land | nicht abgedeckt (RULES.md R18) |
+| `steuerfall: gibt es nicht mehr` | alte Rechnungsdatei | `leistung:` eintragen; Sonderfall über `leistungsort:` + `begruendung:` |
 | `Währung USD mit Umsatzsteuerausweis …` | Fremdwährung mit deutscher USt | In EUR fakturieren; Umrechnung ist noch nicht gebaut |
 | `Beleg fehlt: …` | Datei steht im YAML, liegt aber nicht in `belege/` | Datei hinlegen oder Eintrag löschen |
 | `Rechnung … ist festgeschrieben` | Neubau einer eingefrorenen Rechnung | Storno und neue Rechnung |
@@ -252,30 +279,31 @@ Aus dem ersten echten Testlauf. Die Faustregel: **Text mit Satzzeichen in Anfüh
 
 ## Wo welche Einstellung steht
 
-### Steuerliche Logik — `src/rechnung/rules.py`
+### Steuerliche Logik — `RULES.md` und `src/rechnung/rules.py`
 
-Das ist der einzige Ort, an dem über Steuern entschieden wird. Die Vorlage druckt nur.
+`RULES.md` beschreibt die Regeln mit Gesetzeswortlaut, Status und Grenzen; `rules.py` ist der einzige
+Ort, an dem über Steuern entschieden wird. Die Vorlage druckt nur.
 
 | Thema | Fundstelle in `rules.py` | Inhalt |
 | --- | --- | --- |
-| Steuerfall | `steuerfall()` | A Inland · B EU mit USt-IdNr. · C Drittland-Unternehmen · D sonst |
-| EU-Länder | `EU_LAENDER` | Liste mit Stand-Datum; UK ist Drittland |
+| Entscheidungskern | `kern()` | Entscheidungstabelle aus RULES.md Teil 4 über abstrakte Merkmale |
+| Übersetzung | `entscheide()` | Kunde, Leistung, Aussteller → Merkmale → Leistungsort, Ergebnis, Satz, Regeln |
+| Einordnung | `EINORDNUNGEN` | Begriffe aus § 3a UStG mit Gruppe und Fundstelle |
+| EU-Länder | `EU_LAENDER`, `kategorie()` | Liste mit Stand-Datum; UK ist Drittland |
 | Ländernamen | `LAENDER` | deutscher und englischer Name, für den Hinweistext |
-| Steuersatz | `steuersatz()` | 0 % bei B und C, sonst 19 %; 7 % nur je Position im Inland |
-| Hinweistexte | `hinweis()` | Wortlaut für Fall B und C, je Sprache |
+| Hinweistexte | `hinweis()` | Wortlaut je Ergebnis und Sprache |
+| Frist Reverse Charge | `frist_reverse_charge()` | 15. des Folgemonats, Warnung bei `resolve` |
 | Fälligkeit | `faelligkeit()` | Rechnungsdatum plus Zahlungsziel |
 | Rundung | `runde()` | kaufmännisch, zwei Stellen, je Zeile und je Steuersatz |
 | Nummernvergabe | `nummer()`, `naechste_lfd()` | Format aus der Config, laufende Nummer aus den Ordnern |
 | Währungsregel | `waehrung_erlaubt()` | Fremdwährung nur ohne deutschen USt-Ausweis |
 
-| Fall | Bedingung | Satz | Text auf der Rechnung |
+| Ergebnis | Wann | Satz | Text auf der Rechnung |
 | --- | --- | --- | --- |
-| A | Kunde in Deutschland | 19 % (7 % je Position möglich) | kein Hinweis |
-| B | EU-Land **und** `ustid` gesetzt | 0 % | „Steuerschuldnerschaft des Leistungsempfängers (§ 14a Abs. 5 UStG, Art. 196 MwStSystRL).“ |
-| C | Drittland **und** `unternehmer: true` | 0 % | „Leistungsort: {Land}. Die Leistung ist in Deutschland nicht steuerbar (§ 3a Abs. 2 UStG).“ |
-| D | alles andere | 19 % | kein Hinweis; `resolve` bricht ab, bis du D mit `begruendung:` bestätigst |
-
-Die Kleinunternehmerregelung (§ 19 UStG) wird bewusst nicht unterstützt.
+| `inland` | Leistungsort Inland | 19 % (7 % je Position möglich) | kein Hinweis |
+| `reverse_charge` | Leistungsort anderer EU-Staat, Kunde Unternehmer | 0 % | „Steuerschuldnerschaft des Leistungsempfängers (§ 14a Abs. 1 UStG, Art. 196 MwStSystRL).“ |
+| `nicht_steuerbar` | Leistungsort Drittland | 0 % | „Leistungsort: {Land}. Die Leistung ist in Deutschland nicht steuerbar ({Fundstelle}).“ |
+| `kleinunternehmer` | Leistungsort Inland, `kleinunternehmer: true` in `ich.yaml` | 0 % | „Steuerfrei als Leistung eines Kleinunternehmers (§ 19 Abs. 1 UStG).“, keine Steuerzeile |
 
 ### Betriebseinstellungen — `~/.config/rechnung/config.toml`
 
@@ -306,6 +334,7 @@ Pflegt nur der Mensch. Weder das Werkzeug noch eine AI schreiben diese Datei.
 | `land` | ja (`DE`) | Briefkopf bei englischen Rechnungen |
 | `email`, `telefon`, `website` | E-Mail ja | Briefkopf oben rechts |
 | `steuernummer` **oder** `ustid` | eines von beiden | Metadatenblock und Fußzeile |
+| `kleinunternehmer` | nein (`false`) | `true`: § 19 UStG, keine Umsatzsteuer; die Umsatzgrenzen prüfst du selbst |
 | `bank.kontoinhaber`, `bank.iban`, `bank.bic`, `bank.name` | für die Zahlung | Zahlungssatz und Fußzeile |
 
 ### Aussehen — `vorlage/style/defaults.sty`
@@ -329,7 +358,7 @@ Wenn dieses Werkzeug einmal über einen MCP-Server oder direkt aus Claude bedien
 Vertrag wie für einen Menschen. Er steht ausführlich in `CLAUDE.md`, hier das Wesentliche:
 
 **Eine AI darf:** `rechnung.yaml` anlegen und ändern, Kundendateien als Vorschlag anlegen (der Mensch
-bestätigt, weil `land` und `ustid` den Steuerfall bestimmen), Code und Vorlage ändern.
+bestätigt, weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen), Code und Vorlage ändern.
 
 **Eine AI darf nicht:** `rechnung.resolved.json`, PDFs, `status.yaml` oder `ich.yaml` schreiben,
 Rechnungsnummern vergeben, Beträge ausrechnen, festgeschriebene Rechnungen anfassen. Das ist
@@ -342,5 +371,5 @@ zusätzlich technisch erzwungen, über einen PreToolUse-Hook und Deny-Regeln.
 Kunden war, und es ist unumkehrbar.
 
 **Sinnvoller Ablauf für einen Assistenten:** `neu` → `rechnung.yaml` füllen → `resolve` ausführen und
-dem Menschen **zeigen**, was herauskommt (vor allem den Steuerfall) → Bestätigung abwarten → `bauen`
+dem Menschen **zeigen**, was herauskommt (vor allem Einordnung, Leistungsort und Ergebnis) → Bestätigung abwarten → `bauen`
 → `pruefen` → dem Menschen die PDF geben. Das Festschreiben macht der Mensch nach dem Versand.

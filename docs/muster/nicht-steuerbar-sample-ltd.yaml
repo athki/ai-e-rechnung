@@ -2,6 +2,10 @@ kunde: sample-ltd
 datum: 2026-06-17
 leistungsdatum: 2026-06-10
 sprache: en
+leistung:
+  taetigkeit: "Panel participation at a policy forum"
+  einordnung: unterrichtend
+  ort: GB
 positionen:
   - beschreibung: "Panel participation, Sample Policy Forum, London"
     menge: 2

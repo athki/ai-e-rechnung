@@ -39,7 +39,8 @@ Entscheidung im Nachhinein prüfbar.
   die betroffenen Felder im Werkzeug und ihren Status.
 - **Teil 4 – Zuordnung zum Werkzeug:** die Entscheidungstabelle (Merkmale → Leistungsort → Satz und
   Pflichttext) und wie sie sich zu den heutigen Steuerfällen A–D verhält.
-- **Teil 5 – Stand des Codes:** wo `rules.py` heute noch von diesem Dokument abweicht.
+- **Teil 5 – Regeln im Code:** wo jede Regel umgesetzt und wie sie geprüft ist, und wo der Code bekannte
+  Grenzen hat.
 - **Teil 6 – Fragen an den Steuerberater.**
 
 **Status einer Regel:**
@@ -456,8 +457,8 @@ vollständige Tabelle steht in Teil 4.
   sie steuerfrei (R13), weist die Rechnung keinen deutschen Steuerbetrag größer als 0 aus. Ein
   höherer Ausweis würde nach § 14c geschuldet.
 - **Annahmen:** keine.
-- **Werkzeug:** `steuersatz` je Position darf in diesen Fällen nicht gesetzt sein; heute abgebrochen
-  in Fall B und C.
+- **Werkzeug:** `steuersatz` je Position darf in diesen Fällen nicht gesetzt sein; `resolve` bricht
+  sonst ab.
 - **Status:** Annahme – ungeprüft.
 
 ### Kleinunternehmer (§ 19 UStG)
@@ -470,7 +471,7 @@ vollständige Tabelle steht in Teil 4.
   schon nicht steuerbar; § 19 berührt sie nicht.
 - **Annahmen:** Die Umsatzgrenzen sind eingehalten (Teil 1); der Aussteller hat nicht auf die
   Regelung verzichtet (§ 19 Abs. 3).
-- **Werkzeug:** `kleinunternehmer: true` in `ich.yaml` (neu).
+- **Werkzeug:** `kleinunternehmer: true` in `ich.yaml`.
 - **Status:** Annahme – ungeprüft.
 
 #### R14 – Kleinunternehmer weist nie Umsatzsteuer aus
@@ -815,23 +816,37 @@ und Privatpersonen, deren Leistungsort je nach Einordnung im Inland (`inland`) o
 
 ---
 
-## Teil 5 – Stand des Codes
+## Teil 5 – Regeln im Code
 
-`rules.py` folgt diesem Dokument noch nicht überall. Bis zur Umsetzung gilt:
+Stand 2026-10-09. Die Steuerentscheidung (R1–R19, R28–R31, R37) steckt in einer einzigen reinen
+Funktion, `rules.kern()`. Sie rechnet nur mit abstrakten Merkmalen: Kategorie des Kundenlands,
+Unternehmer, USt-IdNrn., Gruppe der Einordnung, Ort der Tätigkeit, Kleinunternehmer, Festlegung. Das
+sind 1728 mögliche Eingaben. `rules.entscheide()` übersetzt die Daten einer Rechnung in Merkmale und
+das Ergebnis zurück in Land, Hinweistext und Meldungen. Jede Rechnung hält in `resolved.json` fest,
+welche Regeln angewandt wurden (`regeln`, R35).
 
-| Regel | Heute im Code | Folge |
+| Regel | Umgesetzt in | Geprüft durch |
 | --- | --- | --- |
-| R5–R8, R9 | Es gibt keine Leistungsart. Privatpersonen außerhalb des Inlands landen in Fall D. | Abbruch mit Vorschlag 19 %; bei Katalog- oder Tätigkeitsleistung im Drittland wäre 0 % richtig (Zeilen 7, 9). Freigabe nur über manuelle Festlegung. |
-| R4, R8 | Privatperson in der EU mit `unternehmer: false` führt zu Abbruch (Fall D). | strenger als nötig, kein falsches Ergebnis |
-| R13–R17 | Keine Kleinunternehmerregelung. | nicht nutzbar für Kleinunternehmer |
-| R28 | Pflichttext zitiert § 14a Abs. 5 UStG. | falsche Fundstelle im Text; die gesetzlich verlangte Angabe selbst steht da |
-| R29 | `resolve` prüft in Fall B nicht, ob die eigene USt-IdNr. gesetzt ist; erst `pruefen` meldet ihr Fehlen im PDF. | Rechnung lässt sich bauen, fällt aber bei `pruefen` durch |
-| R30 | Frist wird nicht geprüft. | keine Warnung |
-| R31 | Pflichttext nennt immer § 3a Abs. 2 und den Reverse-Charge-Nachsatz. | passt heute, weil C nur Unternehmer kennt |
-| R35, R36 | Kein Regel-Trace, keine Warnung. | – |
-| R37 | Manuelle Festlegung erlaubt jeden Fall A–D mit Begründung. | bleibt; R12/R14 kommen als Schranke dazu |
+| R1 | `rules.kategorie()`, `EU_LAENDER` | `test_gb_ist_drittland` |
+| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, und über **alle 1728 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
+| Einordnung (Teil 4) | `rules.EINORDNUNGEN`, `models.Einordnung` | `test_einordnungen_passen_zum_modell`, `test_einordnungen_stehen_in_rules_md` |
+| R16, R28, R31 (Wortlaut) | `rules.hinweis()` | `test_hinweis_*` |
+| R19, R24, R25, R37 (Pflichtfelder) | `models.Input`, `models.Leistung` | `tests/test_resolve.py` |
+| R12, R14 (kein Steuersatz je Position), R32 | `resolve.rechne()` | `tests/test_resolve.py` |
+| R30 | `rules.frist_reverse_charge()`, Warnung in `resolve.rechne()` | `test_frist_reverse_charge`, `test_reverse_charge_fristwarnung` |
+| R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |
+| R20–R29 im PDF | `pruefen.befunde()` | `tests/test_pruefen.py`, `rechnung pruefen` |
+| R23 | `rules.naechste_lfd()` | `test_naechste_lfd_*` |
+| IDs im Code | – | `test_jede_regel_id_im_code_steht_in_rules_md` |
 
----
+Das sind Tests, keine Beweise. Die Beweise kommen mit dem Lean-Modell; es prüft `kern()` dann über
+alle Eingaben gegen bewiesene Theoreme mit denselben IDs.
+
+**Bekannte Grenzen des Codes:**
+
+- R23: Wird der Ordner der jüngsten Rechnung gelöscht, vergibt das Werkzeug seine Nummer erneut.
+- R1: Sondergebiete werden nicht unterschieden (Teil 1).
+- R32: Gerundet wird je Zeile und je Steuergruppe; die Methode ist eine Entscheidung des Werkzeugs.
 
 ## Teil 6 – Fragen an den Steuerberater
 

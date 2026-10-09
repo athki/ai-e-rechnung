@@ -1,5 +1,5 @@
-# Steuerfall D: Privatperson im Drittland, 19 % deutsche USt. Erfunden.
-# resolve bricht hier ab, solange in der Rechnung nicht steuerfall: D mit begruendung: steht.
+# Privatperson im Drittland. Der Leistungsort hängt von der Einordnung ab: ein Vortrag in Zürich
+# (unterrichtend, ort: CH) ist nicht_steuerbar, Beratung (Katalog) ebenso, sonstige Leistungen 19 %. Erfunden.
 firma: Hans Beispiel
 adresse:
   strasse: Beispielweg 5

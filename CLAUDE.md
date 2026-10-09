@@ -34,7 +34,7 @@ Builds laufen in einem temporären Verzeichnis (`tempfile.mkdtemp()`); nur `rech
 `rechnung.resolved.json` werden in den Rechnungsordner kopiert. Kein `.aux`, `.log`, `.tex` dort, nie.
 
 Ohne Gewerbe-Wurzel läuft alles gegen `stammdaten.example/` im Repo (Demo-Modus).
-`rechnung demo` baut daraus vier Beispielrechnungen (Steuerfall A–D) nach `./demo-output/` (gitignored).
+`rechnung demo` baut daraus sechs Beispielrechnungen, je Ergebnis mindestens eine, nach `./demo-output/` (gitignored).
 
 ## Pipeline
 
@@ -52,10 +52,14 @@ rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()─�
   wäre der Steuerbetrag zusätzlich in Euro anzugeben, § 16 Abs. 6 UStG – nicht gebaut, `resolve` bricht ab).
 - Mengeneinheit je Position ist Pflicht (`pauschal`, `stunde`, `tag`, `stueck`, `kilometer`, gemappt auf
   UN/ECE Rec. 20). Kein Default im Modell; `rechnung neu` füllt `pauschal` sichtbar in die Datei vor.
+- `leistung:` ist Pflicht und wird nie geraten: `taetigkeit` (in eigenen Worten), `einordnung` (ein Begriff
+  aus § 3a UStG, Liste in RULES.md Teil 4 und als Kommentar in jeder neuen `rechnung.yaml`), `ort` bei
+  Tätigkeitsleistungen (Land oder `online`). `rechnung neu` lässt den Block leer; `--taetigkeit`,
+  `--einordnung`, `--ort` füllen ihn vor.
 - Leistungsdatum ist Pflicht und wird nie geraten. `rechnung neu --kunde <kuerzel>` lässt es in
   `rechnung.yaml` leer (`# PFLICHT: Tag der Leistung, JJJJ-MM-TT`), `resolve` bricht ab, bis es dasteht;
   `--leistungsdatum JJJJ-MM-TT` füllt es vor (für Skripte und AI).
-- `resolved.json` enthält `vorlage_version` (Git-Short-Hash des Repos beim Build) und einen Hash des Inputs.
+- `resolved.json` enthält Leistungsort, Ergebnis und die angewandten Regel-IDs (`regeln`), dazu `vorlage_version` (Git-Short-Hash des Repos beim Build) und einen Hash des Inputs.
 - `rechnung festschreiben <nr> --gesendet-am JJJJ-MM-TT` macht die Rechnung unveränderbar: Status
   `festgeschrieben`, PDF und resolved.json read-only, Hashes von yaml, resolved.json und PDF in
   `status.yaml`. `--gesendet-am` ist Pflicht – unveränderbar wird eine Rechnung, weil sie ausgestellt
@@ -65,17 +69,28 @@ rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()─�
 - `rechnung pruefen <nr>` nimmt auch den Pfad eines Rechnungsordners – so prüft der Container die
   Demo-Rechnungen. `rechnung demo --pruefen` baut und prüft in einem Zug.
 
-## Steuerfälle (`rules.py`) – Regelbesteuerung
+## Steuerregeln (`RULES.md`, `rules.py`)
 
-| Fall | Bedingung | Satz | Hinweis |
+`RULES.md` ist die Spezifikation: Gesetzeswortlaut, Regeln R1…Rn mit Status, Entscheidungstabelle,
+Geltungsbereich. `rules.py` setzt sie um; Regel-IDs im Code verweisen dorthin. Grundsatz: Das Werkzeug
+darf strenger sein als das Gesetz (abbrechen), aber nie anders entscheiden.
+
+- Leistungsort aus Status des Kunden (`unternehmer`, bei EU-Kunden genügt `ustid`), Gruppe der
+  Einordnung (Tätigkeit / Katalog / Grundregel) und Ort; daraus das Ergebnis:
+
+| Ergebnis | Leistungsort | Satz | Hinweis |
 | --- | --- | --- | --- |
-| A | `kunde.land == "DE"` | 19 % (7 % je Position möglich) | keiner |
-| B | Land in EU und `kunde.ustid` gesetzt | 0 % | „Steuerschuldnerschaft des Leistungsempfängers (§ 14a Abs. 5 UStG, Art. 196 MwStSystRL).“ bzw. die englische Fassung – beide USt-IdNrn. auf der Rechnung |
-| C | Land nicht in EU und `kunde.unternehmer == true` | 0 % | „Leistungsort: {Land}. Die Leistung ist in Deutschland nicht steuerbar (§ 3a Abs. 2 UStG). / Place of supply: {Country}. Not subject to German VAT; the reverse charge may apply in the recipient's country.“ |
-| D | sonst | 19 % | keiner; `resolve` **bricht ab** und nennt, was fehlt (meist `ustid` oder `unternehmer`), weil D fast immer ein Datenfehler ist. Freigabe nur über `steuerfall: D` plus `begruendung:` |
+| `inland` | Inland | 19 % (7 % je Position möglich) | keiner |
+| `reverse_charge` | anderer EU-Staat, Kunde Unternehmer | 0 % | „Steuerschuldnerschaft des Leistungsempfängers (§ 14a Abs. 1 UStG, Art. 196 MwStSystRL).“ bzw. englisch – beide USt-IdNrn. auf der Rechnung; Warnung nach dem 15. des Folgemonats |
+| `nicht_steuerbar` | Drittland | 0 % | „Leistungsort: {Land}. Die Leistung ist in Deutschland nicht steuerbar ({Fundstelle}).“ bzw. englisch, mit Reverse-Charge-Nachsatz nur bei Unternehmern |
+| `kleinunternehmer` | Inland, Aussteller mit `kleinunternehmer: true` (§ 19 UStG) | 0 % | „Steuerfrei als Leistung eines Kleinunternehmers (§ 19 Abs. 1 UStG).“; keine Steuerzeile |
 
-- Manueller Override `steuerfall:` im Input nur zusammen mit `begruendung:`; sonst Validierungsfehler.
-- Kleinunternehmerregelung (§ 19 UStG) wird bewusst nicht unterstützt.
+- Abbruch statt Entscheidung, wenn Daten fehlen (`unternehmer`, USt-IdNrn. bei `reverse_charge`) oder
+  der Leistungsort bei einer Privatperson ein anderer EU-Staat wäre.
+- `rules.kern()` ist der Entscheidungskern als reine Funktion über abstrakte Merkmale (1728 Kombinationen,
+  Tests laufen über alle); `rules.entscheide()` übersetzt Daten hin und zurück. Später prüft ein
+  Lean-Modell den Kern vollständig.
+- Manuelle Festlegung nur des Leistungsorts: `leistungsort:` mit `begruendung:`, sonst Validierungsfehler.
 - EU-Länderliste als Konstante in `rules.py`, mit Kommentar und Datum.
 
 ## Vorlage (`vorlage/`)
@@ -102,13 +117,13 @@ LaTeX, pdflatex, neutral in Schwarz. Sie enthält keine Steuerlogik und druckt n
 
 `rechnung pruefen <nr>` extrahiert den Text (`pdftotext`) und prüft, dass enthalten sind: Rechnungsnummer,
 Rechnungsdatum, Leistungsdatum, Name und Anschrift des Ausstellers, Name und Anschrift des Kunden,
-Steuernummer oder USt-IdNr., jede Positionsbeschreibung, Netto, USt-Betrag, Brutto, und bei Satz 0 der
-Steuerhinweis-Text. Die vollständige Liste mit Paragraphen steht in `pruefen.py`.
+Steuernummer oder USt-IdNr., jede Positionsbeschreibung, Netto, USt-Betrag (beim Kleinunternehmer
+entfällt die Steuerzeile), Brutto, bei Satz 0 der Steuerhinweis-Text und bei `reverse_charge` beide USt-IdNrn. Die vollständige Liste mit Paragraphen steht in `pruefen.py`.
 
 ## Was die AI darf und was nicht
 
 Darf: `rechnung.yaml` anlegen und ändern; `stammdaten/kunden/*.yaml` als Vorschlag anlegen (der Mensch bestätigt,
-weil `land` und `ustid` den Steuerfall bestimmen); Code, Tests und Vorlage im Repo ändern.
+weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen); Code, Tests und Vorlage im Repo ändern.
 
 Darf nicht: `resolved.json`, PDFs, `status.yaml` oder `stammdaten/ich.yaml` schreiben; Rechnungsnummern vergeben;
 Beträge ausrechnen; festgeschriebene Rechnungen anfassen; echte Daten in Tests, Fixtures oder Commits.
@@ -124,7 +139,7 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
 - LaTeX: `latexmk -interaction=nonstopmode -no-shell-escape -outdir=<tmp>`; Engine `pdflatex`,
   XCharter + Fira Sans als TeX-Pakete;
   lualatex und xelatex in `config.toml` wählbar
-- Tests: `pytest`; jede Regel in `rules.py` hat einen Test; End-to-End-Tests bauen A–D aus
+- Tests: `pytest`; jede Regel in `rules.py` hat einen Test; End-to-End-Tests bauen die Ergebnisse aus
   `stammdaten.example/`; Tests laufen ohne Config und ohne Gewerbe-Ordner (Temp-Verzeichnis)
 - Feldnamen und CLI-Kommandos auf Deutsch (`kunde`, `positionen`, `leistungsdatum`, `netto`, `brutto`,
   `neu`, `resolve`, `bauen`, `pruefen`, `festschreiben`, `demo`, `doctor`)

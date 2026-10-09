@@ -2,6 +2,9 @@ kunde: muster-gmbh
 datum: 2026-06-17
 leistungsdatum: 2026-06-10
 sprache: de
+leistung:
+  taetigkeit: "Beratung zum Marktzugang mit Workshop"
+  einordnung: beratung
 positionen:
   - beschreibung: "Beratung Marktzugang, Workshop in Berlin"
     menge: 8

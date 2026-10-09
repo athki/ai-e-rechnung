@@ -1,16 +1,17 @@
 # ai-e-rechnung
 
 Rechnungen für ein deutsches Kleingewerbe: Aus einem kurzen YAML wird eine formal vollständige
-Rechnung als PDF, gesetzt mit LaTeX. Der Kern ist deterministisch. Steuerfall, Summen und
-Rechnungsnummer rechnet das Werkzeug, nicht der Mensch und nicht die AI. Der Befehl heißt `rechnung`.
+Rechnung als PDF, gesetzt mit LaTeX. Der Kern ist deterministisch. Leistungsort, Steuersatz, Summen
+und Rechnungsnummer rechnet das Werkzeug, nicht der Mensch und nicht die AI. Der Befehl heißt `rechnung`.
 
 ```
 rechnung.yaml ──resolve──▶ rechnung.resolved.json ──render──▶ rechnung.pdf
 ```
 
 **Stand:** PDF heute. ZUGFeRD (E-Rechnung nach EN 16931) ist geplant, die Vorlage ist dafür schon
-PDF/A-tauglich gebaut. Regelbesteuerung mit vier Steuerfällen (Inland, EU mit Reverse Charge,
-Drittland-Unternehmen, sonst); die Kleinunternehmerregelung (§ 19 UStG) wird nicht unterstützt.
+PDF/A-tauglich gebaut. Sonstige Leistungen an Unternehmer und Privatpersonen im Inland, in der EU
+und im Drittland, mit Regelbesteuerung oder als Kleinunternehmer (§ 19 UStG). Welche Regeln das
+Werkzeug anwendet, woher sie kommen und was es bewusst nicht kann, steht in [`RULES.md`](RULES.md).
 
 ## Ausprobieren ohne Installation (Docker)
 
@@ -23,9 +24,10 @@ mkdir -p probe
 docker run --rm -v "$PWD/probe":/gewerbe rechnung demo --pruefen --ziel /gewerbe/demo
 ```
 
-Danach liegen in `probe/demo/` vier Beispielrechnungen, eine je Steuerfall, jede mit
-`rechnung.yaml`, `rechnung.resolved.json` und `rechnung.pdf`. `--pruefen` weist in jeder PDF die
-Pflichtangaben nach § 14 Abs. 4 UStG nach. Dieselben vier liegen als Muster in `docs/muster/`.
+Danach liegen in `probe/demo/` sechs Beispielrechnungen, je Ergebnis mindestens eine (Inland,
+EU mit Reverse Charge, Drittland, Kleinunternehmer), jede mit `rechnung.yaml`,
+`rechnung.resolved.json` und `rechnung.pdf`. `--pruefen` weist in jeder PDF die Pflichtangaben nach
+§ 14 Abs. 4 UStG nach. Dieselben liegen als Muster in `docs/muster/`.
 
 ## Installation
 
@@ -35,7 +37,7 @@ Voraussetzungen: Python ≥ 3.12 mit [uv](https://docs.astral.sh/uv/), TeX Live 
 ```sh
 uv sync
 uv run rechnung doctor   # prüft Python, LaTeX, TeX-Pakete, pdftotext, Config, Gewerbe-Ordner
-uv run rechnung demo     # vier Beispielrechnungen nach ./demo-output/
+uv run rechnung demo     # sechs Beispielrechnungen nach ./demo-output/
 ```
 
 ## Ablauf einer Rechnung
@@ -44,16 +46,16 @@ uv run rechnung demo     # vier Beispielrechnungen nach ./demo-output/
 rechnung init --stammdaten            # einmalig: Ordner und ein leeres ich.yaml anlegen
 rechnung neu --kunde sample-ltd
 #   legt <ausgang>/2026/2026-0001/ mit vorbefülltem rechnung.yaml an;
-#   leistungsdatum dort eintragen (Pflicht, resolve bricht sonst ab)
-rechnung resolve 2026-0001            # Steuerfall, Summen, Fälligkeit – schreibt das Ergebnis daneben
+#   leistungsdatum und leistung: (was, Einordnung nach § 3a UStG) dort eintragen – Pflicht
+rechnung resolve 2026-0001            # Leistungsort, Ergebnis, Summen, Regeln – schreibt das Ergebnis daneben
 rechnung bauen   2026-0001            # PDF
 rechnung pruefen 2026-0001            # weist die Pflichtangaben im PDF-Text nach
 rechnung festschreiben 2026-0001 --gesendet-am 2026-06-18
 #   macht die Rechnung unveränderbar: Status, Schreibschutz, Hashes
 ```
 
-`rechnung.yaml` ist die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Steuerfall,
-Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer leitet das Werkzeug daraus ab und
+`rechnung.yaml` ist die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Leistungsort,
+Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer leitet das Werkzeug daraus ab und
 friert sie in `rechnung.resolved.json` ein. Die ausführliche Anleitung steht in
 `docs/anleitung-neue-rechnung.md`.
 
@@ -130,11 +132,13 @@ steht in `.githooks/sperrliste.py`. Ohne Sperrliste ist er still; mit Sperrliste
 - `docs/anleitung-neue-rechnung.md` – Schritt für Schritt eine Rechnung schreiben, plus
   Nachschlagewerk: welche Einstellung in welcher Datei steht
 - `vorlage/README.md` – die LaTeX-Vorlage: Aufbau, Stilschalter, eigener Vorlagen-Ordner, `make beispiel`
-- `docs/muster/` – vier Musterrechnungen (Steuerfall A–D) als visuelle Referenz
+- `RULES.md` – die Steuerregeln: Gesetzeswortlaut, Regeln mit Status, Entscheidungstabelle, Grenzen
+- `docs/muster/` – sechs Musterrechnungen als visuelle Referenz
 
 ## Hinweis
 
 Das Werkzeug ersetzt keine Steuerberatung. Es setzt die Pflichtangaben nach § 14 UStG um und prüft
-sie im PDF nach; ob ein Steuerfall im Einzelfall richtig gewählt ist, bleibt deine Verantwortung.
+sie im PDF nach; ob die Einordnung der Leistung und die Kundendaten im Einzelfall stimmen, bleibt deine Verantwortung.
+Die Regeln in `RULES.md` sind, wo nicht anders vermerkt, begründete Annahmen, von keinem Steuerberater geprüft.
 
 Lizenz: MIT.

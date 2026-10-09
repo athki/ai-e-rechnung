@@ -30,7 +30,7 @@ zahlungsziel_tage = 14
 sprache = "de"
 
 # Währung: "EUR", "USD" oder "GBP". Fremdwährung ist nur zulässig, wenn keine deutsche
-# Umsatzsteuer ausgewiesen wird (Steuerfall B und C).
+# Umsatzsteuer ausgewiesen wird (Ergebnis reverse_charge, nicht_steuerbar, kleinunternehmer).
 waehrung = "EUR"
 
 # Eigener Vorlagen-Ordner (optional). Darin liegen nur die Dateien, die anders aussehen sollen,

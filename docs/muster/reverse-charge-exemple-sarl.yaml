@@ -2,6 +2,9 @@ kunde: exemple-sarl
 datum: 2026-06-17
 leistungsdatum: 2026-06-10
 sprache: en
+leistung:
+  taetigkeit: "Policy briefing for the management team"
+  einordnung: beratung
 positionen:
   - beschreibung: "Policy briefing, Paris"
     menge: 1
