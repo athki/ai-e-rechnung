@@ -189,7 +189,7 @@ def test_hinweis_nicht_steuerbar_nennt_den_leistungsort():
     de = hinweis("GB", None, True)["de"]
     assert de == ("Leistungsort: Vereinigtes Königreich. Die Leistung ist in Deutschland nicht "
                   "steuerbar (§ 3a Abs. 2 UStG).")
-    # Die vom Steuerberater gesehene englische Fassung bleibt wörtlich gleich.
+    # Die englische Fassung bleibt wörtlich gleich.
     assert hinweis("GB", None, True, sprache="en")["en"] == (
         "Place of supply: United Kingdom. Not subject to German VAT; the reverse charge may apply "
         "in the recipient's country.")

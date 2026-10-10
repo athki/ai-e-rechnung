@@ -154,6 +154,6 @@ steht in `.githooks/sperrliste.py`. Ohne Sperrliste ist er still; mit Sperrliste
 
 Das Werkzeug ersetzt keine Steuerberatung. Es setzt die Pflichtangaben nach § 14 UStG um und prüft
 sie im PDF nach; ob die Einordnung der Leistung und die Kundendaten im Einzelfall stimmen, bleibt deine Verantwortung.
-Die Regeln in `RULES.md` sind, wo nicht anders vermerkt, begründete Annahmen, von keinem Steuerberater geprüft.
+Die Regeln in `RULES.md` sind begründete Annahmen; kein Steuerberater hat sie bisher geprüft.
 
 Lizenz: MIT.

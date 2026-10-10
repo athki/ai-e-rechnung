@@ -8,7 +8,7 @@ dass der Code die Regeln richtig umsetzt.
 Die Kette:
 
 ```
-Gesetz ──(Prüfung durch Steuerberater)──▶ Regeln R1…Rn in dieser Datei
+Gesetz ──(Prüfung durch Steuerberater, steht aus)──▶ Regeln R1…Rn in dieser Datei
        ──(je Regel ein Theorem, gleiche ID)──▶ Lean-Modell (bewiesen)
        ──(erschöpfender Abgleich)──▶ rules.py
 ```
@@ -49,6 +49,9 @@ Entscheidung im Nachhinein prüfbar.
 | --- | --- |
 | bestätigt | Ein Steuerberater hat eine Rechnung gesehen, die genau diese Regel anwendet, und sie für richtig befunden. Datum und Umfang stehen dabei. |
 | Annahme – ungeprüft | Begründete Auslegung, kein Steuerberater hat sie gesehen. Die Begründung steht dabei. |
+
+Derzeit hat keine Regel den Status „bestätigt“: Kein Steuerberater hat dieses Dokument oder eine Regel
+daraus geprüft.
 
 **IDs** werden einmal vergeben und nie neu nummeriert. Fällt eine Regel weg, bleibt ihre Nummer
 frei. Die Lean-Theoreme tragen dieselben IDs.
@@ -371,9 +374,7 @@ vollständige Tabelle steht in Teil 4.
   - Ein Unternehmer in der EU weist sich durch seine USt-IdNr. aus (siehe R29).
   - Die Ausnahmen in § 3a Abs. 3 Nr. 1, 2, 3a, 5 und Abs. 8 greifen nicht (Teil 1).
 - **Werkzeug:** `kunde.unternehmer`, `kunde.land`, `kunde.ustid`.
-- **Status:** **bestätigt** (Stand 2026-10-08) für einen Kunden im Drittland, an einer Rechnung, deren
-  Leistung in einem anderen Drittland vor Ort erbracht wurde: Leistungsort ist der Sitz des Kunden,
-  nicht der Ort der Leistung. Für Kunden im Inland und in der EU: Annahme – ungeprüft.
+- **Status:** Annahme – ungeprüft.
 
 #### R4 – Grundregel bei Nichtunternehmern: Sitz des Ausstellers
 
@@ -435,8 +436,7 @@ vollständige Tabelle steht in Teil 4.
   Posten. Getrennte Rechnungen sind strenger als nötig, aber zulässig.
 - **Werkzeug:** `leistung` gilt für die ganze Rechnung, nicht je Position; `leistung.taetigkeit`
   beschreibt die Hauptleistung in eigenen Worten.
-- **Status:** Annahme – ungeprüft. Für Reisekosten als Nebenleistung im Drittland-Fall indirekt
-  mitbestätigt (siehe R3), da die bestätigte Rechnung Flugkosten enthielt.
+- **Status:** Annahme – ungeprüft.
 
 ### Steuersatz und Steuerschuldner
 
@@ -679,8 +679,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   § 3a Abs. 3 Nr. 3; R7: § 3a Abs. 4). Der Nachsatz zum Reverse Charge passt nur bei Unternehmern; bei
   Privatpersonen entfällt er.
 - **Werkzeug:** Pflichttext Block 8 mit Ländername aus `LAENDER`.
-- **Status:** **bestätigt** (Stand 2026-10-08) in der englischen Fassung für R3 (Kunde Unternehmer im
-  Drittland). Deutsche Fassung und Varianten für R5 und R7: Annahme – ungeprüft.
+- **Status:** Annahme – ungeprüft.
 
 ### Beträge
 

@@ -10,7 +10,7 @@ proofs about it. It is not part of the invoice tool: writing invoices never need
 
 ```
 law (UStG)
-  └─ RULES.md            rules R1…Rn in plain German, with citations    checked by a tax advisor, not provable
+  └─ RULES.md            rules R1…Rn in plain German, with citations    to be reviewed by a tax advisor (not done yet); not provable
       └─ Lean theorems   one per rule, same ID (e.g. R14_…)             read side by side with RULES.md
           └─ Lean model  the decision as Lean definitions               proved by Lean
               └─ rules.py  rules.kern() in Python, the running code      exhaustive comparison, all 1728 inputs
@@ -20,8 +20,8 @@ The tool keeps running Python. Lean proves properties of a model of `rules.kern(
 that model with the Python code on every possible input (the inputs are finite: country category,
 business customer yes/no/unknown, VAT IDs, kind of service, place of activity, small business, override).
 
-What will stay unproved, and is said so: that the rules match the law (a tax advisor reviews RULES.md;
-many rules are still marked as unreviewed assumptions), that the facts entered are true (whether a
+What will stay unproved, and is said so: that the rules match the law (no tax advisor has reviewed
+RULES.md yet; every rule is a reasoned but unreviewed assumption), that the facts entered are true (whether a
 customer is a business, how a service is classified), the mapping from country code to category, and
 the PDF output (checked by `rechnung pruefen`, not proved).
 
