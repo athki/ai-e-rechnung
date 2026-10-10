@@ -167,9 +167,14 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
 - Kein Netzwerkzugriff im Kern. Künftige AI-Funktionen kommen in ein eigenes, optional importierbares Modul.
 - Lean (`lean/`, README englisch): Beweise über die Steuerregeln, außerhalb des Werkzeugs. Version fest in
   `lean/lean-toolchain`, keine Abhängigkeiten (kein Mathlib), `lakefile.toml`. Namen spiegeln `rules.py`
-  und RULES.md (Felder in `snake_case`, Theoreme mit Regel-ID, z. B. `R14_…`). `lean/pruefen.sh` baut und
-  prüft die Axiome: Jede Warnung ist ein Fehler (`sorry`), nur Leans Standardaxiome (kein
-  `native_decide`). `make lean` auf dem Host (braucht elan, `doctor` warnt nur), `make beweise` im Container.
+  und RULES.md (Felder in `snake_case`, Theoreme mit Regel-ID, z. B. `R14_…`). Zwei Ebenen: `Gesetz/`
+  (Sachverhalt, § 3a je Absatz, Folgen) und `Werkzeug/` (genauer Spiegel von `kern()`, `satz_position()`,
+  `merkmale()`); `Bruecke.lean` (`Passt`) ist die vollständige Liste der Annahmen. Je Regel eine
+  `Aussage.R…` in `Aussagen.lean`, bewiesen durch ein Theorem gleichen Namens. `lean/pruefen.sh` baut,
+  gibt die Entscheidungstabelle aus (`Tabelle.lean`) und prüft (`Pruefung.lean`): jede Aussage hat ein
+  Theorem genau dieses Typs (in 8.4 noch offen erlaubt), jede Warnung ist ein Fehler (`sorry`), nur Leans
+  Standardaxiome (kein `native_decide`). `make lean` auf dem Host (braucht elan, `doctor` warnt nur),
+  `make beweise` im Container.
 
 ## Schattencontainer – Muss
 
