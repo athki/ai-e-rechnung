@@ -224,6 +224,20 @@ def test_unbekanntes_land_sagt_was_zu_tun_ist():
         hinweis("XX", None, True)
 
 
+@pytest.mark.parametrize("land", ["EL", "XX", "UK"])
+def test_unbekannter_laendercode_wird_nicht_als_drittland_geraten(land):
+    """R1: Ein Code außerhalb von LAENDER bricht ab – auch wo das Ergebnis nicht vom Land abhinge
+    (Privatperson, Grundregel: Leistungsort Inland) und wo er nur Ort oder Festlegung ist."""
+    with pytest.raises(rules.RegelFehler, match="LAENDER"):
+        rules.kategorie(land)
+    with pytest.raises(rules.RegelFehler, match="LAENDER"):
+        rules.entscheide(kunde(land, None, False), leistung(), ich())
+    with pytest.raises(rules.RegelFehler, match="LAENDER"):
+        rules.entscheide(kunde("DE", None, False), leistung("unterrichtend", land), ich())
+    with pytest.raises(rules.RegelFehler, match="LAENDER"):
+        rules.entscheide(kunde("DE", None, True), leistung(), ich(), festgelegt=land)
+
+
 def test_jedes_eu_land_hat_einen_namen():
     assert rules.EU_LAENDER <= set(rules.LAENDER)
 

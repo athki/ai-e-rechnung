@@ -113,7 +113,17 @@ EINORDNUNGEN: dict[str, tuple[str, str]] = {
 
 
 def kategorie(land: str) -> str:
-    """R1: Inland, übriges Gemeinschaftsgebiet oder Drittlandsgebiet (§ 1 Abs. 2a UStG)."""
+    """R1: Inland, übriges Gemeinschaftsgebiet oder Drittlandsgebiet (§ 1 Abs. 2a UStG).
+
+    Nur für Länder aus `LAENDER`: Ein unbekannter Code (Tippfehler, `EL` statt `GR`) würde sonst
+    als Drittland gelten – das Werkzeug rät die Kategorie nicht.
+    """
+    if land not in LAENDER:
+        raise RegelFehler(
+            f"Land {land} ist in rules.LAENDER nicht hinterlegt. Ländercode nach ISO 3166-1 prüfen "
+            f"(Griechenland: GR, nicht EL); ist er richtig, dort eintragen (deutscher und englischer "
+            f"Name) und bei einem EU-Staat auch in EU_LAENDER."
+        )
     if land == "DE":
         return INLAND
     return EU if land in EU_LAENDER else DRITTLAND

@@ -339,7 +339,8 @@ und Verhalten) – **Status**.
 - **Annahmen:** Ein Land ist durch seinen ISO-Code bestimmt; Sondergebiete (Büsingen, Helgoland,
   Kanaren, Nordirland …) werden nicht unterschieden. Das Vereinigte Königreich ist seit 2021
   Drittland.
-- **Werkzeug:** `kunde.land`; EU-Liste `EU_LAENDER` in `rules.py` mit Datum.
+- **Werkzeug:** `kunde.land`; EU-Liste `EU_LAENDER` in `rules.py` mit Datum. Kategorien gibt es nur
+  für Länder aus `LAENDER`; ein anderer Code bricht ab, statt als Drittland zu gelten.
 - **Status:** Annahme – ungeprüft (die Einteilung selbst ist Gesetz; ungeprüft ist nur die gepflegte
   Liste).
 
