@@ -383,7 +383,9 @@ vollständige Tabelle steht in Teil 4.
   Leistungsort dort, wo der Aussteller sein Unternehmen betreibt, also im Inland.
 - **Annahmen:** Der Aussteller betreibt sein Unternehmen vom Inland aus und hat keine Betriebsstätte
   im Ausland.
-- **Werkzeug:** `kunde.unternehmer: false`, `leistung.einordnung: sonstige`.
+- **Werkzeug:** `kunde.unternehmer: false`, `leistung.einordnung: sonstige`. Steht in den Stammdaten des
+  Ausstellers (`land`) nicht `DE`, bricht das Werkzeug ab: Es bildet das deutsche UStG ab und gilt nur für
+  Aussteller mit Sitz in Deutschland. Angenommen bleibt nur, dass es keine Betriebsstätte im Ausland gibt.
 - **Status:** Annahme – ungeprüft.
 
 #### R5 – Tätigkeitsleistung an Nichtunternehmer: Ort der Tätigkeit
@@ -429,11 +431,14 @@ vollständige Tabelle steht in Teil 4.
 #### R9 – Eine Einordnung je Rechnung; Nebenleistungen folgen der Hauptleistung
 
 - **Quelle:** Q14 (Einheitlichkeit der Leistung, Verwaltungsauffassung).
-- **Regel:** Eine Rechnung beschreibt eine Hauptleistung und ihre Nebenleistungen (z. B.
-  Reisekosten, Material). Leistungsort und Steuersatz der Hauptleistung gelten für alle Positionen.
-  Mehrere Hauptleistungen verschiedener Art gehören auf getrennte Rechnungen.
+- **Regel:** Eine Rechnung hat eine Einordnung und damit einen Leistungsort; er gilt für alle
+  Positionen. Nebenleistungen (z. B. Reisekosten, Material) teilen Leistungsort und Steuersatz ihrer
+  Hauptleistung. Leistungen verschiedener Einordnung gehören auf getrennte Rechnungen. Leistungen
+  derselben Einordnung dürfen verschiedene Steuersätze haben (19 % und 7 %, R10); die Rechnung
+  schlüsselt das Entgelt dann nach Sätzen auf (§ 14 Abs. 4 Nr. 7 und 8).
 - **Annahmen:** Weiterberechnete Auslagen sind Nebenleistung und Teil des Entgelts, kein durchlaufender
-  Posten. Getrennte Rechnungen sind strenger als nötig, aber zulässig.
+  Posten. Getrennte Rechnungen sind strenger als nötig, aber zulässig. Dass gemischte Sätze auf einer
+  Rechnung derselben Einordnung zulässig sind, ist eine Annahme (Teil 6).
 - **Werkzeug:** `leistung` gilt für die ganze Rechnung, nicht je Position; `leistung.taetigkeit`
   beschreibt die Hauptleistung in eigenen Worten.
 - **Status:** Annahme – ungeprüft.
@@ -446,7 +451,9 @@ vollständige Tabelle steht in Teil 4.
 - **Regel:** Ist die Leistung steuerbar (R2) und nicht steuerfrei (R13), beträgt die Steuer 19 % des
   Entgelts, für die in § 12 Abs. 2 genannten Umsätze 7 %.
 - **Annahmen:** Ob eine Position unter § 12 Abs. 2 fällt, entscheidet der Mensch (Teil 1).
-- **Werkzeug:** Satz 19 % als Vorgabe, `positionen[].steuersatz: 7` je Position.
+- **Werkzeug:** Satz 19 % als Vorgabe, `positionen[].steuersatz: 7` je Position. Das Feld nimmt nur `7`
+  an: 19 % und 0 % folgen aus dem Ergebnis der Rechnung, eine Position mit 0 % bei steuerpflichtiger
+  Leistung wäre ein zu niedriger Ausweis (eine Steuerbefreiung nach § 4 deckt das Werkzeug nicht ab).
 - **Status:** Annahme – ungeprüft.
 
 #### R11 – Steuerschuldnerschaft des Leistungsempfängers in der EU
@@ -536,7 +543,8 @@ vollständige Tabelle steht in Teil 4.
 - **Regel:** Ergibt R5 oder R6 einen Leistungsort in einem anderen EU-Staat, wäre die Steuer dort zu
   erklären. Das Werkzeug bricht ab.
 - **Annahmen:** keine.
-- **Werkzeug:** Abbruch mit Meldung.
+- **Werkzeug:** Abbruch mit Meldung. Nur bei `unternehmer: false`; ist der Status unbekannt (auch bei
+  manueller Festlegung des Orts, R37), bricht das Werkzeug nach R19 ab.
 - **Status:** Annahme – ungeprüft.
 
 #### R19 – Unvollständige Daten
@@ -824,6 +832,7 @@ der Tätigkeit. Ausgabe: Leistungsort, und daraus das Ergebnis mit Satz und Pfli
 | 11 | Privat, jedes Land | Tätigkeit, online | Wohnsitz des Kunden | wie Zeile 8, 9 bzw. 10 | | | R6 | – |
 | 12 | Unternehmer, EU, ohne USt-IdNr. | jede | EU-Staat des Kunden | – | – | – | R19, R29 | D (**Abbruch**, bleibt) |
 | 13 | Unternehmer unbekannt | | | – | – | – | R19 | D (**Abbruch**, bleibt) |
+| 14 | jeder, Aussteller nicht in Deutschland | | | – | – | – | R4 | **Abbruch** |
 
 **Kleinunternehmer** (`kleinunternehmer: true` in `ich.yaml`): dieselbe Tabelle bestimmt den
 Leistungsort, dann gilt:
@@ -833,7 +842,7 @@ Leistungsort, dann gilt:
 | Inland (Zeilen 1, 4, 5, 6, 8, 11) | `kleinunternehmer` | 0 % | Kleinunternehmer-Hinweis | R13, R14, R16 |
 | EU-Staat, Kunde Unternehmer (Zeile 2) | `reverse_charge` | 0 % | Steuerschuldnerschaft; USt-IdNrn. nicht Pflicht | R14, R15, R28, R30 |
 | Drittland (Zeilen 3, 7, 9, 11) | `nicht_steuerbar` | 0 % | Leistungsort | R14, R17, R31 |
-| Abbruch (Zeilen 10, 12, 13) | – | – | – | R18, R19 |
+| Abbruch (Zeilen 10, 12, 13, 14) | – | – | – | R4, R18, R19 |
 
 ### Die Ergebnisse
 
@@ -852,21 +861,23 @@ und Privatpersonen, deren Leistungsort je nach Einordnung im Inland (`inland`) o
 
 ## Teil 5 – Regeln im Code
 
-Stand 2026-10-09. Die Steuerentscheidung (R1–R19, R28–R31, R37) steckt in einer einzigen reinen
+Stand 2026-10-10. Die Steuerentscheidung (R1–R19, R28–R31, R37) steckt in einer einzigen reinen
 Funktion, `rules.kern()`. Sie rechnet nur mit abstrakten Merkmalen: Kategorie des Kundenlands,
-Unternehmer, USt-IdNrn., Gruppe der Einordnung, Ort der Tätigkeit, Kleinunternehmer, Festlegung. Das
-sind 1728 mögliche Eingaben. `rules.entscheide()` übersetzt die Daten einer Rechnung in Merkmale und
+Unternehmer, USt-IdNrn., Gruppe der Einordnung, Ort der Tätigkeit, Kleinunternehmer, Sitz des
+Ausstellers im Inland, Festlegung. Das sind 3456 mögliche Eingaben. Der Satz je Position (R10, R12,
+R14) ist die zweite reine Funktion, `rules.satz_position()`. `rules.entscheide()` übersetzt die Daten einer Rechnung in Merkmale und
 das Ergebnis zurück in Land, Hinweistext und Meldungen. Jede Rechnung hält in `resolved.json` fest,
 welche Regeln angewandt wurden (`regeln`, R35).
 
 | Regel | Umgesetzt in | Geprüft durch |
 | --- | --- | --- |
 | R1 | `rules.kategorie()`, `EU_LAENDER` | `test_gb_ist_drittland` |
-| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, und über **alle 1728 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
+| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, `test_aussteller_ausserhalb_deutschlands_bricht_ab`, und über **alle 3456 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_aussteller_im_ausland_bricht_immer_ab`, `test_kern_r18_nur_bei_privatpersonen`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
 | Einordnung (Teil 4) | `rules.EINORDNUNGEN`, `models.Einordnung` | `test_einordnungen_passen_zum_modell`, `test_einordnungen_stehen_in_rules_md` |
 | R16, R28, R31 (Wortlaut) | `rules.hinweis()` | `test_hinweis_*` |
 | R19, R24, R25, R37 (Pflichtfelder) | `models.Input`, `models.Leistung` | `tests/test_resolve.py` |
-| R12, R14 (kein Steuersatz je Position), R32 | `resolve.rechne()` | `tests/test_resolve.py` |
+| R10, R12, R14 (Satz je Position) | `rules.satz_position()`, `models.Position` | `test_satz_position`, `test_positions_steuersatz_*` |
+| R32 | `resolve.rechne()` | `tests/test_resolve.py` |
 | R30 | `rules.frist_reverse_charge()`, Warnung in `resolve.rechne()` | `test_frist_reverse_charge`, `test_reverse_charge_fristwarnung` |
 | R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |
 | R20–R29 im PDF | `pruefen.befunde()` | `tests/test_pruefen.py`, `rechnung pruefen` |
@@ -914,3 +925,6 @@ alle Eingaben gegen bewiesene Theoreme mit denselben IDs.
 13. **Pro forma (R38):** Genügt die Kennzeichnung („keine Rechnung“, vorläufige Nummer, Bitte um Prüfung
     statt Zahlungsaufforderung), damit die Pro forma nicht als Rechnung gilt – auch wenn sie
     Steuerbeträge zeigt? Was gilt, wenn auf eine Pro forma nie eine Rechnung folgt?
+14. **Gemischte Sätze (R9, R10):** Darf eine Rechnung über Leistungen derselben Einordnung Positionen
+    mit 19 % und 7 % haben (etwa ein Vortrag und die Einräumung von Nutzungsrechten nach § 12 Abs. 2
+    Nr. 7 c)? Oder ist das schon eine zweite Hauptleistung, die auf eine eigene Rechnung gehört?

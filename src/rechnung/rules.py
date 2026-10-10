@@ -141,6 +141,7 @@ class Merkmale:
     taetigkeit_ort: str | None    # nur bei taetigkeit: inland | eu | drittland | online
     kleinunternehmer: bool        # Aussteller nach § 19 UStG
     aussteller_ustid: bool        # Aussteller hat eine USt-IdNr.
+    aussteller_inland: bool       # Aussteller betreibt sein Unternehmen vom Inland aus (R4)
     festgelegt: str | None        # manuell festgelegter Leistungsort: inland | eu | drittland (R37)
 
 
@@ -159,12 +160,17 @@ class KernErgebnis:
 class Abbruch:
     """Das Werkzeug entscheidet nicht und sagt, warum (Grundsatz: strenger, nie anders)."""
 
-    regel: str                    # R18, R19 oder R29
-    grund: str                    # unternehmer_fehlt | eu_privat | kunde_ustid_fehlt | eigene_ustid_fehlt
+    regel: str                    # R4, R18, R19 oder R29; bei satz_position() R12 oder R14
+    grund: str                    # aussteller_ausland | unternehmer_fehlt | eu_privat | kunde_ustid_fehlt
+                                  # | eigene_ustid_fehlt | satz_ohne_steuer
 
 
 def kern(m: Merkmale) -> KernErgebnis | Abbruch:
     """Die Entscheidungstabelle aus RULES.md Teil 4, als reine Funktion über Merkmale."""
+    # R4: Das Werkzeug bildet das deutsche UStG ab und rechnet nur für Aussteller mit Sitz im Inland.
+    if not m.aussteller_inland:
+        return Abbruch("R4", "aussteller_ausland")
+
     # R3-Annahme: Ein EU-Kunde mit USt-IdNr. gilt als Unternehmer, wenn nichts anderes angegeben ist.
     unternehmer = m.unternehmer
     if unternehmer is None and m.kunde == EU and m.kunde_ustid:
@@ -197,6 +203,9 @@ def kern(m: Merkmale) -> KernErgebnis | Abbruch:
         ergebnis: Ergebnis = "kleinunternehmer" if ku else "inland"
         regeln += ["R13", "R16"] if ku else ["R10"]
     elif ort == EU:
+        if unternehmer is None:
+            # Nur bei festgelegtem Ort möglich: Unternehmer → Reverse Charge, Privatperson → R18.
+            return Abbruch("R19", "unternehmer_fehlt")
         if not unternehmer:
             return Abbruch("R18", "eu_privat")
         ergebnis = "reverse_charge"
@@ -216,6 +225,17 @@ def kern(m: Merkmale) -> KernErgebnis | Abbruch:
     if satz == 0:
         regeln.append("R14" if ku else "R12")
     return KernErgebnis(quelle, ort, ergebnis, satz, tuple(regeln))
+
+
+def satz_position(satz: int, kleinunternehmer: bool, ermaessigt: bool) -> int | Abbruch:
+    """Satz einer Position: der Satz der Rechnung, oder 7 %, wenn der Mensch die Position als
+    ermäßigt einordnet (§ 12 Abs. 2 UStG, R10). Ermäßigt geht nur, wo deutsche Steuer ausgewiesen
+    wird; sonst Abbruch (R14 beim Kleinunternehmer, sonst R12)."""
+    if not ermaessigt:
+        return satz
+    if satz == 0:
+        return Abbruch("R14" if kleinunternehmer else "R12", "satz_ohne_steuer")
+    return 7
 
 
 # ---------------------------------------------------------------- Übersetzung: Daten ↔ Merkmale
@@ -259,6 +279,7 @@ def merkmale(kunde: Kunde, leistung: Leistung, aussteller: Stammdaten, festgeleg
         taetigkeit_ort=None if ort is None else ("online" if ort == "online" else kategorie(ort)),
         kleinunternehmer=aussteller.kleinunternehmer,
         aussteller_ustid=bool(aussteller.ustid),
+        aussteller_inland=kategorie(aussteller.land) == INLAND,
         festgelegt=None if festgelegt is None else kategorie(festgelegt),
     )
 
@@ -278,7 +299,7 @@ def entscheide(
     land = {
         ORT_KUNDE: kunde.land,
         ORT_TAETIGKEIT: leistung.ort,
-        ORT_AUSSTELLER: "DE",   # der Aussteller betreibt sein Unternehmen vom Inland aus (R4)
+        ORT_AUSSTELLER: aussteller.land,   # nach kern() immer das Inland (R4)
         ORT_FESTGELEGT: festgelegt,
     }[k.ort_quelle]
     assert land is not None
@@ -296,6 +317,11 @@ def entscheide(
 
 def _meldung(a: Abbruch, kunde: Kunde, ort: str | None) -> str:
     kuerzel = kunde.kuerzel or kunde.firma
+    if a.grund == "aussteller_ausland":
+        return (
+            "stammdaten/ich.yaml: `land` ist nicht DE. Das Werkzeug bildet das deutsche "
+            "Umsatzsteuergesetz ab und rechnet nur für Aussteller mit Sitz in Deutschland (RULES.md R4)."
+        )
     if a.grund == "unternehmer_fehlt":
         zeilen = [
             f"Kunde {kuerzel}, Land {kunde.land}: `unternehmer` ist nicht gesetzt. Davon hängt der "

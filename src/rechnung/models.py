@@ -160,15 +160,18 @@ class Position(Basis):
     menge: Decimal
     einheit: Einheit
     einzelpreis: Decimal
-    steuersatz: Decimal | None = None  # nur bei Ergebnis inland sinnvoll: 19 oder 7
+    steuersatz: Decimal | None = None  # nur 7: ermäßigt (§ 12 Abs. 2 UStG); leer = Satz der Rechnung
 
     _zahlen = field_validator("menge", "einzelpreis", "steuersatz", mode="before")(_dezimal)
 
     @field_validator("steuersatz")
     @classmethod
     def _satz_erlaubt(cls, v: Decimal | None) -> Decimal | None:
-        if v is not None and v not in (Decimal(0), Decimal(7), Decimal(19)):
-            raise ValueError("steuersatz muss 0, 7 oder 19 sein")
+        if v is not None and v != Decimal(7):
+            raise ValueError(
+                "steuersatz kann nur 7 sein (ermäßigt nach § 12 Abs. 2 UStG, RULES.md R10). Ohne Angabe "
+                "gilt der Satz der Rechnung: 19 % im Inland, sonst 0 %."
+            )
         return v
 
 

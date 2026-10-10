@@ -115,6 +115,15 @@ def test_festgelegter_leistungsort_geht_durch_dieselben_regeln():
     assert (e.ort.land, e.ergebnis, e.ort.regeln) == ("CH", "nicht_steuerbar", ("R37",))
     with pytest.raises(rules.RegelFehler, match="R18"):
         rules.entscheide(kunde("CH", None, False), leistung(), ich(), festgelegt="FR")
+    # Status unbekannt: als Unternehmer wäre es Reverse Charge, also fehlt eine Angabe (R19), nicht R18.
+    with pytest.raises(rules.RegelFehler, match="unternehmer"):
+        rules.entscheide(kunde("CH", None, None), leistung(), ich(), festgelegt="FR")
+
+
+def test_aussteller_ausserhalb_deutschlands_bricht_ab():
+    at = ich().model_copy(update={"land": "AT"})
+    with pytest.raises(rules.RegelFehler, match="R4"):
+        rules.entscheide(kunde("DE", None, False), leistung(), at)
 
 
 @pytest.mark.parametrize(
@@ -310,13 +319,13 @@ AKTIVE_REGELN = {
 
 
 def alle_merkmale():
-    for kunde, unternehmer, kunde_ustid, gruppe, ku, eigene, festgelegt in itertools.product(
+    for kunde, unternehmer, kunde_ustid, gruppe, ku, eigene, inland, festgelegt in itertools.product(
         KATEGORIEN, (True, False, None), (True, False), (rules.TAETIGKEIT, rules.KATALOG, rules.GRUNDREGEL),
-        (True, False), (True, False), (None, *KATEGORIEN),
+        (True, False), (True, False), (True, False), (None, *KATEGORIEN),
     ):
         orte = (*KATEGORIEN, "online") if gruppe == rules.TAETIGKEIT else (None,)
         for ort in orte:
-            yield rules.Merkmale(kunde, unternehmer, kunde_ustid, gruppe, ort, ku, eigene, festgelegt)
+            yield rules.Merkmale(kunde, unternehmer, kunde_ustid, gruppe, ort, ku, eigene, inland, festgelegt)
 
 
 ALLE = list(alle_merkmale())
@@ -324,12 +333,37 @@ ALLE = list(alle_merkmale())
 
 def test_kern_ist_total():
     """Jede Kombination ergibt genau eine Entscheidung oder einen begründeten Abbruch."""
-    assert len(ALLE) == 3 * 3 * 2 * (4 + 1 + 1) * 2 * 2 * 4
+    assert len(ALLE) == 3 * 3 * 2 * (4 + 1 + 1) * 2 * 2 * 2 * 4 == 3456
     for m in ALLE:
         k = rules.kern(m)
         assert isinstance(k, (rules.KernErgebnis, rules.Abbruch)), m
         if isinstance(k, rules.Abbruch):
-            assert k.regel in {"R18", "R19", "R29"}, m
+            assert k.regel in {"R4", "R18", "R19", "R29"}, m
+
+
+def test_kern_aussteller_im_ausland_bricht_immer_ab():
+    """R4: genau dann, wenn der Aussteller nicht im Inland sitzt."""
+    for m in ALLE:
+        k = rules.kern(m)
+        assert (isinstance(k, rules.Abbruch) and k.regel == "R4") == (not m.aussteller_inland), m
+
+
+def test_kern_r18_nur_bei_privatpersonen():
+    """R18 heißt: Privatperson. Ist der Status unbekannt, ist der Grund R19 – auch bei Festlegung."""
+    for m in ALLE:
+        k = rules.kern(m)
+        if isinstance(k, rules.Abbruch) and k.regel == "R18":
+            assert m.unternehmer is False, m
+
+
+@pytest.mark.parametrize(
+    "satz, ku, ermaessigt, erwartet",
+    [(19, False, False, 19), (19, False, True, 7), (0, False, False, 0), (0, True, False, 0),
+     (0, False, True, "R12"), (0, True, True, "R14")],
+)
+def test_satz_position(satz, ku, ermaessigt, erwartet):
+    s = rules.satz_position(satz, ku, ermaessigt)
+    assert (s.regel if isinstance(s, rules.Abbruch) else s) == erwartet
 
 
 def test_kern_satz_und_ergebnis_passen_zum_leistungsort():

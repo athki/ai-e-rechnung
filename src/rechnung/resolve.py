@@ -382,12 +382,13 @@ def rechne(
 
     positionen: list[ResolvedPosition] = []
     for i, p in enumerate(eingabe.positionen, start=1):
-        if p.steuersatz is not None and basissatz == rules.NULLSATZ:
+        satz = rules.satz_position(int(basissatz), stammdaten.kleinunternehmer, p.steuersatz is not None)
+        if isinstance(satz, rules.Abbruch):
             raise ResolveFehler(
                 f"Position {i}: steuersatz ist gesetzt, aber das Ergebnis {entscheidung.ergebnis} weist "
-                f"keine deutsche Umsatzsteuer aus (RULES.md R12). Den Satz aus der Position entfernen."
+                f"keine deutsche Umsatzsteuer aus (RULES.md {satz.regel}). Den Satz aus der Position entfernen."
             )
-        satz = p.steuersatz if p.steuersatz is not None else basissatz
+        satz = Decimal(satz)
         positionen.append(
             ResolvedPosition(
                 pos=i,

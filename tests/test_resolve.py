@@ -315,9 +315,18 @@ def test_fremdwaehrung_ohne_ust_laeuft(gewerbe):
 
 
 def test_positions_steuersatz_bei_null_prozent_bricht_ab(gewerbe):
-    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: 1000.00\n    steuersatz: 19")
+    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: 1000.00\n    steuersatz: 7")
     nummer = lege_an(gewerbe, "sample-ltd", positionen)
     with pytest.raises(r.ResolveFehler, match="nicht_steuerbar"):
+        r.resolve(config.laden(), nummer)
+
+
+@pytest.mark.parametrize("satz", ["0", "19"])
+def test_positions_steuersatz_nur_sieben(gewerbe, satz):
+    """R10: Je Position nur die Ermäßigung; 19 und 0 folgen aus dem Ergebnis der Rechnung."""
+    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", f"einzelpreis: 1000.00\n    steuersatz: {satz}")
+    nummer = lege_an(gewerbe, "muster-gmbh", positionen)
+    with pytest.raises(r.ResolveFehler, match="nur 7"):
         r.resolve(config.laden(), nummer)
 
 

@@ -97,9 +97,11 @@ darf strenger sein als das Gesetz (abbrechen), aber nie anders entscheiden.
 | `kleinunternehmer` | Inland, Aussteller mit `kleinunternehmer: true` (§ 19 UStG) | 0 % | „Steuerfrei als Leistung eines Kleinunternehmers (§ 19 Abs. 1 UStG).“; keine Steuerzeile |
 
 - Abbruch statt Entscheidung, wenn Daten fehlen (`unternehmer`, USt-IdNrn. bei `reverse_charge`) oder
-  der Leistungsort bei einer Privatperson ein anderer EU-Staat wäre.
-- `rules.kern()` ist der Entscheidungskern als reine Funktion über abstrakte Merkmale (1728 Kombinationen,
-  Tests laufen über alle); `rules.entscheide()` übersetzt Daten hin und zurück. Später prüft ein
+  der Leistungsort bei einer Privatperson ein anderer EU-Staat wäre; ebenso, wenn der Aussteller laut
+  Stammdaten nicht in Deutschland sitzt (R4).
+- `rules.kern()` ist der Entscheidungskern als reine Funktion über abstrakte Merkmale (3456 Kombinationen,
+  Tests laufen über alle); `rules.entscheide()` übersetzt Daten hin und zurück. `steuersatz` je Position
+  nimmt nur `7` (§ 12 Abs. 2); `rules.satz_position()` entscheidet, wo das geht. Später prüft ein
   Lean-Modell (`lean/`) den Kern vollständig.
 - Manuelle Festlegung nur des Leistungsorts: `leistungsort:` mit `begruendung:`, sonst Validierungsfehler.
 - EU-Länderliste als Konstante in `rules.py`, mit Kommentar und Datum.

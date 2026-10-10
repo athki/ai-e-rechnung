@@ -137,7 +137,7 @@ positionen:                          # mindestens eine
     menge: 1
     einheit: pauschal                # pauschal | stunde | tag | stueck | kilometer — Pflicht
     einzelpreis: 0.00
-    steuersatz: 7                    # nur im Inland, wenn abweichend von 19
+    steuersatz: 7                    # nur 7 (ermäßigt, § 12 Abs. 2); leer = Satz der Rechnung
 
 belege:                              # optional
   - datei: flug.pdf
