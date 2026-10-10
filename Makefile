@@ -3,7 +3,7 @@ IMAGE := rechnung
 SCHATTEN_GEWERBE := $(CURDIR)/build/schatten-gewerbe
 DOCKER_RUN := docker run --rm -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE)
 
-.PHONY: test doctor hooks beispiel beispiel-neu lean beweise beweise-image schatten schatten-image
+.PHONY: test doctor hooks beispiel beispiel-neu lean abgleich beweise beweise-image schatten schatten-image
 
 test: hooks
 	uv run pytest -q
@@ -32,6 +32,12 @@ beispiel-neu:
 # lean/lean-toolchain). Schnell beim Arbeiten an den Beweisen.
 lean:
 	lean/pruefen.sh
+
+# Antworten des Lean-Modells für den Abgleich mit rules.py neu schreiben (lean/abgleich/kern.json,
+# eingecheckt). Nur bewusst aufrufen, wenn das Modell sich gewollt geändert hat; `make lean` und
+# `make beweise` prüfen die Datei, `make test` hält rules.py dagegen.
+abgleich:
+	cd lean && lake build && lake env lean --run Abgleich.lean > abgleich/kern.json
 
 schatten-image:
 	docker build -t $(IMAGE) .

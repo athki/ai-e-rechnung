@@ -873,12 +873,13 @@ welche Regeln angewandt wurden (`regeln`, R35).
 
 | Regel | Umgesetzt in | Geprüft durch |
 | --- | --- | --- |
-| R1 | `rules.kategorie()`, `EU_LAENDER` | `test_gb_ist_drittland` |
-| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, `test_aussteller_ausserhalb_deutschlands_bricht_ab`, und über **alle 3456 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_aussteller_im_ausland_bricht_immer_ab`, `test_kern_r19_genau_wenn_unternehmer_fehlt`, `test_kern_r18_nur_bei_privatpersonen`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
-| Einordnung (Teil 4) | `rules.EINORDNUNGEN`, `models.Einordnung` | `test_einordnungen_passen_zum_modell`, `test_einordnungen_stehen_in_rules_md` |
+| R1 | `rules.kategorie()`, `EU_LAENDER` | `test_gb_ist_drittland`, `test_laendercodes_bilden_gebiete`, `test_eu_liste`, `test_bekannte_fallen_sind_drittland`, `test_unbekannter_laendercode_wird_nicht_als_drittland_geraten` |
+| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | **Abgleich mit dem Lean-Modell über alle 3456 Eingaben**: `test_kern_antwortet_wie_lean`, `test_kern_eingaben_sind_genau_die_von_python`; außerdem `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, `test_aussteller_ausserhalb_deutschlands_bricht_ab`, und über **alle 3456 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_aussteller_im_ausland_bricht_immer_ab`, `test_kern_r19_genau_wenn_unternehmer_fehlt`, `test_kern_r18_nur_bei_privatpersonen`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
+| Einordnung (Teil 4) | `rules.EINORDNUNGEN`, `models.Einordnung` | `test_einordnungen_wie_lean` (Abgleich), `test_einordnungen_passen_zum_modell`, `test_einordnungen_stehen_in_rules_md` |
+| R31 (Fundstelle) | `rules.fundstelle()` | `test_kern_antwortet_wie_lean` (Abgleich) |
 | R16, R28, R31 (Wortlaut) | `rules.hinweis()` | `test_hinweis_*` |
 | R19, R24, R25, R37 (Pflichtfelder) | `models.Input`, `models.Leistung` | `tests/test_resolve.py` |
-| R10, R12, R14 (Satz je Position) | `rules.satz_position()`, `models.Position` | `test_satz_position`, `test_positions_steuersatz_*` |
+| R10, R12, R14 (Satz je Position) | `rules.satz_position()`, `models.Position` | `test_satz_position_antwortet_wie_lean` (Abgleich), `test_satz_position`, `test_positions_steuersatz_*` |
 | R32 | `resolve.rechne()` | `tests/test_resolve.py` |
 | R30 | `rules.frist_reverse_charge()`, Warnung in `resolve.rechne()` | `test_frist_reverse_charge`, `test_reverse_charge_fristwarnung` |
 | R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |
@@ -890,8 +891,15 @@ welche Regeln angewandt wurden (`regeln`, R35).
 Das sind Tests, keine Beweise. Bewiesen ist ein Lean-Modell der Entscheidung (`lean/`): Die Aussagen je
 Regel stehen in `lean/Rechnung/Aussagen.lean` mit denselben IDs, die Annahmen über Tatsachen in
 `lean/Rechnung/Bruecke.lean`, die Beweise in `lean/Rechnung/Beweise/`; alle Aussagen sind bewiesen
-(R2–R19, R28–R31, R37). Dass `kern()` dem Modell entspricht, prüft erst der Abgleich über alle Eingaben
-(Schritt 8.6, noch nicht gebaut). Nummern (R23) und Beträge (R32) sind getestet, nicht bewiesen.
+(R2–R19, R28–R31, R37). Dass `kern()` und `satz_position()` dem Modell entsprechen, prüft ein
+Abgleich über alle Eingaben (`tests/test_abgleich.py`): Lean zählt die Eingaben auf und beweist, dass
+keine fehlt (`lean/Rechnung/Abgleich.lean`), und schreibt die Antworten des Modells in
+`lean/abgleich/kern.json` – je Eingabe Ort, Quelle, Ergebnis, Satz, Regel-Trace samt Reihenfolge und
+Fundstelle oder Abbruch mit Regel und Grund, dazu Gruppe und Fundstelle je Einordnungswort. pytest
+hält `rules.py` dagegen. Das ist ein vollständiger Vergleich, kein Beweis: Die Antworten rechnet Lean
+mit `#eval` aus, dabei wird Leans Compiler vertraut; die Beweise selbst prüft nur der Kernel. Nicht
+abgeglichen, sondern getestet ist der länderabhängige Teil von `merkmale()` und `entscheide()`
+(Ländercode → Kategorie, Quelle → Land). Nummern (R23) und Beträge (R32) sind getestet, nicht bewiesen.
 
 **Bekannte Grenzen des Codes:**
 

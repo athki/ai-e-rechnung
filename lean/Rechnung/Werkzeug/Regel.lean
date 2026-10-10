@@ -1,7 +1,7 @@
 /-
 Die Regel-IDs aus RULES.md Teil 3 als Typ: Eine ID, die es nicht gibt, lässt sich nicht hinschreiben.
 R36 ist entfallen und fehlt deshalb. Dass jede ID hier in RULES.md steht, prüft ein Python-Test
-(`test_kern_nennt_nur_regeln_aus_rules_md`); Lean liest RULES.md nicht.
+(`test_kern_nennt_nur_regeln_aus_rules_md`, `test_lean_nennt_nur_regeln_aus_rules_md`); Lean liest RULES.md nicht.
 -/
 
 namespace Rechnung

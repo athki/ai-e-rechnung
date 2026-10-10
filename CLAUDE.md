@@ -101,8 +101,8 @@ darf strenger sein als das Gesetz (abbrechen), aber nie anders entscheiden.
   Stammdaten nicht in Deutschland sitzt (R4).
 - `rules.kern()` ist der Entscheidungskern als reine Funktion über abstrakte Merkmale (3456 Kombinationen,
   Tests laufen über alle); `rules.entscheide()` übersetzt Daten hin und zurück. `steuersatz` je Position
-  nimmt nur `7` (§ 12 Abs. 2); `rules.satz_position()` entscheidet, wo das geht. Später prüft ein
-  Lean-Modell (`lean/`) den Kern vollständig.
+  nimmt nur `7` (§ 12 Abs. 2); `rules.satz_position()` entscheidet, wo das geht. Beide gleicht
+  `tests/test_abgleich.py` über alle Eingaben mit dem bewiesenen Lean-Modell ab (`lean/abgleich/kern.json`).
 - Manuelle Festlegung nur des Leistungsorts: `leistungsort:` mit `begruendung:`, sonst Validierungsfehler.
 - EU-Länderliste als Konstante in `rules.py`, mit Kommentar und Datum.
 
@@ -174,8 +174,11 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
   gibt die Entscheidungstabelle aus (`Tabelle.lean`) und prüft (`Pruefung.lean`): jede Aussage hat ein
   Theorem genau dieses Typs (seit 8.5 Pflicht) und Beispiele, in denen ihre Voraussetzungen
   gelten (aus ihrem Typ abgeleitet, `Erfuellbarkeit.lean`; `Beispiele.lean` zeigt sie), jede Warnung ist ein Fehler (`sorry`), nur Leans
-  Standardaxiome (kein `native_decide`). `make lean` auf dem Host (braucht elan, `doctor` warnt nur),
-  `make beweise` im Container.
+  Standardaxiome (kein `native_decide`). Abgleich mit `rules.py`: `Rechnung/Abgleich.lean` zählt alle
+  Eingaben auf (Vollständigkeit bewiesen), `Abgleich.lean` schreibt die Antworten per `#eval` nach
+  `abgleich/kern.json` (eingecheckt, nur `make abgleich` schreibt sie), `pruefen.sh` vergleicht die
+  Datei mit dem Modell, pytest `rules.py` mit der Datei; `make test` braucht kein Lean.
+  `make lean` auf dem Host (braucht elan, `doctor` warnt nur), `make beweise` im Container.
 
 ## Schattencontainer – Muss
 

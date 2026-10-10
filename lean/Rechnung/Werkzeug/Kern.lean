@@ -1,6 +1,6 @@
 /-
 Spiegel von `rules.kern()`: dieselben Merkmale, dieselbe Fallunterscheidung, derselbe Regel-Trace in
-derselben Reihenfolge. Schritt 8.6 vergleicht beide über alle 3456 Eingaben.
+derselben Reihenfolge. `tests/test_abgleich.py` vergleicht beide über alle 3456 Eingaben (Rechnung/Abgleich.lean).
 
 Eine Abweichung in der Form, nicht im Inhalt: Python führt Gruppe und Ort der Tätigkeit als zwei
 Felder (`gruppe`, `taetigkeit_ort`), und `models.Leistung` erzwingt, dass der Ort genau bei

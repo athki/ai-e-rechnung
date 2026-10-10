@@ -114,8 +114,8 @@ docker run --rm -v "<gewerbe>":/gewerbe rechnung doctor  # gegen den eigenen Gew
 ```
 
 Ein zweiter Container prüft die Beweise unter [`lean/`](lean/README.md): das Rechnungs-Image plus Lean,
-ohne Mount. Jeder Lauf baut die Beweise neu und scheitert an einem offenen Beweis. Noch ist dort
-nur das Gerüst; das Modell der Steuerregeln folgt.
+ohne Mount. Jeder Lauf baut die Beweise neu, scheitert an einem offenen Beweis und prüft, dass die
+Antworten des Modells, gegen die `make test` den Python-Code abgleicht, zum Modell passen.
 
 ```sh
 docker build -t rechnung . && docker build -f Dockerfile.beweise -t rechnung-beweise .

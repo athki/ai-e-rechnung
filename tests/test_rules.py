@@ -166,6 +166,33 @@ def test_gb_ist_drittland():
     assert rules.kategorie("DE") == rules.INLAND
 
 
+# Prüfliste der EU-Mitgliedstaaten, Stand 2026-10-10, unabhängig von rules.EU_LAENDER abgetippt.
+# Ändert sich die EU, beide nachziehen. Griechenland: ISO-Code GR (EL ist nur das USt-IdNr.-Präfix).
+EU_2026 = set("AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK".split())
+
+
+def test_laendercodes_bilden_gebiete():
+    """R1: Die Lean-Aussagen gelten für jede Länderzuordnung mit genau einer Kategorie je Land und
+    genau einem Inland (`Gebiete`, inland_eindeutig). rules.py ist eine solche Zuordnung."""
+    kategorien = {land: rules.kategorie(land) for land in rules.LAENDER}
+    assert set(kategorien.values()) <= set(KATEGORIEN)
+    assert [land for land, k in kategorien.items() if k == rules.INLAND] == ["DE"]
+
+
+def test_eu_liste():
+    """R1: genau die 27 Mitgliedstaaten; nur sie sind EU (außer DE, dem Inland)."""
+    assert rules.EU_LAENDER == EU_2026 and len(EU_2026) == 27
+    assert "EL" not in rules.EU_LAENDER
+    for land in rules.LAENDER:
+        assert (rules.kategorie(land) == rules.EU) == (land in EU_2026 - {"DE"}), land
+
+
+@pytest.mark.parametrize("land", ["GB", "CH", "NO", "IS", "LI", "TR"])
+def test_bekannte_fallen_sind_drittland(land):
+    """Vereinigtes Königreich seit 2021; EWR und EFTA sind nicht Gemeinschaftsgebiet."""
+    assert rules.kategorie(land) == rules.DRITTLAND
+
+
 @pytest.mark.parametrize(
     "leistung_bis, frist",
     [(date(2026, 6, 10), date(2026, 7, 15)), (date(2026, 12, 31), date(2027, 1, 15))],
@@ -320,7 +347,9 @@ def test_fremdwaehrung_mit_ust_bricht_ab():
 # ---------------------------------------------------------------- Entscheidungskern, vollständig
 #
 # Die Menge aller Merkmale ist endlich. Diese Tests laufen über jede Kombination und prüfen
-# Eigenschaften, die RULES.md verspricht – ein Vorgriff auf die Lean-Beweise (Schritt 8.5/8.6).
+# Eigenschaften, die RULES.md verspricht. Die Garantie kommt aus dem Abgleich mit dem bewiesenen
+# Lean-Modell (tests/test_abgleich.py); diese Tests sind eine zweite, von Lean unabhängige Sicht und
+# sagen bei einer Änderung an rules.py, welche Regel verletzt ist. `ALLE` nutzt auch der Abgleich.
 
 import itertools
 import re

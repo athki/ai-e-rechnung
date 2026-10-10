@@ -3,10 +3,10 @@
 This folder holds a Lean 4 model of the tax rules in [`RULES.md`](../RULES.md) and machine-checked
 proofs about it. It is not part of the invoice tool: writing invoices never needs Lean.
 
-**Status (step 8.5): all 27 statements are proved, each by a theorem of the same name, and each has an
-example showing that its hypotheses can hold.** The comparison of the Lean model with the Python code
-(step 8.6) is not built yet: until then, that `rules.kern()` behaves like the model is claimed, not
-checked.
+**Status (step 8.6): all 27 statements are proved, each by a theorem of the same name, and each has an
+example showing that its hypotheses can hold. `rules.kern()` and `rules.satz_position()` give the same
+answer as the model on every possible input.** That last part is an exhaustive comparison, not a proof;
+see [Comparison with the Python code](#comparison-with-the-python-code).
 
 ## The chain, and which link this folder covers
 
@@ -18,8 +18,8 @@ law (UStG)
               └─ rules.py  rules.kern() in Python, the running code      exhaustive comparison, all 3456 inputs
 ```
 
-The tool keeps running Python. Lean proves properties of a model of `rules.kern()`; a test (step 8.6)
-will compare that model with the Python code on every possible input (the inputs are finite: country category,
+The tool keeps running Python. Lean proves properties of a model of `rules.kern()`; a test compares
+that model with the Python code on every possible input (the inputs are finite: country category,
 business customer yes/no/unknown, VAT IDs, kind of service, place of activity, small business, issuer in Germany, override).
 
 What will stay unproved, and is said so: that the rules match the law (no tax advisor has reviewed
@@ -40,8 +40,8 @@ The model has two levels, written in the words of their source, and one place wh
   countries, any assignment to Germany / other EU / non-EU, with exactly one Germany. Every statement
   holds for every such assignment; whether the EU list in `rules.py` is right is tested, not proved.
 - **Tool** (`Rechnung/Werkzeug/`): an exact mirror of `rules.kern()`, `rules.satz_position()` and
-  `rules.merkmale()` – same features, same cases, same rule trace in the same order. Step 8.6 compares
-  the mirror with the Python code on all 3456 inputs.
+  `rules.merkmale()` – same features, same cases, same rule trace in the same order. The comparison
+  below checks the mirror against the Python code on all 3456 inputs.
 - **Bridge** (`Bruecke.lean`): `Passt d s` says that the invoice data `d` describe the facts `s`. Each of
   its fields is one assumption from RULES.md, named with its rule ID (the customer's country is where it
   does business, `unternehmer: true` means it buys for its business, the classification of the service
@@ -77,13 +77,36 @@ order they build on each other:
 The proofs are case analyses over the questions the core itself asks, closed by `simp`; `decide` only
 settles small concrete facts (is a rule in a given list), never a whole statement.
 
+## Comparison with the Python code
+
+[`Rechnung/Abgleich.lean`](Rechnung/Abgleich.lean) lists every input of `kern` (3456), every rate
+`satz_position` can receive from `kern` (19 or 0, times small business and reduced rate: 8) and every
+classification word (17), and proves that nothing is missing (`alle_vollstaendig`,
+`einordnungen_vollstaendig`, `satz_aus_kern`). [`Abgleich.lean`](Abgleich.lean) evaluates the model
+on each of them and writes the answers to [`abgleich/kern.json`](abgleich/kern.json), one line per
+input: place, its source, result, rate, the rule trace in order and the cited provision, or the refusal
+with rule and reason; for each classification word its group and provision. Field names are those of
+`rules.py`.
+
+The file is checked in. `make abgleich` rewrites it; nothing else does. `pruefen.sh` regenerates it on
+every run and fails if it differs from the checked-in file, so it always matches the proved model.
+`tests/test_abgleich.py` (part of `make test`, no Lean needed) checks that Python enumerates exactly
+the same inputs and that `rules.py` gives exactly the same answer on each.
+
+What is trusted: the answers are computed with `#eval`, that is by Lean's compiler, not checked by the
+kernel. The proofs themselves rest on the kernel and Lean's standard axioms only; the compiler is
+trusted for the comparison data alone. Not compared, because it depends on actual countries rather
+than categories: the country-code-to-category table in `rules.py` and which country a place source
+stands for. Both are tested in Python.
+
 ## Build and check
 
 Two commands, both run `pruefen.sh`: `lake build`, then [`Tabelle.lean`](Tabelle.lean), which prints
 the decision table of RULES.md part 4 as computed by the Lean `kern`, then
 [`Beispiele.lean`](Beispiele.lean), which prints the examples each statement requires (see below), then
 [`Pruefung.lean`](Pruefung.lean), which reports for every statement whether a theorem proves exactly it
-and whether its examples exist, and checks the axioms every theorem in namespace `Rechnung` rests on.
+and whether its examples exist, and checks the axioms every theorem in namespace `Rechnung` rests on,
+and finally compares `abgleich/kern.json` with the model.
 
 ```sh
 make lean      # on the host; needs elan (https://github.com/leanprover/elan)
@@ -102,6 +125,8 @@ The check fails if
   of the statement ([`Rechnung/Erfuellbarkeit.lean`](Rechnung/Erfuellbarkeit.lean)), not typed by hand;
   the examples live in [`Rechnung/Beweise/Erfuellbar.lean`](Rechnung/Beweise/Erfuellbar.lean), in a
   small world of three countries (Germany, France, the US),
+- `abgleich/kern.json` does not match the model (run `make abgleich` if the change is intended, then
+  `make test`),
 - a theorem rests on anything but Lean's standard axioms (`propext`, `Classical.choice`, `Quot.sound`);
   this rules out `native_decide`, which trusts the compiler instead of the kernel.
 
@@ -142,3 +167,4 @@ proved by `theorem R14_kleinunternehmer_nie_steuer`.
 | `Aussage`, `annahme_…` | statement, assumption |
 | `erfuellbar`, `Beispiel`, `welt` | satisfiable, example, (example) world |
 | `Tabelle`, `Pruefung` | table, check |
+| `Abgleich`, `alle`, `vollstaendig` | comparison, all, complete |
