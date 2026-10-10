@@ -551,14 +551,15 @@ vollständige Tabelle steht in Teil 4.
 
 - **Quelle:** Grundsatz.
 - **Regel:** Das Werkzeug entscheidet nur, wenn alle Merkmale bekannt sind, die nach R3–R8 den
-  Leistungsort bestimmen. Fehlt eines, bricht es ab und nennt das Feld. Bei einem EU-Unternehmer ohne
-  USt-IdNr. bricht es ebenfalls ab (R29).
-- **Annahmen:** Ein Kunde in der EU mit USt-IdNr. gilt als Unternehmer, auch wenn `unternehmer` nicht
-  gesetzt ist (R3). Ein Kunde im Inland braucht `unternehmer` nur bei einer Tätigkeitsleistung (R5),
-  sonst führt jede Antwort zum Inland.
-- **Werkzeug:** `leistung` (`taetigkeit`, `einordnung`, bei Tätigkeitsleistungen `ort`) ist in jeder
-  Rechnung Pflicht – strenger als nötig, weil die Einordnung bei Unternehmern das Ergebnis nicht
-  ändert, aber im Ergebnis festgehalten werden soll. `kunde.unternehmer` nach der Annahme oben.
+  Leistungsort bestimmen. Fehlt eines, bricht es ab und nennt das Feld. Ob der Kunde Unternehmer ist,
+  steht in jeder Kundendatei – auch dort, wo die Antwort den Leistungsort nicht ändert. Bei einem
+  EU-Unternehmer ohne USt-IdNr. bricht es ebenfalls ab (R29).
+- **Annahmen:** keine. Strenger als § 3a, mit Absicht: Als was der Kunde behandelt wurde, gehört zur
+  Dokumentation jeder Rechnung (Nachweis, R3; künftig auch, ob an einen inländischen Unternehmer eine
+  E-Rechnung geht), und das Werkzeug rät es nicht – auch nicht aus einer USt-IdNr.
+- **Werkzeug:** `kunde.unternehmer` ist für jede Rechnung Pflicht. `leistung` (`taetigkeit`,
+  `einordnung`, bei Tätigkeitsleistungen `ort`) ebenso – strenger als nötig, weil die Einordnung bei
+  Unternehmern das Ergebnis nicht ändert, aber im Ergebnis festgehalten werden soll.
 - **Status:** Annahme – ungeprüft.
 
 ### Pflichtangaben (§ 14 Abs. 4 UStG)
@@ -872,7 +873,7 @@ welche Regeln angewandt wurden (`regeln`, R35).
 | Regel | Umgesetzt in | Geprüft durch |
 | --- | --- | --- |
 | R1 | `rules.kategorie()`, `EU_LAENDER` | `test_gb_ist_drittland` |
-| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, `test_aussteller_ausserhalb_deutschlands_bricht_ab`, und über **alle 3456 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_aussteller_im_ausland_bricht_immer_ab`, `test_kern_r18_nur_bei_privatpersonen`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
+| R2–R12, R13–R19, R29, R31, R37 (Entscheidung) | `rules.kern()` | `test_entscheidungstabelle` (Zeilen aus Teil 4), `test_abbruch_statt_falscher_entscheidung`, `test_kleinunternehmer`, `test_aussteller_ausserhalb_deutschlands_bricht_ab`, und über **alle 3456 Merkmalskombinationen**: `test_kern_ist_total`, `test_kern_aussteller_im_ausland_bricht_immer_ab`, `test_kern_r19_genau_wenn_unternehmer_fehlt`, `test_kern_r18_nur_bei_privatpersonen`, `test_kern_satz_und_ergebnis_passen_zum_leistungsort`, `test_kern_unternehmer_immer_sitz_des_kunden`, `test_kern_kleinunternehmer_weist_nie_steuer_aus`, `test_kern_nennt_nur_regeln_aus_rules_md` |
 | Einordnung (Teil 4) | `rules.EINORDNUNGEN`, `models.Einordnung` | `test_einordnungen_passen_zum_modell`, `test_einordnungen_stehen_in_rules_md` |
 | R16, R28, R31 (Wortlaut) | `rules.hinweis()` | `test_hinweis_*` |
 | R19, R24, R25, R37 (Pflichtfelder) | `models.Input`, `models.Leistung` | `tests/test_resolve.py` |

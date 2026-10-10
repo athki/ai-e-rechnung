@@ -171,21 +171,16 @@ def kern(m: Merkmale) -> KernErgebnis | Abbruch:
     if not m.aussteller_inland:
         return Abbruch("R4", "aussteller_ausland")
 
-    # R3-Annahme: Ein EU-Kunde mit USt-IdNr. gilt als Unternehmer, wenn nichts anderes angegeben ist.
+    # R19: Ob der Kunde Unternehmer ist, steht in jeder Kundendatei; das Werkzeug rät es nicht.
+    if m.unternehmer is None:
+        return Abbruch("R19", "unternehmer_fehlt")
     unternehmer = m.unternehmer
-    if unternehmer is None and m.kunde == EU and m.kunde_ustid:
-        unternehmer = True
 
     # Leistungsort (R3–R8, R37)
     if m.festgelegt is not None:
         quelle, ort, ort_regeln = ORT_FESTGELEGT, m.festgelegt, ("R37",)
     elif unternehmer:
         quelle, ort, ort_regeln = ORT_KUNDE, m.kunde, ("R3",)
-    elif unternehmer is None:
-        # Im Inland führt jede Antwort zum Inland – außer eine Tätigkeit wird woanders erbracht (R19).
-        if m.kunde != INLAND or m.gruppe == TAETIGKEIT:
-            return Abbruch("R19", "unternehmer_fehlt")
-        quelle, ort, ort_regeln = ORT_AUSSTELLER, INLAND, ("R3", "R4")
     elif m.gruppe == TAETIGKEIT:
         if m.taetigkeit_ort == "online":
             quelle, ort, ort_regeln = ORT_KUNDE, m.kunde, ("R6",)
@@ -203,9 +198,6 @@ def kern(m: Merkmale) -> KernErgebnis | Abbruch:
         ergebnis: Ergebnis = "kleinunternehmer" if ku else "inland"
         regeln += ["R13", "R16"] if ku else ["R10"]
     elif ort == EU:
-        if unternehmer is None:
-            # Nur bei festgelegtem Ort möglich: Unternehmer → Reverse Charge, Privatperson → R18.
-            return Abbruch("R19", "unternehmer_fehlt")
         if not unternehmer:
             return Abbruch("R18", "eu_privat")
         ergebnis = "reverse_charge"
@@ -265,7 +257,7 @@ class Entscheidung:
     ort: Ort
     ergebnis: Ergebnis
     satz: Decimal
-    unternehmer: bool | None
+    unternehmer: bool
     regeln: tuple[str, ...]
 
 
@@ -305,12 +297,12 @@ def entscheide(
     assert land is not None
     ort_regeln = tuple(r for r in k.regeln if r in FUNDSTELLE or r == "R37")
     fundstelle = None if k.ort_quelle == ORT_FESTGELEGT else FUNDSTELLE[ort_regeln[-1]]
-    unternehmer = m.unternehmer if m.unternehmer is not None else (True if m.kunde == EU and m.kunde_ustid else None)
+    assert m.unternehmer is not None   # sonst hätte kern() abgebrochen (R19)
     return Entscheidung(
         ort=Ort(land, ort_regeln, fundstelle),
         ergebnis=k.ergebnis,
         satz=Decimal(k.satz),
-        unternehmer=unternehmer,
+        unternehmer=m.unternehmer,
         regeln=k.regeln,
     )
 
@@ -324,8 +316,9 @@ def _meldung(a: Abbruch, kunde: Kunde, ort: str | None) -> str:
         )
     if a.grund == "unternehmer_fehlt":
         zeilen = [
-            f"Kunde {kuerzel}, Land {kunde.land}: `unternehmer` ist nicht gesetzt. Davon hängt der "
-            f"Leistungsort ab (§ 3a Abs. 1 und 2 UStG). In stammdaten/kunden/{kuerzel}.yaml eintragen:",
+            f"Kunde {kuerzel}, Land {kunde.land}: `unternehmer` ist nicht gesetzt. Die Angabe ist für "
+            f"jeden Kunden Pflicht (RULES.md R19): Davon hängen der Leistungsort (§ 3a Abs. 1 und 2 UStG) "
+            f"und die Dokumentation der Rechnung ab. In stammdaten/kunden/{kuerzel}.yaml eintragen:",
             "  unternehmer: true     # bezieht die Leistung für sein Unternehmen",
             "  unternehmer: false    # Privatperson",
         ]

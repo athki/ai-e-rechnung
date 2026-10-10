@@ -60,7 +60,7 @@ def leistung(einordnung: str = "sonstige", ort: str | None = None) -> Leistung:
         # Unternehmer: immer Sitz des Kunden (R3), gleich welche Einordnung
         ("DE", "DE1", True, "beratung", None, "DE", "inland", "R3"),
         ("FR", "FR1", True, "unterrichtend", "DE", "FR", "reverse_charge", "R3"),
-        ("AT", "ATU1", None, "sonstige", None, "AT", "reverse_charge", "R3"),   # USt-IdNr. genügt
+        ("AT", "ATU1", True, "sonstige", None, "AT", "reverse_charge", "R3"),
         ("GB", None, True, "sonstige", None, "GB", "nicht_steuerbar", "R3"),
         ("US", None, True, "beratung", None, "US", "nicht_steuerbar", "R3"),
         # Privatperson, Grundregel (R4)
@@ -78,8 +78,6 @@ def leistung(einordnung: str = "sonstige", ort: str | None = None) -> Leistung:
         ("CH", None, False, "kuenstlerisch", "DE", "DE", "inland", "R5"),
         ("CH", None, False, "unterrichtend", "online", "CH", "nicht_steuerbar", "R6"),
         ("DE", None, False, "unterhaltend", "online", "DE", "inland", "R6"),
-        # Inland ohne Angabe zum Unternehmer: jede Antwort führt zum Inland
-        ("DE", None, None, "beratung", None, "DE", "inland", "R4"),
     ],
 )
 def test_entscheidungstabelle(land, ustid, unternehmer, einordnung, ort, erwartet_ort, ergebnis, regel):
@@ -93,6 +91,8 @@ def test_entscheidungstabelle(land, ustid, unternehmer, einordnung, ort, erwarte
     "land, ustid, unternehmer, einordnung, ort, meldung",
     [
         ("CH", None, None, "sonstige", None, "unternehmer"),           # R19
+        ("DE", None, None, "beratung", None, "unternehmer"),           # R19 auch im Inland
+        ("AT", "ATU1", None, "sonstige", None, "unternehmer"),         # USt-IdNr. ersetzt die Angabe nicht
         ("FR", None, None, "sonstige", None, "ustid"),                 # R19, Hinweis auf USt-IdNr.
         ("DE", None, None, "unterrichtend", "CH", "unternehmer"),      # Tätigkeit braucht den Status
         ("FR", None, True, "sonstige", None, "ustid"),                 # R29: EU-Unternehmer ohne USt-IdNr.
@@ -346,6 +346,14 @@ def test_kern_aussteller_im_ausland_bricht_immer_ab():
     for m in ALLE:
         k = rules.kern(m)
         assert (isinstance(k, rules.Abbruch) and k.regel == "R4") == (not m.aussteller_inland), m
+
+
+def test_kern_r19_genau_wenn_unternehmer_fehlt():
+    """R19: `unternehmer` ist Pflicht; das Werkzeug rät den Status nie."""
+    for m in ALLE:
+        if m.aussteller_inland:
+            k = rules.kern(m)
+            assert (isinstance(k, rules.Abbruch) and k.regel == "R19") == (m.unternehmer is None), m
 
 
 def test_kern_r18_nur_bei_privatpersonen():

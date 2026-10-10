@@ -59,7 +59,7 @@ genau hinsehen:
 | Feld | Wirkung |
 | --- | --- |
 | `land` | ISO-Code, z. B. `DE`, `FR`, `GB`, `US`. Bestimmt Inland, EU oder Drittland |
-| `unternehmer` | `true`/`false`. Bei Unternehmern ist der Leistungsort ihr Sitz; bei Privatpersonen hängt er von der Einordnung ab. Fehlt die Angabe, bricht `resolve` ab (außer im Inland) |
+| `unternehmer` | `true`/`false`. Bei Unternehmern ist der Leistungsort ihr Sitz; bei Privatpersonen hängt er von der Einordnung ab. Pflicht für jeden Kunden; fehlt sie, bricht `resolve` ab |
 | `ustid` | USt-IdNr. Bei EU-Unternehmern Pflicht (Reverse Charge, § 14a Abs. 1 UStG); ein EU-Kunde mit `ustid` gilt als Unternehmer |
 
 Vollständige Kundendatei:
