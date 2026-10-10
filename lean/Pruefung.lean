@@ -3,13 +3,12 @@ Prüfung nach `lake build` (siehe `pruefen.sh`). Drei Teile:
 
 1. **Aussage ↔ Theorem.** Jede `Rechnung.Aussage.X : Prop` (Aussagen.lean) braucht ein Theorem, dessen
    Typ genau `Rechnung.Aussage.X` ist – nicht eine ähnliche, schwächere Fassung. Lean selbst prüft nur,
-   dass vorhandene Theoreme stimmen, nicht, dass jede Aussage eines hat. In Schritt 8.4 sind die
-   Aussagen formuliert und noch offen; das ist erlaubt (`offenErlaubt`). Ab 8.5 ist jede offene Aussage
-   ein Fehler.
+   dass vorhandene Theoreme stimmen, nicht, dass jede Aussage eines hat. Seit Schritt 8.5 ist jede
+   offene Aussage ein Fehler (`offenErlaubt`; in 8.4 waren die Aussagen nur formuliert).
 2. **Erfüllbarkeit.** Jede Aussage mit Voraussetzungen braucht Beispiele, in denen sie zugleich gelten,
    sonst könnte sie leer bewiesen sein. Was gefordert ist, leitet `Rechnung.Erfuellbarkeit.forderung`
    aus dem Typ der Aussage ab (Erfuellbarkeit.lean); verlangt ist ein Theorem genau dieses Typs. Das
-   gilt ohne Ausnahme, auch solange Aussagen offen sein dürfen. `Beispiele.lean` gibt die Forderungen
+   gilt ohne Ausnahme, auch wenn Aussagen offen sein dürfen. `Beispiele.lean` gibt die Forderungen
    zum Lesen aus.
 3. **Axiome.** `lake build` allein beweist nicht genug: Ein Theorem kann sich auf `sorryAx` stützen
    (offener Beweis) oder über `native_decide` dem Compiler statt dem Kernel vertrauen. Jedes Theorem im
@@ -22,8 +21,8 @@ open Rechnung.Erfuellbarkeit
 
 open Lean Elab Command
 
-/-- Schritt 8.4: Aussagen ohne Theorem sind erlaubt. Ab 8.5 auf `false`. -/
-def offenErlaubt : Bool := true
+/-- Aussagen ohne Theorem erlaubt? In Schritt 8.4 ja, seit 8.5 nicht mehr. -/
+def offenErlaubt : Bool := false
 
 /-- Die Standardaxiome von Lean; alles andere lässt die Prüfung scheitern. -/
 def erlaubteAxiome : List Name := [``propext, ``Classical.choice, ``Quot.sound]

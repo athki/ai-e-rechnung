@@ -1,11 +1,12 @@
 # Lean: proofs for the tax rules
 
-This folder holds a Lean 4 model of the tax rules in [`RULES.md`](../RULES.md) and, from step 8.5 on,
-machine-checked proofs about it. It is not part of the invoice tool: writing invoices never needs Lean.
+This folder holds a Lean 4 model of the tax rules in [`RULES.md`](../RULES.md) and machine-checked
+proofs about it. It is not part of the invoice tool: writing invoices never needs Lean.
 
-**Status (step 8.4): the model and the statements are written; nothing is proved yet.** Each statement is
-a `def Aussage.… : Prop` – Lean checks that it is well-formed, not that it is true. The proofs come in
-step 8.5 as theorems of the same name; until then the check lists every statement as open.
+**Status (step 8.5): all 27 statements are proved, each by a theorem of the same name, and each has an
+example showing that its hypotheses can hold.** The comparison of the Lean model with the Python code
+(step 8.6) is not built yet: until then, that `rules.kern()` behaves like the model is claimed, not
+checked.
 
 ## The chain, and which link this folder covers
 
@@ -17,14 +18,15 @@ law (UStG)
               └─ rules.py  rules.kern() in Python, the running code      exhaustive comparison, all 3456 inputs
 ```
 
-The tool keeps running Python. Lean proves properties of a model of `rules.kern()`; a test then compares
-that model with the Python code on every possible input (the inputs are finite: country category,
+The tool keeps running Python. Lean proves properties of a model of `rules.kern()`; a test (step 8.6)
+will compare that model with the Python code on every possible input (the inputs are finite: country category,
 business customer yes/no/unknown, VAT IDs, kind of service, place of activity, small business, issuer in Germany, override).
 
 What will stay unproved, and is said so: that the rules match the law (no tax advisor has reviewed
 RULES.md yet; every rule is a reasoned but unreviewed assumption), that the facts entered are true (whether a
-customer is a business, how a service is classified), the mapping from country code to category, and
-the PDF output (checked by `rechnung pruefen`, not proved).
+customer is a business, how a service is classified), the mapping from country code to category,
+invoice numbers and amounts (net, VAT, total; tested, not modelled in Lean), and the PDF output (checked
+by `rechnung pruefen`, not proved).
 
 ## Two levels and a bridge
 
@@ -57,6 +59,24 @@ replaces the place (`R37_…`).
 Outside the model, because it cannot be expressed in it (RULES.md part 1): special territories,
 exceptions in § 3a Abs. 3 Nr. 1, 2, 3a, 5 and Abs. 8, financial services, supplies of goods.
 
+## Proofs
+
+The proofs live in [`Rechnung/Beweise/`](Rechnung/Beweise), one file per group of statements, in the
+order they build on each other:
+
+| File | Statements | How |
+| --- | --- | --- |
+| `Gesetz.lean` | R2, R3–R8 at most one provision | law level only |
+| `Kern.lean` | R12, R14–R17, R28, R30, refusals only for stated reasons | what a result or a refusal of `kern` looks like (`kern_ok`, `kern_fehler`), then case analysis by place and small business |
+| `Hilfssaetze.lean` | – | the bridge: without an override the tool names the place of the law, with the category the core used, and its place rule belongs to the provision that applies (`ohne_festlegung`); with an override, the fixed place (`mit_festlegung`) |
+| `Abbruch.lean` | R4, R18, R19, R29 | each refusal happens exactly for its reason |
+| `Leistungsort.lean` | R3–R8, R31 | which place and provision the law gives under each statement's hypotheses |
+| `Folgen.lean` | R10, R11, R13, R37, `Ergebnis_fasst_Folgen_zusammen`, `Werkzeug_nie_anders` | `folgen_stimmen`: for the place the tool names, every consequence matches the law |
+| `Erfuellbar.lean` | examples for all statements | a world of three countries |
+
+The proofs are case analyses over the questions the core itself asks, closed by `simp`; `decide` only
+settles small concrete facts (is a rule in a given list), never a whole statement.
+
 ## Build and check
 
 Two commands, both run `pruefen.sh`: `lake build`, then [`Tabelle.lean`](Tabelle.lean), which prints
@@ -73,8 +93,8 @@ make beweise   # in Docker, nothing to install: the invoice image plus Lean, pro
 The check fails if
 
 - a proof is left open (`sorry`): every warning is an error (`lakefile.toml`),
-- a statement has no theorem whose type is exactly that statement – allowed in step 8.4, an error from
-  8.5 on (`offenErlaubt` in `Pruefung.lean`),
+- a statement has no theorem whose type is exactly that statement (`offenErlaubt` in `Pruefung.lean`,
+  `false` since step 8.5),
 - a statement with hypotheses has no examples: "if V then F" is also proved when V can never hold, and
   then it says nothing. So every statement needs a proved example in which all its hypotheses hold at
   once, and for an "if and only if" one example where the left side holds and one where it does not

@@ -172,7 +172,7 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
   `merkmale()`); `Bruecke.lean` (`Passt`) ist die vollständige Liste der Annahmen. Je Regel eine
   `Aussage.R…` in `Aussagen.lean`, bewiesen durch ein Theorem gleichen Namens. `lean/pruefen.sh` baut,
   gibt die Entscheidungstabelle aus (`Tabelle.lean`) und prüft (`Pruefung.lean`): jede Aussage hat ein
-  Theorem genau dieses Typs (in 8.4 noch offen erlaubt) und Beispiele, in denen ihre Voraussetzungen
+  Theorem genau dieses Typs (seit 8.5 Pflicht) und Beispiele, in denen ihre Voraussetzungen
   gelten (aus ihrem Typ abgeleitet, `Erfuellbarkeit.lean`; `Beispiele.lean` zeigt sie), jede Warnung ist ein Fehler (`sorry`), nur Leans
   Standardaxiome (kein `native_decide`). `make lean` auf dem Host (braucht elan, `doctor` warnt nur),
   `make beweise` im Container.

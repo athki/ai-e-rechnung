@@ -886,10 +886,11 @@ welche Regeln angewandt wurden (`regeln`, R35).
 | R38 | `render.baue_pdf(…, pro_forma=True)`, Belegart `proforma` in `invoice.sty`, `festschreiben.pro_forma_festhalten()`, `pruefen.befunde(…, pro_forma)` | `test_pro_forma_ist_gekennzeichnet_und_rechnung_nicht`, `test_pro_forma_revisionen_werden_eingefroren` |
 | IDs im Code | – | `test_jede_regel_id_im_code_steht_in_rules_md` |
 
-Das sind Tests, keine Beweise. Die Beweise kommen mit dem Lean-Modell (`lean/`): Die Aussagen je Regel
-stehen in `lean/Rechnung/Aussagen.lean` mit denselben IDs, die Annahmen über Tatsachen in
-`lean/Rechnung/Bruecke.lean`; bewiesen werden sie in Schritt 8.5, der Abgleich des Modells mit `kern()`
-über alle Eingaben folgt in 8.6.
+Das sind Tests, keine Beweise. Bewiesen ist ein Lean-Modell der Entscheidung (`lean/`): Die Aussagen je
+Regel stehen in `lean/Rechnung/Aussagen.lean` mit denselben IDs, die Annahmen über Tatsachen in
+`lean/Rechnung/Bruecke.lean`, die Beweise in `lean/Rechnung/Beweise/`; alle Aussagen sind bewiesen
+(R2–R19, R28–R31, R37). Dass `kern()` dem Modell entspricht, prüft erst der Abgleich über alle Eingaben
+(Schritt 8.6, noch nicht gebaut). Nummern (R23) und Beträge (R32) sind getestet, nicht bewiesen.
 
 **Bekannte Grenzen des Codes:**
 

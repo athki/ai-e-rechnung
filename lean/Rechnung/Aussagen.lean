@@ -2,9 +2,9 @@
 Die Aussagen: je Regel aus RULES.md (R2–R19, R28–R31, R37) mindestens eine, mit derselben ID, dazu die
 Aussagen über das Ganze (eindeutig, nie anders, Abbruch nur aus genannten Gründen).
 
-In Schritt 8.4 sind das nur formulierte Sätze (`def … : Prop`): Lean prüft, dass sie wohlgeformt sind,
-nicht, dass sie stimmen. Bewiesen werden sie in 8.5 als Theoreme gleichen Namens im Namespace
-`Rechnung` (`theorem R3_… : Aussage.R3_…`). `Pruefung.lean` meldet je Aussage, ob es dieses Theorem gibt.
+Hier stehen nur die Sätze (`def … : Prop`); bewiesen werden sie in `Beweise/` als Theoreme gleichen
+Namens im Namespace `Rechnung` (`theorem R3_… : Aussage.R3_…`). `Pruefung.lean` verlangt je Aussage
+dieses Theorem und Beispiele, in denen ihre Voraussetzungen gelten.
 
 Ohne eigene Aussage, weil der Typ sie schon trägt: R1 (jedes Land hat genau eine Kategorie,
 Gebiete.lean) und R9 (eine Einordnung je Rechnung: `Daten` hat genau ein Feld `einordnung`).
