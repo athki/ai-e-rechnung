@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from rechnung import (
+    begruendung as begruendung_mod,
     config,
     doctor as doctor_mod,
     festschreiben as festschreiben_mod,
@@ -253,6 +254,28 @@ def pruefen(
         raise typer.Exit(1)
     typer.secho(f"grün: {len(liste)} Pflichtangaben nachgewiesen in {ordner.name}",
                 fg=typer.colors.GREEN, bold=True)
+
+
+@app.command()
+def begruendung(
+    nummer: Annotated[str, typer.Argument(
+        help="Rechnungsnummer oder Pfad eines Rechnungsordners, auch einer Pro-forma-Revision (pro-forma/<n>)")],
+) -> None:
+    """Begründung der Steuerentscheidung für Prüfer, als Markdown: Fakten, Regeln der Spur mit Status und
+    Nachweis, was bewiesen, getestet und angenommen ist.
+
+    Entscheidet nichts; liest rechnung.resolved.json und RULES.md. Rot (Exit 1), wenn die Spur in der
+    Datei nicht zu dem passt, was das Werkzeug heute auf denselben Fakten entscheidet.
+    """
+    cfg = _config()
+    try:
+        ordner = _ordner_oder_nummer(cfg, nummer)
+        text, spur_passt = begruendung_mod.begruende(ordner)
+    except (resolve_mod.ResolveFehler, begruendung_mod.BegruendungFehler, config.ConfigFehler, OSError) as e:
+        raise _abbruch(e) from e
+    typer.echo(text, nl=False)
+    if not spur_passt:
+        raise typer.Exit(1)
 
 
 @app.command()

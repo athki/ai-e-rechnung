@@ -460,7 +460,7 @@ def test_kern_nennt_nur_regeln_aus_rules_md():
 def test_jede_regel_id_im_code_steht_in_rules_md():
     """Der Code verweist nur auf Regeln, die es in RULES.md gibt und die nicht entfallen sind."""
     quelle = Path(rules.__file__).parent
-    for datei in ("rules.py", "resolve.py", "models.py"):
+    for datei in ("rules.py", "resolve.py", "models.py", "begruendung.py"):
         ids = set(re.findall(r"\bR(\d+)\b", (quelle / datei).read_text(encoding="utf-8")))
         fehlend = {f"R{i}" for i in ids} - AKTIVE_REGELN
         assert not fehlend, (datei, fehlend)

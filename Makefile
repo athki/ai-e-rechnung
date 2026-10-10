@@ -51,7 +51,8 @@ beweise: beweise-image
 	docker run --rm $(IMAGE)-beweise
 
 # Beide Container: das Rechnungs-Image mit init gegen einen leeren Gewerbe-Ordner, doctor,
-# den Demo-Rechnungen und `rechnung pruefen` auf jeder einzelnen; dann der Beweis-Container.
+# den Demo-Rechnungen, `rechnung pruefen` und `rechnung begruendung` auf jeder einzelnen; dann der
+# Beweis-Container.
 # Pflicht: keine Änderung ist fertig, solange das hier rot ist.
 schatten: hooks schatten-image
 	rm -rf "$(SCHATTEN_GEWERBE)" && mkdir -p "$(SCHATTEN_GEWERBE)"
@@ -63,6 +64,12 @@ schatten: hooks schatten-image
 		$(DOCKER_RUN) pruefen /gewerbe/demo-output/$$rechnung || exit 1; \
 	done
 	$(DOCKER_RUN) pruefen --pro-forma /gewerbe/demo-output/nicht-steuerbar-sample-ltd
+	@for rechnung in inland-muster-gmbh reverse-charge-exemple-sarl nicht-steuerbar-sample-ltd \
+		nicht-steuerbar-sample-ltd/pro-forma/2 nicht-steuerbar-privat-ch inland-privat-de \
+		kleinunternehmer-muster-gmbh; do \
+		$(DOCKER_RUN) begruendung /gewerbe/demo-output/$$rechnung > /dev/null || exit 1; \
+	done
+	@echo "begruendung: alle Demo-Rechnungen grün"
 	$(MAKE) beweise
 	@# Alte, unbenannte Images dieses Projekts wegräumen (Kennzeichnung im Dockerfile); fremde bleiben, der Build-Cache auch.
 	docker image prune -f --filter label=ai-e-rechnung=schatten

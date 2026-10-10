@@ -77,12 +77,17 @@ rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()─�
   vor dem echten Bau in `rechnung.yaml` um.
 - Dateinamen der PDFs tragen die Nummer, das Präfix folgt der Sprache (`rechnung_…` / `invoice_…`);
   ein Sprachwechsel räumt die Datei mit dem anderen Präfix weg.
+- `rechnung begruendung <nr|ordner>` (RULES.md R35): Begründung der Steuerentscheidung für Prüfer, Markdown
+  auf stdout, nur Deutsch. Entscheidet und rechnet nichts: liest `resolved.json` (auch `pro-forma/<n>/`),
+  Regeltexte, Status und `Nachweis:` aus RULES.md Teil 3 (`begruendung.py`, strenger Parser), Fakten über
+  `rules.merkmale()`. Rot, wenn `rules.entscheide()` heute auf denselben Fakten eine andere Spur liefert;
+  warnt bei geänderter `rechnung.yaml` und anderem Regelstand. Nichts davon wird eingefroren.
 - `rechnung pruefen <nr>` nimmt auch den Pfad eines Rechnungsordners – so prüft der Container die
   Demo-Rechnungen. `rechnung demo --pruefen` baut und prüft in einem Zug.
 
 ## Steuerregeln (`RULES.md`, `rules.py`)
 
-`RULES.md` ist die Spezifikation: Gesetzeswortlaut, Regeln R1…Rn mit Status, Entscheidungstabelle,
+`RULES.md` ist die Spezifikation: Gesetzeswortlaut, Regeln R1…Rn mit Status und Nachweis, Entscheidungstabelle,
 Geltungsbereich. `rules.py` setzt sie um; Regel-IDs im Code verweisen dorthin. Grundsatz: Das Werkzeug
 darf strenger sein als das Gesetz (abbrechen), aber nie anders entscheiden.
 
@@ -147,7 +152,7 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
 
 ## Technik
 
-- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,rules,resolve,render,vorlage,pruefen,festschreiben,doctor,cli}.py`
+- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,rules,resolve,render,vorlage,pruefen,festschreiben,begruendung,doctor,cli}.py`
 - `pydantic` v2 mit `extra="forbid"` auf allen Modellen; `typer` für die CLI; `pyyaml`
 - `jinja2` mit LaTeX-Delimitern (`\VAR{ }`, `\BLOCK{ }`, `\#{ }`) und `StrictUndefined`
 - LaTeX: `latexmk -interaction=nonstopmode -no-shell-escape -outdir=<tmp>`; Engine `pdflatex`,

@@ -56,6 +56,7 @@ rechnung bauen   2026-0001            # die Rechnung: rechnung_2026-0001.pdf bzw
 rechnung pruefen 2026-0001            # weist die Pflichtangaben im PDF-Text nach
 rechnung festschreiben 2026-0001 --gesendet-am 2026-06-18
 #   macht die Rechnung unveränderbar: Status, Schreibschutz, Hashes
+rechnung begruendung 2026-0001        # für Prüfer: Fakten, angewandte Regeln, Status und Nachweis (Markdown)
 ```
 
 `rechnung.yaml` ist die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Leistungsort,
@@ -146,7 +147,8 @@ steht in `.githooks/sperrliste.py`. Ohne Sperrliste ist er still; mit Sperrliste
 - `docs/anleitung-neue-rechnung.md` – Schritt für Schritt eine Rechnung schreiben, plus
   Nachschlagewerk: welche Einstellung in welcher Datei steht
 - `vorlage/README.md` – die LaTeX-Vorlage: Aufbau, Stilschalter, eigener Vorlagen-Ordner, `make beispiel`
-- `RULES.md` – die Steuerregeln: Gesetzeswortlaut, Regeln mit Status, Entscheidungstabelle, Grenzen
+- `RULES.md` – die Steuerregeln: Gesetzeswortlaut, Regeln mit Status und Nachweis, Entscheidungstabelle,
+  Grenzen; `rechnung begruendung <nr>` zeigt daraus die Kette für eine einzelne Rechnung
 - `lean/README.md` – Beweise über die Steuerregeln (englisch): was bewiesen ist und was nicht
 - `docs/muster/` – sechs Musterrechnungen als visuelle Referenz
 

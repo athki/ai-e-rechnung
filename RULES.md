@@ -36,7 +36,7 @@ Entscheidung im Nachhinein prüfbar.
 - **Teil 2 – Quellen:** die einschlägigen Vorschriften im Wortlaut (Q1…), jeweils mit den Regeln,
   die daraus folgen.
 - **Teil 3 – Regeln:** R1…Rn in der Sprache des Gesetzes. Jede Regel nennt ihre Quellen, Annahmen,
-  die betroffenen Felder im Werkzeug und ihren Status.
+  die betroffenen Felder im Werkzeug, ihren Status und ihren Nachweis.
 - **Teil 4 – Zuordnung zum Werkzeug:** die Entscheidungstabelle (Merkmale → Leistungsort → Satz und
   Pflichttext) und wie sie sich zu den heutigen Steuerfällen A–D verhält.
 - **Teil 5 – Regeln im Code:** wo jede Regel umgesetzt und wie sie geprüft ist, und wo der Code bekannte
@@ -49,9 +49,23 @@ Entscheidung im Nachhinein prüfbar.
 | --- | --- |
 | bestätigt | Ein Steuerberater hat eine Rechnung gesehen, die genau diese Regel anwendet, und sie für richtig befunden. Datum und Umfang stehen dabei. |
 | Annahme – ungeprüft | Begründete Auslegung, kein Steuerberater hat sie gesehen. Die Begründung steht dabei. |
+| Werkzeug-Entscheidung | Kein Steuerrecht, sondern eine Festlegung des Werkzeugs (R35, R37). |
 
 Derzeit hat keine Regel den Status „bestätigt“: Kein Steuerberater hat dieses Dokument oder eine Regel
 daraus geprüft.
+
+**Nachweis einer Regel** – wie sicher ist, dass das Werkzeug sie so umsetzt, wie sie hier steht (nicht:
+ob sie das Gesetz richtig wiedergibt; das sagt der Status). Das erste Wort ist eines von:
+
+| Nachweis | Bedeutung |
+| --- | --- |
+| bewiesen | Für das Lean-Modell bewiesen (`lean/`, Aussagen mit derselben ID); `rules.kern()` und `rules.satz_position()` antworten auf jede mögliche Eingabe wie das Modell (Abgleich, kein Beweis). |
+| getestet | Tests in `tests/`, kein Beweis. |
+| im PDF geprüft | `rechnung pruefen` weist die Angabe im Text der fertigen PDF nach. |
+| keiner | Kein eigener Nachweis; der Text dahinter sagt, warum. |
+
+`rechnung begruendung <nr>` liest Status und Nachweis von hier und zeigt sie für jede Regel, die eine
+Rechnung angewandt hat.
 
 **IDs** werden einmal vergeben und nie neu nummeriert. Fällt eine Regel weg, bleibt ihre Nummer
 frei. Die Lean-Theoreme tragen dieselben IDs.
@@ -327,7 +341,7 @@ Daraus folgt: **R38**.
 ## Teil 3 – Regeln
 
 Jede Regel hat dieselbe Form: **Quelle** – **Regel** – **Annahmen** – **Werkzeug** (betroffene Felder
-und Verhalten) – **Status**.
+und Verhalten) – **Status** – **Nachweis**. `rechnung begruendung` liest diese Form; ein Test hält sie fest.
 
 ### Gebiete und Steuerbarkeit
 
@@ -343,6 +357,9 @@ und Verhalten) – **Status**.
   für Länder aus `LAENDER`; ein anderer Code bricht ab, statt als Drittland zu gelten.
 - **Status:** Annahme – ungeprüft (die Einteilung selbst ist Gesetz; ungeprüft ist nur die gepflegte
   Liste).
+- **Nachweis:** getestet – Ländercode → Kategorie (`test_laendercodes_bilden_gebiete`, `test_eu_liste`,
+  `test_bekannte_fallen_sind_drittland`). Im Lean-Modell ist die Einteilung in genau drei Kategorien Teil
+  des Typs (`Gebiete`); die Liste selbst ist nicht bewiesen.
 
 #### R2 – Steuerbar ist nur, was im Inland ausgeführt wird
 
@@ -353,6 +370,7 @@ und Verhalten) – **Status**.
   seines Unternehmens.
 - **Werkzeug:** keine eigene Angabe; folgt aus R3–R8.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R2_steuerbar_genau_im_inland`.
 
 ### Leistungsort
 
@@ -376,6 +394,7 @@ vollständige Tabelle steht in Teil 4.
   - Die Ausnahmen in § 3a Abs. 3 Nr. 1, 2, 3a, 5 und Abs. 8 greifen nicht (Teil 1).
 - **Werkzeug:** `kunde.unternehmer`, `kunde.land`, `kunde.ustid`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R3_unternehmer_sitz_des_kunden`, `Aussage.R3_R8_eindeutig`.
 
 #### R4 – Grundregel bei Nichtunternehmern: Sitz des Ausstellers
 
@@ -388,6 +407,8 @@ vollständige Tabelle steht in Teil 4.
   Ausstellers (`land`) nicht `DE`, bricht das Werkzeug ab: Es bildet das deutsche UStG ab und gilt nur für
   Aussteller mit Sitz in Deutschland. Angenommen bleibt nur, dass es keine Betriebsstätte im Ausland gibt.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R4_aussteller_im_ausland_bricht_ab`,
+  `Aussage.R4_grundregel_sitz_des_ausstellers`.
 
 #### R5 – Tätigkeitsleistung an Nichtunternehmer: Ort der Tätigkeit
 
@@ -400,6 +421,7 @@ vollständige Tabelle steht in Teil 4.
 - **Werkzeug:** `leistung.einordnung`: `kulturell`, `kuenstlerisch`, `wissenschaftlich`,
   `unterrichtend`, `sportlich` oder `unterhaltend`; `leistung.ort` (Land).
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R5_taetigkeit_ort_der_erbringung`.
 
 #### R6 – Tätigkeitsleistung, virtuell: Wohnsitz des Empfängers
 
@@ -410,6 +432,7 @@ vollständige Tabelle steht in Teil 4.
 - **Annahmen:** Das Land in den Kundendaten ist der Wohnsitz.
 - **Werkzeug:** `leistung.ort: online`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R6_virtuell_wohnsitz`.
 
 #### R7 – Katalogleistung an Nichtunternehmer im Drittland: Wohnsitz des Empfängers
 
@@ -419,6 +442,7 @@ vollständige Tabelle steht in Teil 4.
 - **Annahmen:** Welche Nummer des Katalogs zutrifft, entscheidet der Mensch und gibt sie an.
 - **Werkzeug:** `leistung.einordnung`: ein Wort aus der Katalogtabelle in Teil 4 (Nr. 1–5, 7–10, 14).
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R7_katalog_drittland_wohnsitz`.
 
 #### R8 – Katalogleistung an Nichtunternehmer in der EU oder im Inland: Grundregel
 
@@ -428,6 +452,7 @@ vollständige Tabelle steht in Teil 4.
 - **Annahmen:** wie R4.
 - **Werkzeug:** wie R7.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R8_katalog_sonst_grundregel`, `Aussage.R3_R8_eindeutig`.
 
 #### R9 – Eine Einordnung je Rechnung; Nebenleistungen folgen der Hauptleistung
 
@@ -443,6 +468,9 @@ vollständige Tabelle steht in Teil 4.
 - **Werkzeug:** `leistung` gilt für die ganze Rechnung, nicht je Position; `leistung.taetigkeit`
   beschreibt die Hauptleistung in eigenen Worten.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** keiner – Das Datenmodell hat eine `leistung` je Rechnung, das Lean-Modell ein Feld
+  `einordnung`; eine eigene Aussage gibt es nicht. Ob Nebenleistungen der Hauptleistung folgen,
+  entscheidet der Mensch.
 
 ### Steuersatz und Steuerschuldner
 
@@ -456,6 +484,7 @@ vollständige Tabelle steht in Teil 4.
   an: 19 % und 0 % folgen aus dem Ergebnis der Rechnung, eine Position mit 0 % bei steuerpflichtiger
   Leistung wäre ein zu niedriger Ausweis (eine Steuerbefreiung nach § 4 deckt das Werkzeug nicht ab).
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R10_satz_je_position`; `satz_position()` ist mit dem Modell abgeglichen.
 
 #### R11 – Steuerschuldnerschaft des Leistungsempfängers in der EU
 
@@ -466,6 +495,7 @@ vollständige Tabelle steht in Teil 4.
   Art. 196 um (Pflicht für alle Mitgliedstaaten).
 - **Werkzeug:** `kunde.land` in der EU, `kunde.unternehmer` bzw. `kunde.ustid`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R11_reverse_charge_genau_wenn_empfaenger_schuldet`.
 
 #### R12 – Kein deutscher Steuerausweis, wenn keine deutsche Steuer geschuldet wird
 
@@ -477,6 +507,7 @@ vollständige Tabelle steht in Teil 4.
 - **Werkzeug:** `steuersatz` je Position darf in diesen Fällen nicht gesetzt sein; `resolve` bricht
   sonst ab.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R12_genau_bei_null_prozent_regelbesteuert`.
 
 ### Kleinunternehmer (§ 19 UStG)
 
@@ -490,6 +521,7 @@ vollständige Tabelle steht in Teil 4.
   Regelung verzichtet (§ 19 Abs. 3).
 - **Werkzeug:** `kleinunternehmer: true` in `ich.yaml`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R13_kleinunternehmer_genau_wenn_steuerfrei`.
 
 #### R14 – Kleinunternehmer weist nie Umsatzsteuer aus
 
@@ -499,6 +531,7 @@ vollständige Tabelle steht in Teil 4.
 - **Annahmen:** keine.
 - **Werkzeug:** `kleinunternehmer: true` schließt `positionen[].steuersatz` aus.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R14_kleinunternehmer_nie_steuer`.
 
 #### R15 – Kleinunternehmer, Kunde ist Unternehmer in der EU
 
@@ -512,6 +545,7 @@ vollständige Tabelle steht in Teil 4.
   USt-IdNrn. trotzdem, wenn sie vorhanden sind.
 - **Werkzeug:** `kleinunternehmer: true`; R29/R30 entfallen.
 - **Status:** Annahme – ungeprüft. **Unsicher** – auf der Fragenliste.
+- **Nachweis:** bewiesen – `Aussage.R15_kleinunternehmer_eu_ohne_ustids`.
 
 #### R16 – Pflichttext des Kleinunternehmers
 
@@ -526,6 +560,7 @@ vollständige Tabelle steht in Teil 4.
   Rechnung mit Steuerausweis aussieht.
 - **Werkzeug:** Pflichttext in Block 8; Summenblock ohne Steuerzeile.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R16_hinweis_genau_bei_kleinunternehmer`; der Wortlaut ist getestet.
 
 #### R17 – Kleinunternehmer, Kunde ist Unternehmer im Drittland oder Leistungsort im Drittland
 
@@ -535,6 +570,7 @@ vollständige Tabelle steht in Teil 4.
 - **Annahmen:** wie R15: § 19 erfasst nur Umsätze im Inland.
 - **Werkzeug:** wie R31.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R17_kleinunternehmer_drittland`.
 
 ### Abbruch statt falscher Entscheidung
 
@@ -547,6 +583,7 @@ vollständige Tabelle steht in Teil 4.
 - **Werkzeug:** Abbruch mit Meldung. Nur bei `unternehmer: false`; ist der Status unbekannt (auch bei
   manueller Festlegung des Orts, R37), bricht das Werkzeug nach R19 ab.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R18_abbruch_genau_bei_privatperson_in_der_eu`.
 
 #### R19 – Unvollständige Daten
 
@@ -562,6 +599,7 @@ vollständige Tabelle steht in Teil 4.
   `einordnung`, bei Tätigkeitsleistungen `ort`) ebenso – strenger als nötig, weil die Einordnung bei
   Unternehmern das Ergebnis nicht ändert, aber im Ergebnis festgehalten werden soll.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R19_abbruch_genau_wenn_unternehmer_fehlt`.
 
 ### Pflichtangaben (§ 14 Abs. 4 UStG)
 
@@ -578,6 +616,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   bezieht, nicht der Ansprechpartner.
 - **Werkzeug:** `ich.yaml: name, adresse`; `kunde: firma, adresse`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`.
 
 #### R21 – Steuernummer oder USt-IdNr. des Ausstellers
 
@@ -585,12 +624,14 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
 - **Regel:** Mindestens eine von beiden steht auf der Rechnung.
 - **Werkzeug:** `ich.yaml: steuernummer`, `ustid`; Pflicht im Schema.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`.
 
 #### R22 – Ausstellungsdatum
 
 - **Quelle:** Q8 Nr. 3; Q12 Nr. 3.
 - **Werkzeug:** `datum` (Vorgabe: heute).
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`.
 
 #### R23 – Rechnungsnummer, einmalig
 
@@ -601,6 +642,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   jüngsten Rechnung gelöscht, vergibt das Werkzeug seine Nummer erneut.
 - **Werkzeug:** Ordnername = Nummer; `naechste_lfd()`: höchste laufende Nummer im Jahr plus eins.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** getestet – `test_naechste_lfd_*`; die bekannte Schwäche steht oben.
 
 #### R24 – Umfang und Art der Leistung
 
@@ -608,6 +650,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
 - **Regel:** Jede Position hat eine Beschreibung, eine Menge und eine Einheit.
 - **Werkzeug:** `positionen[]: beschreibung, menge, einheit` (alle Pflicht).
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`; Pflichtfelder im Schema.
 
 #### R25 – Zeitpunkt der Leistung
 
@@ -618,6 +661,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   verlangt § 34a UStDV die Angabe gar nicht – das Werkzeug verlangt sie trotzdem.
 - **Werkzeug:** `leistungsdatum` (Pflicht), `leistungsdatum_bis`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`; Pflichtfeld im Schema.
 
 #### R26 – Entgelt nach Steuersätzen aufgeschlüsselt
 
@@ -625,6 +669,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
 - **Regel:** Das Nettoentgelt steht getrennt je Steuersatz auf der Rechnung.
 - **Werkzeug:** `steuergruppen[]` in `resolved.json`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`.
 
 #### R27 – Steuersatz und Steuerbetrag oder Hinweis
 
@@ -633,6 +678,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   Steuer ausgewiesen, steht an ihrer Stelle der Pflichttext nach R16, R28 oder R31.
 - **Werkzeug:** Summenblock und Block 8.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen`.
 
 ### Rechnungen bei Steuerschuldnerschaft in der EU (§ 14a Abs. 1 UStG)
 
@@ -650,6 +696,8 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   das genügt (Teil 6).
 - **Werkzeug:** Pflichttext Block 8.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R28_angabe_genau_bei_reverse_charge`; der Wortlaut ist getestet, im
+  PDF prüft ihn `rechnung pruefen`.
 
 #### R29 – Beide USt-IdNrn. auf der Rechnung
 
@@ -660,6 +708,8 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   bricht ab, statt Fall „EU-Unternehmer ohne USt-IdNr.“ anders zu behandeln.
 - **Werkzeug:** `kunde.ustid` und `ich.yaml: ustid` Pflicht in diesem Fall.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R29_abbruch_genau_bei_fehlender_ustid`; im PDF prüft beide Nummern
+  `rechnung pruefen`.
 
 #### R30 – Frist: bis zum 15. des Folgemonats
 
@@ -670,6 +720,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   ist nicht unwirksam; das Werkzeug warnt, statt abzubrechen.
 - **Werkzeug:** `datum`, `leistungsdatum`, `leistungsdatum_bis`; Warnung.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R30_frist_genau_bei_reverse_charge`; die Fristberechnung ist getestet.
 
 ### Pflichttext bei Leistungsort im Drittland
 
@@ -690,6 +741,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   Privatpersonen entfällt er.
 - **Werkzeug:** Pflichttext Block 8 mit Ländername aus `LAENDER`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** bewiesen – `Aussage.R31_hinweis_nennt_die_richtige_vorschrift`; der Wortlaut ist getestet.
 
 ### Beträge
 
@@ -703,6 +755,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   bewiesen.
 - **Werkzeug:** `runde()`, `steuergruppen`, `netto`, `ust_betrag`, `brutto`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** getestet – `tests/test_resolve.py`.
 
 #### R33 – Kein zu hoher Steuerausweis
 
@@ -712,6 +765,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
 - **Annahmen:** wie R32.
 - **Werkzeug:** wie R32.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** getestet – `tests/test_resolve.py`.
 
 #### R34 – Fremdwährung nur ohne deutschen Steuerausweis
 
@@ -723,6 +777,7 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   bricht ab – strenger als das Gesetz.
 - **Werkzeug:** `waehrung`; `waehrung_erlaubt()`.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** getestet – `test_fremdwaehrung_*`.
 
 ### Werkzeug-Regeln
 
@@ -734,6 +789,8 @@ Bewiesen werden kann: *Wenn das Werkzeug eine Rechnung erzeugt, enthält das Erg
   Entscheidung geführt haben.
 - **Werkzeug:** `leistung`, `leistungsort`, `ergebnis`, `regeln` in `rechnung.resolved.json`.
 - **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
+- **Nachweis:** getestet – `test_kern_nennt_nur_regeln_aus_rules_md`; `rechnung begruendung` prüft die
+  Spur je Rechnung.
 
 #### R36 – (entfallen)
 
@@ -752,6 +809,8 @@ der Regel-Trace (R35) zeigt, welche Regeln eine Rechnung angewandt hat.
   wird eine Tatsache, nicht das Ergebnis – so ist etwa ein Kleinunternehmer mit 19 % ausgeschlossen.
 - **Werkzeug:** `leistungsort` + `begruendung` in `rechnung.yaml`.
 - **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
+- **Nachweis:** bewiesen – `Aussage.R37_festlegung_nur_des_orts`. Ob der festgelegte Ort stimmt,
+  verantwortet der Mensch.
 
 ### Pro forma
 
@@ -778,6 +837,8 @@ der Regel-Trace (R35) zeigt, welche Regeln eine Rechnung angewandt hat.
   (Revisionen in `pro-forma/<n>/`), Belegart `proforma` in der Vorlage; `rechnung pruefen` weist die
   Kennzeichnung an der Pro forma nach und ihr Fehlen an der Rechnung.
 - **Status:** Annahme – ungeprüft.
+- **Nachweis:** im PDF geprüft – `rechnung pruefen` weist die Kennzeichnung an der Pro forma nach und
+  ihr Fehlen an der Rechnung.
 
 ---
 
@@ -885,6 +946,7 @@ welche Regeln angewandt wurden (`regeln`, R35).
 | R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |
 | R20–R29 im PDF | `pruefen.befunde()` | `tests/test_pruefen.py`, `rechnung pruefen` |
 | R23 | `rules.naechste_lfd()` | `test_naechste_lfd_*` |
+| R35 (Begründung je Rechnung) | `begruendung.py`, `rechnung begruendung` | `tests/test_begruendung.py`: jede mögliche Regel der Spur hat einen vollständigen Eintrag hier, `Nachweis: bewiesen` genau bei den Lean-Aussagen, Annahmen zu jedem Feld von `Passt`, Spur gegen `entscheide()` |
 | R38 | `render.baue_pdf(…, pro_forma=True)`, Belegart `proforma` in `invoice.sty`, `festschreiben.pro_forma_festhalten()`, `pruefen.befunde(…, pro_forma)` | `test_pro_forma_ist_gekennzeichnet_und_rechnung_nicht`, `test_pro_forma_revisionen_werden_eingefroren` |
 | IDs im Code | – | `test_jede_regel_id_im_code_steht_in_rules_md` |
 
