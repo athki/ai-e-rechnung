@@ -3,7 +3,7 @@ IMAGE := rechnung
 SCHATTEN_GEWERBE := $(CURDIR)/build/schatten-gewerbe
 DOCKER_RUN := docker run --rm -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE)
 
-.PHONY: test doctor hooks beispiel beispiel-neu schatten schatten-image
+.PHONY: test doctor hooks beispiel beispiel-neu lean beweise beweise-image schatten schatten-image
 
 test: hooks
 	uv run pytest -q
@@ -28,11 +28,24 @@ beispiel-neu:
 	cd vorlage && latexmk -pdf -interaction=nonstopmode -halt-on-error -no-shell-escape -outdir=attachments attachments/sample-receipt.tex
 	$(MAKE) beispiel
 
+# Beweise unter lean/ bauen und ihre Axiome prüfen, auf dem Host (braucht elan; Version aus
+# lean/lean-toolchain). Schnell beim Arbeiten an den Beweisen.
+lean:
+	lean/pruefen.sh
+
 schatten-image:
 	docker build -t $(IMAGE) .
 
-# Image bauen, dann im Container: init gegen einen leeren Gewerbe-Ordner, doctor,
-# die Demo-Rechnungen und `rechnung pruefen` auf jeder einzelnen.
+# Beweis-Container: Rechnungs-Image plus Lean. Jeder Lauf baut die Beweise neu und prüft die Axiome;
+# ein offener Beweis (`sorry`) oder `native_decide` macht ihn rot.
+beweise-image: schatten-image
+	docker build -f Dockerfile.beweise -t $(IMAGE)-beweise .
+
+beweise: beweise-image
+	docker run --rm $(IMAGE)-beweise
+
+# Beide Container: das Rechnungs-Image mit init gegen einen leeren Gewerbe-Ordner, doctor,
+# den Demo-Rechnungen und `rechnung pruefen` auf jeder einzelnen; dann der Beweis-Container.
 # Pflicht: keine Änderung ist fertig, solange das hier rot ist.
 schatten: hooks schatten-image
 	rm -rf "$(SCHATTEN_GEWERBE)" && mkdir -p "$(SCHATTEN_GEWERBE)"
@@ -44,3 +57,6 @@ schatten: hooks schatten-image
 		$(DOCKER_RUN) pruefen /gewerbe/demo-output/$$rechnung || exit 1; \
 	done
 	$(DOCKER_RUN) pruefen --pro-forma /gewerbe/demo-output/nicht-steuerbar-sample-ltd
+	$(MAKE) beweise
+	@# Alte, unbenannte Images dieses Projekts wegräumen (Kennzeichnung im Dockerfile); fremde bleiben, der Build-Cache auch.
+	docker image prune -f --filter label=ai-e-rechnung=schatten

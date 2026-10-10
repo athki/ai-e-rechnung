@@ -100,7 +100,7 @@ darf strenger sein als das Gesetz (abbrechen), aber nie anders entscheiden.
   der Leistungsort bei einer Privatperson ein anderer EU-Staat wäre.
 - `rules.kern()` ist der Entscheidungskern als reine Funktion über abstrakte Merkmale (1728 Kombinationen,
   Tests laufen über alle); `rules.entscheide()` übersetzt Daten hin und zurück. Später prüft ein
-  Lean-Modell den Kern vollständig.
+  Lean-Modell (`lean/`) den Kern vollständig.
 - Manuelle Festlegung nur des Leistungsorts: `leistungsort:` mit `begruendung:`, sonst Validierungsfehler.
 - EU-Länderliste als Konstante in `rules.py`, mit Kommentar und Datum.
 
@@ -163,20 +163,36 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
   Sperrliste still. `make test` und `make schatten` schalten ihn mit ein;
   `rechnung doctor` ist rot, wenn eine Sperrliste da ist und der Wächter aus ist.
 - Kein Netzwerkzugriff im Kern. Künftige AI-Funktionen kommen in ein eigenes, optional importierbares Modul.
+- Lean (`lean/`, README englisch): Beweise über die Steuerregeln, außerhalb des Werkzeugs. Version fest in
+  `lean/lean-toolchain`, keine Abhängigkeiten (kein Mathlib), `lakefile.toml`. Namen spiegeln `rules.py`
+  und RULES.md (Felder in `snake_case`, Theoreme mit Regel-ID, z. B. `R14_…`). `lean/pruefen.sh` baut und
+  prüft die Axiome: Jede Warnung ist ein Fehler (`sorry`), nur Leans Standardaxiome (kein
+  `native_decide`). `make lean` auf dem Host (braucht elan, `doctor` warnt nur), `make beweise` im Container.
 
 ## Schattencontainer – Muss
 
-Das Werkzeug wird lokal benutzt, muss aber jederzeit im Container laufen. Der Container ist das
-`Dockerfile`, wird über `make schatten` gebaut und geprüft, und ist im Alltag nicht in Gebrauch.
-Eine Änderung ist erst fertig, wenn `make schatten` grün ist. Er baut immer mit der Standardvorlage.
+Das Werkzeug wird lokal benutzt, muss aber jederzeit im Container laufen. Es gibt zwei Container, beide
+werden über `make schatten` gebaut und geprüft, beide sind im Alltag nicht in Gebrauch:
+
+- **Rechnungs-Container** (`Dockerfile`, Image `rechnung`): das Werkzeug, für Ausprobierer. Baut immer mit
+  der Standardvorlage. Ohne Lean (`lean/` steht in `.dockerignore`).
+- **Beweis-Container** (`Dockerfile.beweise`, Image `rechnung-beweise`, `make beweise`): `FROM rechnung`
+  plus elan und die Lean-Version aus `lean/lean-toolchain`. Jeder Lauf baut die Beweise neu und prüft die
+  Axiome (`lean/pruefen.sh`). Kein Mount, kein Netzwerk. Eigene Ignore-Datei
+  `Dockerfile.beweise.dockerignore`: nur `lean/` ohne `.lake/`.
+
+Eine Änderung ist erst fertig, wenn `make schatten` grün ist – beide Container. Am Ende räumt es die alten,
+unbenannten Images dieses Projekts weg (Kennzeichnung `ai-e-rechnung=schatten` im `Dockerfile`), sonst nichts.
 
 Der Vertrag:
 - Keine Host-Annahmen: jede Option auch als Umgebungsvariable `RECHNUNG_<OPTION>` (Env gewinnt); kein
   Code verlässt sich auf `$HOME`, `~/.config` oder absolute Pfade. Im Container liegt der Gewerbe-Ordner unter `/gewerbe`.
 - Alle Abhängigkeiten deklariert: Python in `uv.lock`, TeX-Pakete in `docs/tex-pakete.txt` (kein „TeX Live
   full“), Fonts offen lizenziert (XCharter, Fira Sans; als TeX-Pakete, bei Bedarf Dateien in `vorlage/fonts/`). Systemfonts sind nie Default.
-- Der Gewerbe-Ordner ist der einzige Mount-Punkt; mehr sieht der Container nicht. Der Kern braucht kein Netzwerk.
-- Definition von „läuft“: `rechnung demo` und `rechnung pruefen` auf allen vier Demo-Rechnungen im Container.
+- Der Gewerbe-Ordner ist der einzige Mount-Punkt; mehr sieht der Container nicht. Der Kern braucht kein
+  Netzwerk. Der Beweis-Container braucht keinen Mount.
+- Definition von „läuft“: `rechnung demo` und `rechnung pruefen` auf allen Demo-Rechnungen im
+  Rechnungs-Container, `make beweise` grün im Beweis-Container.
 - Bewusste Abstriche: Container läuft als root, kein User-Mapping, keine Secrets, kein Netzwerk-Setup.
   Aufruf ist `docker run --rm -v <gewerbe>:/gewerbe rechnung <kommando>`, nicht mehr.
 - `rechnung doctor` prüft auf dem Host gegen dieselbe Paketliste, die das Dockerfile installiert.

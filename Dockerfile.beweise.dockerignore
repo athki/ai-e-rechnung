@@ -1,0 +1,4 @@
+# Nur lean/ geht in den Beweis-Container (der Rest kommt über das Rechnungs-Image), ohne Build-Ordner.
+*
+!lean
+lean/.lake

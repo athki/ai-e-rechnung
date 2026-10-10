@@ -38,6 +38,9 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH=/opt/venv/bin:$PATH \
     RECHNUNG_GEWERBE=/gewerbe
+# Kennzeichnung, damit `make schatten` alte, unbenannte Images dieses Projekts aufräumen kann – nur diese.
+# Der Beweis-Container erbt sie.
+LABEL ai-e-rechnung=schatten
 VOLUME /gewerbe
 ENTRYPOINT ["rechnung"]
 CMD ["--help"]

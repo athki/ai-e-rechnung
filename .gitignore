@@ -28,3 +28,6 @@ config.toml
 
 # macOS
 .DS_Store
+
+# Lean
+lean/.lake/

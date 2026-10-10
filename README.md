@@ -109,8 +109,17 @@ Das Werkzeug läuft jederzeit auch im Container. Der Gewerbe-Ordner ist der einz
 Netzwerk braucht der Kern nicht.
 
 ```sh
-make schatten                                            # Image bauen, Demo bauen und prüfen
+make schatten                                            # beide Images bauen, Demo bauen und prüfen, Beweise prüfen
 docker run --rm -v "<gewerbe>":/gewerbe rechnung doctor  # gegen den eigenen Gewerbe-Ordner
+```
+
+Ein zweiter Container prüft die Beweise unter [`lean/`](lean/README.md): das Rechnungs-Image plus Lean,
+ohne Mount. Jeder Lauf baut die Beweise neu und scheitert an einem offenen Beweis. Noch ist dort
+nur das Gerüst; das Modell der Steuerregeln folgt.
+
+```sh
+docker build -t rechnung . && docker build -f Dockerfile.beweise -t rechnung-beweise .
+docker run --rm rechnung-beweise                         # oder kurz: make beweise
 ```
 
 Abhängigkeiten sind vollständig deklariert: Python in `uv.lock`, TeX-Pakete in `docs/tex-pakete.txt`,
@@ -120,7 +129,8 @@ Fonts offen lizenziert (XCharter, Fira Sans). Der Container baut immer mit der S
 
 ```sh
 uv run pytest -q    # Tests; die Bau-Tests brauchen LaTeX
-make schatten       # Pflicht vor jedem Commit: Image bauen, Demo bauen und prüfen
+make schatten       # Pflicht vor jedem Commit: beide Container bauen und prüfen
+make lean           # Lean-Beweise auf dem Host bauen und prüfen (braucht elan)
 make hooks          # Commit-Wächter einschalten (test und schatten tun das mit)
 ```
 
@@ -137,6 +147,7 @@ steht in `.githooks/sperrliste.py`. Ohne Sperrliste ist er still; mit Sperrliste
   Nachschlagewerk: welche Einstellung in welcher Datei steht
 - `vorlage/README.md` – die LaTeX-Vorlage: Aufbau, Stilschalter, eigener Vorlagen-Ordner, `make beispiel`
 - `RULES.md` – die Steuerregeln: Gesetzeswortlaut, Regeln mit Status, Entscheidungstabelle, Grenzen
+- `lean/README.md` – Beweise über die Steuerregeln (englisch): was bewiesen ist und was nicht
 - `docs/muster/` – sechs Musterrechnungen als visuelle Referenz
 
 ## Hinweis

@@ -1,0 +1,30 @@
+# Beweis-Container: das Rechnungs-Image plus Lean. Prüft bei jedem Start die Beweise unter lean/
+# neu – `lake build`, dann die Axiom-Prüfung (Pruefung.lean). Braucht keinen Mount und kein Netzwerk.
+#   make beweise
+#   docker build -t rechnung . && docker build -f Dockerfile.beweise -t rechnung-beweise .
+#   docker run --rm rechnung-beweise
+# Baut auf `rechnung` auf, damit die Beweise neben genau dem Code liegen, der die Rechnungen schreibt.
+
+FROM rechnung
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# elan installiert die Lean-Version, die lean/lean-toolchain festlegt – dieselbe Datei wie auf dem Host.
+# elan selbst in fester Version, passend zur Architektur (amd64 und arm64).
+ARG ELAN_VERSION=v4.2.4
+ENV ELAN_HOME=/opt/elan \
+    PATH=/opt/elan/bin:$PATH
+COPY lean/lean-toolchain /tmp/lean-toolchain
+RUN curl -sSfL "https://github.com/leanprover/elan/releases/download/${ELAN_VERSION}/elan-$(uname -m)-unknown-linux-gnu.tar.gz" \
+      | tar -xz -C /tmp \
+ && /tmp/elan-init -y --no-modify-path --default-toolchain none \
+ && rm /tmp/elan-init \
+ && elan toolchain install "$(cat /tmp/lean-toolchain)" \
+ && elan default "$(cat /tmp/lean-toolchain)"
+
+COPY lean/ /app/lean/
+WORKDIR /app/lean
+ENTRYPOINT ["/app/lean/pruefen.sh"]
+CMD []

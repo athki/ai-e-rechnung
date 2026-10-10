@@ -1,0 +1,9 @@
+name = "rechnung"
+defaultTargets = ["Rechnung"]
+
+# Every warning is an error: a proof left open with `sorry` fails the build instead of passing quietly.
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "Rechnung"

@@ -17,6 +17,7 @@ from rechnung import config, vorlage
 OK, WARNUNG, FEHLER = "ok", "warnung", "fehler"
 
 TEX_PAKETE = config.REPO / "docs" / "tex-pakete.txt"
+LEAN_TOOLCHAIN = config.REPO / "lean" / "lean-toolchain"
 
 LATEXMK_FLAG = {"pdflatex": "-pdf", "lualatex": "-lualatex", "xelatex": "-xelatex"}
 
@@ -215,6 +216,15 @@ def pruefe_waechter(env: dict[str, str] | None = None, repo: Path = config.REPO)
     return Pruefung(name, OK, f"an, Sperrliste {config.sperrliste_pfad(env)}")
 
 
+def pruefe_lean(toolchain: Path = LEAN_TOOLCHAIN) -> Pruefung:
+    """Lean braucht nur, wer die Beweise unter lean/ baut; zum Rechnungsschreiben nie. Daher nur Warnung."""
+    name = "Lean (Beweise, make lean)"
+    if not shutil.which("elan"):
+        return Pruefung(name, WARNUNG, "elan nicht gefunden; Beweise im Container: make beweise")
+    version = toolchain.read_text(encoding="utf-8").strip() if toolchain.is_file() else "lean/ fehlt"
+    return Pruefung(name, OK, f"{_version('elan', '--version') or 'elan'}; Beweise mit {version}")
+
+
 def pruefe_docker() -> Pruefung:
     if not shutil.which("docker"):
         return Pruefung("Docker (Schattencontainer)", WARNUNG, "nicht gefunden")
@@ -248,5 +258,6 @@ def alle() -> list[Pruefung]:
         *pruefe_gewerbe(cfg),
         pruefe_nummer(cfg),
         pruefe_waechter(),
+        pruefe_lean(),
         pruefe_docker(),
     ]
