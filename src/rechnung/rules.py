@@ -253,6 +253,14 @@ FUNDSTELLE: dict[str, str] = {
 }
 
 
+def fundstelle(k: KernErgebnis) -> str | None:
+    """Fundstelle für den Hinweistext (R31): die der letzten Ortsregel im Trace; None bei manueller
+    Festlegung (R37), weil dann kein Absatz von § 3a den Ort bestimmt hat."""
+    if k.ort_quelle == ORT_FESTGELEGT:
+        return None
+    return [FUNDSTELLE[r] for r in k.regeln if r in FUNDSTELLE][-1]
+
+
 @dataclass(frozen=True)
 class Ort:
     """Der Leistungsort und wie er zustande kam."""
@@ -306,10 +314,9 @@ def entscheide(
     }[k.ort_quelle]
     assert land is not None
     ort_regeln = tuple(r for r in k.regeln if r in FUNDSTELLE or r == "R37")
-    fundstelle = None if k.ort_quelle == ORT_FESTGELEGT else FUNDSTELLE[ort_regeln[-1]]
     assert m.unternehmer is not None   # sonst hätte kern() abgebrochen (R19)
     return Entscheidung(
-        ort=Ort(land, ort_regeln, fundstelle),
+        ort=Ort(land, ort_regeln, fundstelle(k)),
         ergebnis=k.ergebnis,
         satz=Decimal(k.satz),
         unternehmer=m.unternehmer,
