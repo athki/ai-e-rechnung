@@ -1,17 +1,24 @@
 /-
-Prüfung nach `lake build` (siehe `pruefen.sh`). Zwei Teile:
+Prüfung nach `lake build` (siehe `pruefen.sh`). Drei Teile:
 
 1. **Aussage ↔ Theorem.** Jede `Rechnung.Aussage.X : Prop` (Aussagen.lean) braucht ein Theorem, dessen
    Typ genau `Rechnung.Aussage.X` ist – nicht eine ähnliche, schwächere Fassung. Lean selbst prüft nur,
    dass vorhandene Theoreme stimmen, nicht, dass jede Aussage eines hat. In Schritt 8.4 sind die
    Aussagen formuliert und noch offen; das ist erlaubt (`offenErlaubt`). Ab 8.5 ist jede offene Aussage
    ein Fehler.
-2. **Axiome.** `lake build` allein beweist nicht genug: Ein Theorem kann sich auf `sorryAx` stützen
+2. **Erfüllbarkeit.** Jede Aussage mit Voraussetzungen braucht Beispiele, in denen sie zugleich gelten,
+   sonst könnte sie leer bewiesen sein. Was gefordert ist, leitet `Rechnung.Erfuellbarkeit.forderung`
+   aus dem Typ der Aussage ab (Erfuellbarkeit.lean); verlangt ist ein Theorem genau dieses Typs. Das
+   gilt ohne Ausnahme, auch solange Aussagen offen sein dürfen. `Beispiele.lean` gibt die Forderungen
+   zum Lesen aus.
+3. **Axiome.** `lake build` allein beweist nicht genug: Ein Theorem kann sich auf `sorryAx` stützen
    (offener Beweis) oder über `native_decide` dem Compiler statt dem Kernel vertrauen. Jedes Theorem im
    Namespace `Rechnung` darf nur auf den drei Standardaxiomen von Lean ruhen.
 -/
 import Lean
 import Rechnung
+
+open Rechnung.Erfuellbarkeit
 
 open Lean Elab Command
 
@@ -49,7 +56,21 @@ elab "#pruefe_aussagen_und_axiome" : command => do
   unless offen.isEmpty || offenErlaubt do
     throwError m!"Ohne Beweis: {offen.toList}"
 
-  -- 2. Axiome
+  -- 2. Erfüllbarkeit
+  let mut leer := #[]
+  for a in aussagen do
+    match ← liftTermElabM (forderung a) with
+    | none => logInfo m!"ohne Voraussetzungen  {a.componentsRev.head!}"
+    | some f =>
+      match theoreme.find? (·.2 == f) with
+      | some (t, _) => logInfo m!"erfüllbar  {a.componentsRev.head!}  durch {t}"
+      | none =>
+        leer := leer.push a
+        logInfo m!"ohne Beispiel  {a.componentsRev.head!}"
+  unless leer.isEmpty do
+    throwError m!"Ohne Beispiel für die Voraussetzungen: {leer.toList}"
+
+  -- 3. Axiome
   let mut fehler := #[]
   for (name, _) in theoreme do
     let axiome ← liftCoreM (collectAxioms name)

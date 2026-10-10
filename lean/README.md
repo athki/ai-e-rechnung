@@ -61,8 +61,9 @@ exceptions in § 3a Abs. 3 Nr. 1, 2, 3a, 5 and Abs. 8, financial services, suppl
 
 Two commands, both run `pruefen.sh`: `lake build`, then [`Tabelle.lean`](Tabelle.lean), which prints
 the decision table of RULES.md part 4 as computed by the Lean `kern`, then
-[`Pruefung.lean`](Pruefung.lean), which reports for every statement whether a theorem proves exactly it,
-and checks the axioms every theorem in namespace `Rechnung` rests on.
+[`Beispiele.lean`](Beispiele.lean), which prints the examples each statement requires (see below), then
+[`Pruefung.lean`](Pruefung.lean), which reports for every statement whether a theorem proves exactly it
+and whether its examples exist, and checks the axioms every theorem in namespace `Rechnung` rests on.
 
 ```sh
 make lean      # on the host; needs elan (https://github.com/leanprover/elan)
@@ -74,6 +75,13 @@ The check fails if
 - a proof is left open (`sorry`): every warning is an error (`lakefile.toml`),
 - a statement has no theorem whose type is exactly that statement – allowed in step 8.4, an error from
   8.5 on (`offenErlaubt` in `Pruefung.lean`),
+- a statement with hypotheses has no examples: "if V then F" is also proved when V can never hold, and
+  then it says nothing. So every statement needs a proved example in which all its hypotheses hold at
+  once, and for an "if and only if" one example where the left side holds and one where it does not
+  (otherwise both sides might always be false). What is required is derived mechanically from the type
+  of the statement ([`Rechnung/Erfuellbarkeit.lean`](Rechnung/Erfuellbarkeit.lean)), not typed by hand;
+  the examples live in [`Rechnung/Beweise/Erfuellbar.lean`](Rechnung/Beweise/Erfuellbar.lean), in a
+  small world of three countries (Germany, France, the US),
 - a theorem rests on anything but Lean's standard axioms (`propext`, `Classical.choice`, `Quot.sound`);
   this rules out `native_decide`, which trusts the compiler instead of the kernel.
 
@@ -112,4 +120,5 @@ proved by `theorem R14_kleinunternehmer_nie_steuer`.
 | `Daten` | the invoice data the tool reads |
 | `Passt` | the data fit the facts: all assumptions, by rule ID |
 | `Aussage`, `annahme_…` | statement, assumption |
+| `erfuellbar`, `Beispiel`, `welt` | satisfiable, example, (example) world |
 | `Tabelle`, `Pruefung` | table, check |

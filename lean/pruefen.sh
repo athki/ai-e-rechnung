@@ -5,4 +5,5 @@ set -eu
 cd "$(dirname "$0")"
 lake build
 lake env lean Tabelle.lean
+lake env lean Beispiele.lean
 lake env lean Pruefung.lean
