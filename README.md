@@ -1,5 +1,8 @@
 # ai-e-rechnung
 
+*English: what is proved, what is tested, what is assumed, and how to reproduce it –
+[`lean/README.md`](lean/README.md).*
+
 Rechnungen für ein deutsches Kleingewerbe: Aus einem kurzen YAML wird eine formal vollständige
 Rechnung als PDF, gesetzt mit LaTeX. Der Kern ist deterministisch. Leistungsort, Steuersatz, Summen
 und Rechnungsnummer rechnet das Werkzeug, nicht der Mensch und nicht die AI. Der Befehl heißt `rechnung`.
@@ -149,7 +152,8 @@ steht in `.githooks/sperrliste.py`. Ohne Sperrliste ist er still; mit Sperrliste
 - `vorlage/README.md` – die LaTeX-Vorlage: Aufbau, Stilschalter, eigener Vorlagen-Ordner, `make beispiel`
 - `RULES.md` – die Steuerregeln: Gesetzeswortlaut, Regeln mit Status und Nachweis, Entscheidungstabelle,
   Grenzen; `rechnung begruendung <nr>` zeigt daraus die Kette für eine einzelne Rechnung
-- `lean/README.md` – Beweise über die Steuerregeln (englisch): was bewiesen ist und was nicht
+- `lean/README.md` – die ganze Prüfkette auf Englisch: was bewiesen, abgeglichen, getestet und
+  angenommen ist, wie man es nachbaut; danach das Lean-Modell
 - `docs/muster/` – sechs Musterrechnungen als visuelle Referenz
 
 ## Hinweis
