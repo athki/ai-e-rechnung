@@ -67,6 +67,17 @@ Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer leite
 friert sie in `rechnung.resolved.json` ein. Die ausführliche Anleitung steht in
 `docs/anleitung-neue-rechnung.md`.
 
+## Mit einer AI: geschwärzte Sicht
+
+Die AI soll wissen, was geleistet wurde und wie viel davon, nie, wer beteiligt ist und was es kostet.
+Mit `RECHNUNG_GESCHWAERZT=1` geben `neu`, `resolve`, `bauen`, `pruefen` und `begruendung` keine Namen,
+Anschriften, Werte aus Kunden- oder Ausstellerdatei, Beträge oder absoluten Pfade aus. Abbrüche
+kommen als `Abbruch (<art>): …` und sagen, wer handeln muss (`eingabe`, `frage`, `stammdaten`,
+`ausserhalb`). Für Claude Code beschreibt der Skill `.claude/skills/rechnung/SKILL.md` den Ablauf;
+den Schalter und die Gewerbe-Wurzel setzt man in `.claude/settings.local.json` (`env`). Unter dem
+Schalter sperrt der Hook auch das Lesen von Stammdaten und abgeleiteten Dateien im Gewerbe-Ordner.
+Ehrlich: Über Bash ist Lesen in Claude Code damit nicht ganz gesperrt.
+
 ## Zwei Orte, strikt getrennt
 
 **Repo (Code):** Bibliothek, CLI, LaTeX-Vorlage, Tests und erfundene Beispiel-Stammdaten in

@@ -14,10 +14,12 @@ from rechnung import (
     config,
     doctor as doctor_mod,
     festschreiben as festschreiben_mod,
+    meldung,
     pruefen as pruefen_mod,
     render as render_mod,
     resolve as resolve_mod,
     rules,
+    sicht,
 )
 from rechnung.models import Resolved
 
@@ -39,8 +41,18 @@ def _config() -> config.Config:
 
 
 def _abbruch(e: Exception) -> typer.Exit:
-    typer.secho(str(e), fg=typer.colors.RED, err=True)
+    typer.secho(sicht.abbruch(e) if sicht.aktiv() else str(e), fg=typer.colors.RED, err=True)
     return typer.Exit(1)
+
+
+def _eingabe(text: str) -> meldung.Fehler:
+    """Fehler in einem Argument, das die AI selbst übergibt: Art `eingabe`, die Meldung bleibt ganz."""
+    return meldung.Fehler(text, art=meldung.EINGABE, geschwaerzt=text)
+
+
+def _pfad(p: Path, cfg: config.Config | None = None) -> str:
+    """Pfad für die Ausgabe; unter dem Schalter ohne den Namen der Gewerbe-Wurzel."""
+    return sicht.pfad(p, cfg) if sicht.aktiv() else str(p)
 
 
 def _geld(betrag: Decimal, waehrung: str) -> str:
@@ -54,7 +66,8 @@ def doctor() -> None:
     pruefungen = doctor_mod.alle()
     breite = max(len(p.name) for p in pruefungen)
     for p in pruefungen:
-        typer.echo(f" {SYMBOL[p.status]} {p.name.ljust(breite)}  {p.detail}")
+        detail = sicht.kurz(p.detail) if sicht.aktiv() else p.detail
+        typer.echo(f" {SYMBOL[p.status]} {p.name.ljust(breite)}  {detail}")
     fehler = sum(p.status == doctor_mod.FEHLER for p in pruefungen)
     warnungen = sum(p.status == doctor_mod.WARNUNG for p in pruefungen)
     typer.echo()
@@ -75,7 +88,7 @@ def init(
     except config.ConfigFehler as e:
         raise _abbruch(e) from e
     assert cfg.gewerbe is not None
-    typer.echo(f"Gewerbe-Wurzel: {cfg.gewerbe}")
+    typer.echo(f"Gewerbe-Wurzel: {_pfad(cfg.gewerbe, cfg)}")
     for pfad, neu_angelegt in ergebnis:
         typer.echo(f"  {'angelegt ' if neu_angelegt else 'vorhanden'}  {pfad.relative_to(cfg.gewerbe)}/")
     if stammdaten:
@@ -108,13 +121,13 @@ def neu(
         rechnungsdatum = date.fromisoformat(datum) if datum else date.today()
         leistung = date.fromisoformat(leistungsdatum) if leistungsdatum else None
     except ValueError as e:
-        raise _abbruch(ValueError(f"Datum muss JJJJ-MM-TT sein: {e}")) from e
+        raise _abbruch(_eingabe(f"Datum muss JJJJ-MM-TT sein: {e}")) from e
     if sprache and sprache not in config.SPRACHEN:
-        raise _abbruch(ValueError(f"sprache muss eine von {config.SPRACHEN} sein"))
+        raise _abbruch(_eingabe(f"sprache muss eine von {config.SPRACHEN} sein"))
     if waehrung and waehrung not in config.WAEHRUNGEN:
-        raise _abbruch(ValueError(f"waehrung muss eine von {config.WAEHRUNGEN} sein"))
+        raise _abbruch(_eingabe(f"waehrung muss eine von {config.WAEHRUNGEN} sein"))
     if einordnung and einordnung not in rules.EINORDNUNGEN:
-        raise _abbruch(ValueError(f"einordnung muss eine von {', '.join(rules.EINORDNUNGEN)} sein"))
+        raise _abbruch(_eingabe(f"einordnung muss eine von {', '.join(rules.EINORDNUNGEN)} sein"))
     try:
         ordner, nummer = resolve_mod.neu(
             cfg, kunde, leistung, rechnungsdatum, sprache or None, waehrung or None,
@@ -123,7 +136,7 @@ def neu(
     except (resolve_mod.ResolveFehler, config.ConfigFehler, rules.RegelFehler) as e:
         raise _abbruch(e) from e
     typer.secho(f"Rechnung {nummer} angelegt", fg=typer.colors.GREEN, bold=True)
-    typer.echo(f"  {ordner / resolve_mod.INPUT_DATEI}")
+    typer.echo(f"  {_pfad(ordner / resolve_mod.INPUT_DATEI, cfg)}")
     if leistung is None:
         typer.secho("  leistungsdatum ist noch leer – Pflicht, in rechnung.yaml eintragen.",
                     fg=typer.colors.YELLOW)
@@ -133,7 +146,36 @@ def neu(
     typer.echo(f"\nAusfüllen, dann: rechnung resolve {nummer}")
 
 
-def _zeige(r: Resolved, ziel: Path) -> None:
+def _zeige_geschwaerzt(r: Resolved, ziel: Path, cfg: config.Config) -> None:
+    """Was die AI vom Ergebnis sieht (sicht.ergebnis): kein Name, kein Land des Kunden, kein Betrag."""
+    s = sicht.ergebnis(r)
+    typer.secho(f"Rechnung {s['nummer']}  (geschwärzt)", bold=True)
+    typer.echo(f"  Kunde           {s['kunde']}")
+    typer.echo(f"  Datum           {s['datum']}  ·  Leistung {s['leistungsdatum']}"
+               + (f" bis {s['leistungsdatum_bis']}" if s["leistungsdatum_bis"] else ""))
+    typer.echo(f"  Sprache         {s['sprache']}")
+    typer.echo(f"  Leistung        {s['leistung']['taetigkeit']}")
+    typer.echo(f"                  {s['leistung']['einordnung']}"
+               + (f", erbracht: {s['leistung']['ort']}" if s["leistung"]["ort"] else ""))
+    typer.echo(f"  Leistungsort    {s['leistungsort']}{' (manuell festgelegt)' if s['leistungsort_manuell'] else ''}")
+    typer.echo(f"  Ergebnis        {s['ergebnis']}")
+    typer.echo(f"  Regeln          {' '.join(s['regeln'])}  (RULES.md)")
+    typer.echo()
+    for p in s["positionen"]:
+        typer.echo(f"  {p['pos']}  {p['beschreibung']}")
+        typer.echo(f"     {p['menge']} {p['einheit']}   ({p['steuersatz']} %)")
+    for beleg in s["belege"]:
+        typer.echo(f"  Beleg: {beleg}")
+    typer.echo("\n  Preise und Beträge sind geschwärzt.")
+    for warnung in s["warnungen"]:
+        typer.secho(f"\n  Achtung: {warnung}", fg=typer.colors.YELLOW)
+    typer.echo(f"\n  geschrieben: {sicht.pfad(ziel, cfg)}")
+
+
+def _zeige(r: Resolved, ziel: Path, cfg: config.Config) -> None:
+    if sicht.aktiv():
+        _zeige_geschwaerzt(r, ziel, cfg)
+        return
     typer.secho(f"Rechnung {r.nummer}", bold=True)
     typer.echo(f"  Kunde           {r.kunde.firma} ({r.kunde.land})")
     typer.echo(f"  Datum           {r.datum}  ·  Leistung {r.leistungsdatum}"
@@ -174,7 +216,7 @@ def resolve(nummer: Annotated[str, typer.Argument(help="Rechnungsnummer, z. B. 2
         ergebnis, ziel = resolve_mod.resolve(cfg, nummer)
     except (resolve_mod.ResolveFehler, config.ConfigFehler, rules.RegelFehler) as e:
         raise _abbruch(e) from e
-    _zeige(ergebnis, ziel)
+    _zeige(ergebnis, ziel, cfg)
 
 
 @app.command()
@@ -191,7 +233,9 @@ def bauen(
         if festschreiben_mod.ist_festgeschrieben(ordner_vorab):
             raise festschreiben_mod.FestschreibFehler(
                 f"Rechnung {ordner_vorab.name} ist festgeschrieben und wird nicht neu gebaut.\n"
-                f"Für eine Korrektur: Stornorechnung und neue Rechnung."
+                f"Für eine Korrektur: Stornorechnung und neue Rechnung.",
+                art=meldung.AUSSERHALB,
+                geschwaerzt=f"Rechnung {ordner_vorab.name} ist festgeschrieben und wird nicht neu gebaut.",
             )
         ergebnis, json_ziel = resolve_mod.resolve(cfg, nummer)
         ordner = json_ziel.parent
@@ -201,10 +245,10 @@ def bauen(
             rules.RegelFehler, festschreiben_mod.FestschreibFehler) as e:
         raise _abbruch(e) from e
     if still:
-        typer.echo(str(pdf))
+        typer.echo(_pfad(pdf, cfg))
         return
-    _zeige(ergebnis, json_ziel)
-    typer.secho(f"\n  {'Pro forma' if pro_forma else 'PDF'}: {pdf}", fg=typer.colors.GREEN, bold=True)
+    _zeige(ergebnis, json_ziel, cfg)
+    typer.secho(f"\n  {'Pro forma' if pro_forma else 'PDF'}: {_pfad(pdf, cfg)}", fg=typer.colors.GREEN, bold=True)
     if pro_forma:
         typer.echo(f"  Nach dem Versand: rechnung pro-forma {ordner.name} --gesendet-am JJJJ-MM-TT")
 
@@ -240,7 +284,12 @@ def pruefen(
     breite = max(len(b.angabe) for b in liste)
     for b in liste:
         zeichen = SYMBOL[doctor_mod.OK if b.gefunden else doctor_mod.FEHLER]
-        zusatz = "" if b.gefunden else f"   gesucht: {b.gesucht!r}  ({b.paragraf} UStG)"
+        if b.gefunden:
+            zusatz = ""
+        elif sicht.aktiv():
+            zusatz = f"   ({b.paragraf} UStG; der gesuchte Text ist geschwärzt)"
+        else:
+            zusatz = f"   gesucht: {b.gesucht!r}  ({b.paragraf} UStG)"
         typer.echo(f" {zeichen} {b.angabe.ljust(breite)}{zusatz}")
 
     fehlend = [b for b in liste if not b.gefunden]
@@ -270,7 +319,7 @@ def begruendung(
     cfg = _config()
     try:
         ordner = _ordner_oder_nummer(cfg, nummer)
-        text, spur_passt = begruendung_mod.begruende(ordner)
+        text, spur_passt = begruendung_mod.begruende(ordner, geschwaerzt=sicht.aktiv())
     except (resolve_mod.ResolveFehler, begruendung_mod.BegruendungFehler, config.ConfigFehler, OSError) as e:
         raise _abbruch(e) from e
     typer.echo(text, nl=False)
@@ -294,9 +343,9 @@ def festschreiben(
     try:
         gesendet = date.fromisoformat(gesendet_am)
     except ValueError as e:
-        raise _abbruch(ValueError(f"--gesendet-am muss JJJJ-MM-TT sein: {e}")) from e
+        raise _abbruch(_eingabe(f"--gesendet-am muss JJJJ-MM-TT sein: {e}")) from e
     if gesendet > date.today():
-        raise _abbruch(ValueError(
+        raise _abbruch(_eingabe(
             f"--gesendet-am liegt in der Zukunft ({gesendet}). Festgeschrieben wird, was raus ist."))
     try:
         ordner = resolve_mod.finde_ordner(cfg, nummer)
@@ -326,9 +375,9 @@ def pro_forma(
     try:
         gesendet = date.fromisoformat(gesendet_am)
     except ValueError as e:
-        raise _abbruch(ValueError(f"--gesendet-am muss JJJJ-MM-TT sein: {e}")) from e
+        raise _abbruch(_eingabe(f"--gesendet-am muss JJJJ-MM-TT sein: {e}")) from e
     if gesendet > date.today():
-        raise _abbruch(ValueError(f"--gesendet-am liegt in der Zukunft ({gesendet})."))
+        raise _abbruch(_eingabe(f"--gesendet-am liegt in der Zukunft ({gesendet})."))
     try:
         ordner = resolve_mod.finde_ordner(cfg, nummer)
         eintrag = festschreiben_mod.pro_forma_festhalten(ordner, gesendet)
@@ -435,8 +484,8 @@ def demo(
             if zielordner.exists():
                 shutil.rmtree(zielordner)
             shutil.copytree(ordner, zielordner)
-            typer.echo(f" {SYMBOL[doctor_mod.OK]} {name}/{pdf.name}"
-                       f"  ({ergebnis.waehrung} {ergebnis.brutto})")
+            betrag = "" if sicht.aktiv() else f"  ({ergebnis.waehrung} {ergebnis.brutto})"
+            typer.echo(f" {SYMBOL[doctor_mod.OK]} {name}/{pdf.name}{betrag}")
             if pruefe:
                 befunde = pruefen_mod.pruefe(ergebnis, zielordner / pdf.name)
                 fehlend = [b for b in befunde if not b.gefunden]
@@ -445,7 +494,7 @@ def demo(
                            + ("" if not fehlend else "  fehlt: " + ", ".join(b.angabe for b in fehlend)))
                 if fehlend:
                     raise typer.Exit(1)
-    typer.secho(f"\n{len(DEMO)} Rechnungen in {ziel_pfad}", fg=typer.colors.GREEN, bold=True)
+    typer.secho(f"\n{len(DEMO)} Rechnungen in {_pfad(ziel_pfad)}", fg=typer.colors.GREEN, bold=True)
 
 
 def _demo_yaml(eintrag: dict) -> str:

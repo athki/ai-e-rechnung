@@ -70,6 +70,9 @@ schatten: hooks schatten-image
 		$(DOCKER_RUN) begruendung /gewerbe/demo-output/$$rechnung > /dev/null || exit 1; \
 	done
 	@echo "begruendung: alle Demo-Rechnungen grün"
+	@# Geschwärzte Sicht (RECHNUNG_GESCHWAERZT): dieselben Kommandos, ohne Namen und Beträge.
+	docker run --rm -e RECHNUNG_GESCHWAERZT=1 -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE) pruefen /gewerbe/demo-output/reverse-charge-exemple-sarl
+	docker run --rm -e RECHNUNG_GESCHWAERZT=1 -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE) begruendung /gewerbe/demo-output/reverse-charge-exemple-sarl > /dev/null
 	$(MAKE) beweise
 	@# Alte, unbenannte Images dieses Projekts wegräumen (Kennzeichnung im Dockerfile); fremde bleiben, der Build-Cache auch.
 	docker image prune -f --filter label=ai-e-rechnung=schatten

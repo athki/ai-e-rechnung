@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from rechnung import render
+from rechnung import meldung, render
 from rechnung.models import Resolved
 
 # Kennzeichnung der Pro forma, wie sie die Vorlage setzt (invoice.sty, Belegart proforma).
@@ -31,7 +31,7 @@ def pdf_pfad(ordner: Path, r: Resolved, pro_forma: bool = False) -> Path:
     return ordner / render.pdf_name(r.nummer, r.sprache, pro_forma)
 
 
-class PruefFehler(Exception):
+class PruefFehler(meldung.Fehler):
     pass
 
 
@@ -45,9 +45,11 @@ class Befund:
 
 def pdf_text(pdf: Path) -> str:
     if not shutil.which("pdftotext"):
-        raise PruefFehler("pdftotext fehlt – `rechnung doctor` sagt, wie es dazukommt.")
+        text = "pdftotext fehlt – `rechnung doctor` sagt, wie es dazukommt."
+        raise PruefFehler(text, geschwaerzt=text)
     if not pdf.is_file():
-        raise PruefFehler(f"PDF fehlt: {pdf}\nErst `rechnung bauen` ausführen.")
+        raise PruefFehler(f"PDF fehlt: {pdf}\nErst `rechnung bauen` ausführen.",
+                          geschwaerzt=f"PDF fehlt: {pdf.name}. Erst `rechnung bauen` ausführen.")
     aus = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True)
     if aus.returncode != 0:
         raise PruefFehler(f"pdftotext scheiterte an {pdf}: {aus.stderr.strip()}")

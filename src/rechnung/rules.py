@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
+from rechnung import meldung
 from rechnung.models import TAETIGKEITEN, Ergebnis, Kunde, Leistung, Stammdaten
 
 # EU-Mitgliedstaaten, Stand 2026-09-23. Vereinigtes Königreich seit 2021 Drittland.
@@ -76,7 +77,7 @@ REGELSATZ = Decimal(19)
 NULLSATZ = Decimal(0)
 
 
-class RegelFehler(Exception):
+class RegelFehler(meldung.Fehler):
     """Der Fall ist nicht entscheidbar oder die Angaben passen nicht zusammen."""
 
 
@@ -279,18 +280,36 @@ class Entscheidung:
     regeln: tuple[str, ...]
 
 
+def _kategorie_aus(land: str, quelle: str) -> str:
+    """`kategorie()` mit Art und geschwärzter Meldung je Herkunft des Landes.
+
+    Den Code in rechnung.yaml (Ort, festgelegter Leistungsort) hat die AI selbst geschrieben, er darf
+    in der Meldung stehen. Aus Kunden- und Ausstellerdatei steht nur, wo das Land fehlt.
+    """
+    try:
+        return kategorie(land)
+    except RegelFehler as e:
+        if quelle == "rechnung.yaml":
+            raise RegelFehler(str(e), art=meldung.EINGABE, geschwaerzt=str(e)) from None
+        raise RegelFehler(
+            str(e), art=meldung.STAMMDATEN,
+            geschwaerzt=f"Das Land in der {quelle} ist in rules.LAENDER nicht hinterlegt. Der Mensch "
+                        f"prüft den Ländercode.",
+        ) from None
+
+
 def merkmale(kunde: Kunde, leistung: Leistung, aussteller: Stammdaten, festgelegt: str | None = None) -> Merkmale:
     ort = leistung.ort
     return Merkmale(
-        kunde=kategorie(kunde.land),
+        kunde=_kategorie_aus(kunde.land, "Kundendatei"),
         unternehmer=kunde.unternehmer,
         kunde_ustid=bool(kunde.ustid),
         gruppe=EINORDNUNGEN[leistung.einordnung][0],
-        taetigkeit_ort=None if ort is None else ("online" if ort == "online" else kategorie(ort)),
+        taetigkeit_ort=None if ort is None else ("online" if ort == "online" else _kategorie_aus(ort, "rechnung.yaml")),
         kleinunternehmer=aussteller.kleinunternehmer,
         aussteller_ustid=bool(aussteller.ustid),
-        aussteller_inland=kategorie(aussteller.land) == INLAND,
-        festgelegt=None if festgelegt is None else kategorie(festgelegt),
+        aussteller_inland=_kategorie_aus(aussteller.land, "Ausstellerdatei") == INLAND,
+        festgelegt=None if festgelegt is None else _kategorie_aus(festgelegt, "rechnung.yaml"),
     )
 
 
@@ -305,7 +324,7 @@ def entscheide(
     m = merkmale(kunde, leistung, aussteller, festgelegt)
     k = kern(m)
     if isinstance(k, Abbruch):
-        raise RegelFehler(_meldung(k, kunde, festgelegt or leistung.ort))
+        raise _abbruch(k, kunde, festgelegt or leistung.ort)
     land = {
         ORT_KUNDE: kunde.land,
         ORT_TAETIGKEIT: leistung.ort,
@@ -324,12 +343,18 @@ def entscheide(
     )
 
 
-def _meldung(a: Abbruch, kunde: Kunde, ort: str | None) -> str:
+def _abbruch(a: Abbruch, kunde: Kunde, ort: str | None) -> RegelFehler:
+    """Der Abbruch aus `kern()` als Fehler: Meldung mit Kunde, Feld und Ausweg; geschwärzt ohne
+    Land und Werte aus Kunden- und Ausstellerdatei."""
     kuerzel = kunde.kuerzel or kunde.firma
+    datei = f"Kundendatei {kunde.kuerzel or '<kuerzel>'}.yaml"
     if a.grund == "aussteller_ausland":
-        return (
+        return RegelFehler(
             "stammdaten/ich.yaml: `land` ist nicht DE. Das Werkzeug bildet das deutsche "
-            "Umsatzsteuergesetz ab und rechnet nur für Aussteller mit Sitz in Deutschland (RULES.md R4)."
+            "Umsatzsteuergesetz ab und rechnet nur für Aussteller mit Sitz in Deutschland (RULES.md R4).",
+            art=meldung.AUSSERHALB,
+            geschwaerzt="Der Aussteller hat laut Ausstellerdatei keinen Sitz in Deutschland; das deckt das "
+                        "Werkzeug nicht ab (RULES.md R4).",
         )
     if a.grund == "unternehmer_fehlt":
         zeilen = [
@@ -341,23 +366,34 @@ def _meldung(a: Abbruch, kunde: Kunde, ort: str | None) -> str:
         ]
         if kategorie(kunde.land) == EU:
             zeilen.append("Ein Unternehmer in der EU braucht außerdem `ustid:` (§ 14a Abs. 1 UStG).")
-        return "\n".join(zeilen)
+        return RegelFehler(
+            "\n".join(zeilen), art=meldung.STAMMDATEN,
+            geschwaerzt=f"In der {datei} fehlt `unternehmer` (RULES.md R19). Der Mensch trägt es selbst "
+                        f"ein, nicht über den Chat.",
+        )
     if a.grund == "eu_privat":
-        return (
+        text = (
             f"Leistungsort {ort if ort and ort != 'online' else kunde.land} ist ein anderer EU-Staat, der "
             f"Kunde ist kein Unternehmer: Die Umsatzsteuer wäre dort zu erklären. Das deckt das Werkzeug "
             f"nicht ab (RULES.md R18)."
         )
+        return RegelFehler(text, art=meldung.AUSSERHALB, geschwaerzt=text)
     if a.grund == "kunde_ustid_fehlt":
-        return (
+        return RegelFehler(
             f"Kunde {kuerzel}, Land {kunde.land} (EU): `ustid` fehlt. Bei Steuerschuldnerschaft des "
             f"Leistungsempfängers gehört seine USt-IdNr. auf die Rechnung (§ 14a Abs. 1 UStG). In "
-            f"stammdaten/kunden/{kuerzel}.yaml ergänzen; ist der Kunde Privatperson: unternehmer: false."
+            f"stammdaten/kunden/{kuerzel}.yaml ergänzen; ist der Kunde Privatperson: unternehmer: false.",
+            art=meldung.STAMMDATEN,
+            geschwaerzt=f"In der {datei} fehlt `ustid` (§ 14a Abs. 1 UStG). Der Mensch trägt sie selbst "
+                        f"ein, nicht über den Chat.",
         )
-    return (
+    text = (
         "Eigene USt-IdNr. fehlt in stammdaten/ich.yaml: Bei Steuerschuldnerschaft des "
         "Leistungsempfängers gehört sie auf die Rechnung (§ 14a Abs. 1 UStG)."
     )
+    return RegelFehler(text, art=meldung.STAMMDATEN,
+                       geschwaerzt="Eigene USt-IdNr. fehlt in der Ausstellerdatei (§ 14a Abs. 1 UStG). "
+                                   "Der Mensch trägt sie selbst ein.")
 
 
 def frist_reverse_charge(leistung_bis: date) -> date:
@@ -408,7 +444,8 @@ def hinweis(e: Entscheidung, sprache: str = "de") -> dict[str, str] | None:
 
 def faelligkeit(datum: date, tage: int) -> date:
     if tage < 0:
-        raise RegelFehler(f"zahlungsziel_tage darf nicht negativ sein: {tage}")
+        text = f"zahlungsziel_tage darf nicht negativ sein: {tage}"
+        raise RegelFehler(text, geschwaerzt=text)
     return datum + timedelta(days=tage)
 
 
@@ -432,7 +469,8 @@ def nummer(format_: str, jahr: int, lfd: int) -> str:
     except (KeyError, IndexError, ValueError) as e:
         raise RegelFehler(
             f"nummer_format {format_!r} ist ungültig ({e}). Erlaubt sind die Platzhalter "
-            f"{{jahr}} und {{lfd}}, z. B. \"MM-{{jahr}}-{{lfd:04d}}\"."
+            f"{{jahr}} und {{lfd}}, z. B. \"MM-{{jahr}}-{{lfd:04d}}\".",
+            art=meldung.STAMMDATEN, geschwaerzt="nummer_format in der Config ist ungültig.",
         ) from e
 
 
@@ -467,5 +505,8 @@ def waehrung_erlaubt(waehrung: str, saetze: list[Decimal]) -> None:
         raise RegelFehler(
             f"Währung {waehrung} mit Umsatzsteuerausweis: Dann muss der Steuerbetrag zusätzlich "
             f"in Euro angegeben werden (amtlicher Umrechnungskurs, § 16 Abs. 6 UStG). Das kann "
-            f"das Werkzeug noch nicht. Entweder in EUR fakturieren oder die Einordnung prüfen."
+            f"das Werkzeug noch nicht. Entweder in EUR fakturieren oder die Einordnung prüfen.",
+            art=meldung.AUSSERHALB,
+            geschwaerzt="Fremdwährung mit Umsatzsteuerausweis: Dann muss der Steuerbetrag zusätzlich in Euro "
+                        "angegeben werden (§ 16 Abs. 6 UStG). Das kann das Werkzeug noch nicht.",
         )

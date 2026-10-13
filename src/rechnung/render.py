@@ -19,7 +19,7 @@ from pathlib import Path
 
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader, StrictUndefined
 
-from rechnung import rules, vorlage
+from rechnung import meldung, rules, vorlage
 from rechnung.models import Resolved
 
 VORLAGE = vorlage.STANDARD
@@ -57,7 +57,7 @@ ESCAPE = {
 }
 
 
-class RenderFehler(Exception):
+class RenderFehler(meldung.Fehler):
     pass
 
 
@@ -225,7 +225,9 @@ def baue_verzeichnis(r: Resolved, ziel: Path, belege_quelle: Path | None = None,
         if not quelle.is_file():
             raise RenderFehler(
                 f"Beleg fehlt: {quelle}\nEntweder die Datei nach belege/ legen oder den Eintrag "
-                f"aus rechnung.yaml entfernen."
+                f"aus rechnung.yaml entfernen.",
+                geschwaerzt=f"Beleg fehlt: belege/{beleg.datei}. Der Mensch legt die Datei ab, oder der "
+                            f"Eintrag kommt aus rechnung.yaml heraus.",
             )
         shutil.copy2(quelle, ziel / "attachments" / beleg.datei)
     return ziel / "rechnung.tex"
@@ -240,10 +242,9 @@ def baue_pdf(r: Resolved, ziel_ordner: Path, engine: str = "pdflatex",
     Eingefroren wird sie erst mit `rechnung pro-forma` (festschreiben.pro_forma_festhalten).
     """
     if vorlage.nachweis(eigene) != r.vorlage_eigen:
-        raise RenderFehler(
-            "Der eigene Vorlagen-Ordner hat sich seit dem Auflösen geändert – erst neu auflösen, "
-            "damit resolved.json festhält, womit gebaut wird."
-        )
+        text = ("Der eigene Vorlagen-Ordner hat sich seit dem Auflösen geändert – erst neu auflösen, "
+                "damit resolved.json festhält, womit gebaut wird.")
+        raise RenderFehler(text, geschwaerzt=text)
     with tempfile.TemporaryDirectory(prefix="rechnung-build-") as tmp:
         tmp_pfad = Path(tmp)
         tex = baue_verzeichnis(r, tmp_pfad, belege_quelle, eigene, pro_forma)
@@ -255,9 +256,11 @@ def baue_pdf(r: Resolved, ziel_ordner: Path, engine: str = "pdflatex",
         try:
             aus = subprocess.run(cmd, cwd=tmp_pfad, capture_output=True, text=True, timeout=600)
         except FileNotFoundError as e:
-            raise RenderFehler("latexmk nicht gefunden – `rechnung doctor` sagt, was fehlt.") from e
+            text = "latexmk nicht gefunden – `rechnung doctor` sagt, was fehlt."
+            raise RenderFehler(text, geschwaerzt=text) from e
         except subprocess.TimeoutExpired as e:
-            raise RenderFehler("latexmk hat zu lange gebraucht (600 s).") from e
+            raise RenderFehler("latexmk hat zu lange gebraucht (600 s).",
+                               geschwaerzt="latexmk hat zu lange gebraucht (600 s).") from e
 
         pdf = tmp_pfad / "rechnung.pdf"
         if aus.returncode != 0 or not pdf.is_file():
@@ -266,7 +269,11 @@ def baue_pdf(r: Resolved, ziel_ordner: Path, engine: str = "pdflatex",
         ziel_ordner.mkdir(parents=True, exist_ok=True)
         ziel = ziel_ordner / pdf_name(r.nummer, r.sprache, pro_forma)
         if ziel.exists() and not _beschreibbar(ziel):
-            raise RenderFehler(f"{ziel} ist schreibgeschützt – festgeschriebene Rechnungen werden nicht neu gebaut.")
+            raise RenderFehler(
+                f"{ziel} ist schreibgeschützt – festgeschriebene Rechnungen werden nicht neu gebaut.",
+                geschwaerzt=f"{ziel.name} ist schreibgeschützt – festgeschriebene Rechnungen werden nicht "
+                            f"neu gebaut.",
+            )
         shutil.copy2(pdf, ziel)
         # Sprache gewechselt: die Datei mit dem anderen Präfix ist veraltet.
         for sprache in PRAEFIX:

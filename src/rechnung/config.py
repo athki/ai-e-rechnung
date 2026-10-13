@@ -11,6 +11,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rechnung import meldung
+
 REPO = Path(__file__).resolve().parents[2]
 BEISPIEL_STAMMDATEN = REPO / "stammdaten.example"
 
@@ -37,8 +39,8 @@ DEFAULTS: dict[str, object] = {
 UNTERORDNER = ("stammdaten", "kunden", "ausgang", "steuerberater")
 
 
-class ConfigFehler(Exception):
-    pass
+class ConfigFehler(meldung.Fehler):
+    art = meldung.STAMMDATEN
 
 
 def config_pfad(env: dict[str, str] | None = None) -> Path:

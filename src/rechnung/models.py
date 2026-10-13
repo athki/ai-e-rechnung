@@ -164,6 +164,14 @@ class Position(Basis):
 
     _zahlen = field_validator("menge", "einzelpreis", "steuersatz", mode="before")(_dezimal)
 
+    @field_validator("beschreibung", mode="before")
+    @classmethod
+    def _beschreibung_pflicht(cls, v: object) -> object:
+        # `rechnung neu` lässt das Feld ohne --taetigkeit leer; die Meldung soll sagen, was hineingehört.
+        if v in (None, ""):
+            raise ValueError("beschreibung fehlt: was geleistet wurde, wie es auf der Rechnung stehen soll")
+        return v
+
     @field_validator("steuersatz")
     @classmethod
     def _satz_erlaubt(cls, v: Decimal | None) -> Decimal | None:

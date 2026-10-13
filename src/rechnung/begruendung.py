@@ -19,7 +19,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from rechnung import config, festschreiben, resolve, rules
+from rechnung import config, festschreiben, meldung, resolve, rules
 from rechnung.models import Resolved
 
 RULES_MD = config.REPO / "RULES.md"
@@ -49,7 +49,7 @@ ORT_QUELLE_TEXT = {
 HINWEIS_REGEL = {"kleinunternehmer": "R16", "reverse_charge": "R28", "nicht_steuerbar": "R31"}
 
 
-class BegruendungFehler(Exception):
+class BegruendungFehler(meldung.Fehler):
     """Die Begründung lässt sich nicht erstellen (Datei fehlt, RULES.md hat nicht die erwartete Form)."""
 
 
@@ -173,6 +173,7 @@ class Spur:
     ort_quelle: str | None        # aus kern(); None, wenn die Entscheidung heute nicht zustande kommt
     ort_regeln: tuple[str, ...]
     abweichung: str | None
+    abweichung_geschwaerzt: str | None = None   # ohne Werte aus Kunden- und Ausstellerdatei
 
 
 def _festgelegt(r: Resolved) -> str | None:
@@ -185,7 +186,8 @@ def spur_pruefen(r: Resolved) -> Spur:
         e = rules.entscheide(r.kunde, r.leistung, r.aussteller, _festgelegt(r))
         k = rules.kern(rules.merkmale(r.kunde, r.leistung, r.aussteller, _festgelegt(r)))
     except rules.RegelFehler as f:
-        return Spur(False, None, (), f"Heute bricht das Werkzeug auf diesen Fakten ab: {f}")
+        kopf = "Heute bricht das Werkzeug auf diesen Fakten ab: "
+        return Spur(False, None, (), kopf + str(f), kopf + (f.geschwaerzt or "Meldung zurückgehalten."))
     assert isinstance(k, rules.KernErgebnis)   # sonst hätte entscheide() abgebrochen
     unterschiede = []
     regeln = resolve.regel_trace(e, r.waehrung)
@@ -199,7 +201,9 @@ def spur_pruefen(r: Resolved) -> Spur:
         satz = rules.satz_position(int(e.satz), r.aussteller.kleinunternehmer, p.steuersatz == 7)
         if isinstance(satz, rules.Abbruch) or satz != p.steuersatz:
             unterschiede.append(f"Position {p.pos}: Satz heute {satz}, in der Datei {p.steuersatz}")
-    return Spur(not unterschiede, k.ort_quelle, e.ort.regeln, "; ".join(unterschiede) or None)
+    # Regeln, Ergebnis, Leistungsort und Satz sind für die AI sichtbar; die Abweichung ist schon geschwärzt.
+    abweichung = "; ".join(unterschiede) or None
+    return Spur(not unterschiede, k.ort_quelle, e.ort.regeln, abweichung, abweichung)
 
 
 # ---------------------------------------------------------------- Text
@@ -226,7 +230,13 @@ def _ja_nein(wert: bool | None) -> str:
     return "nicht angegeben" if wert is None else ("ja" if wert else "nein")
 
 
-def fakten(r: Resolved) -> list[tuple[str, str, str, str]]:
+# Zeilen der Fakten aus Kunden- und Ausstellerdatei: geschwärzt erscheinen Wert und Lesart nicht.
+PRIVATE_FAKTEN = ("Land des Kunden", "Unternehmer", "USt-IdNr. des Kunden", "Sitz des Ausstellers",
+                  "Kleinunternehmer", "USt-IdNr. des Ausstellers")
+GESCHWAERZT = "(geschwärzt)"
+
+
+def fakten(r: Resolved, geschwaerzt: bool = False) -> list[tuple[str, str, str, str]]:
     """Die Angaben, auf denen entschieden wurde: (Angabe, Herkunft, Wert, was das Werkzeug daraus liest)."""
     kunde = f"kunden/{r.kunde.kuerzel or '<kuerzel>'}.yaml"
     gruppe, fundstelle = rules.EINORDNUNGEN[r.leistung.einordnung]
@@ -245,6 +255,8 @@ def fakten(r: Resolved) -> list[tuple[str, str, str, str]]:
          "§ 19 UStG" if r.aussteller.kleinunternehmer else ""),
         ("USt-IdNr. des Ausstellers", "`ich.yaml: ustid`", r.aussteller.ustid or "–", ""),
     ]
+    if geschwaerzt:
+        zeilen = [(a, h, GESCHWAERZT, "") if a in PRIVATE_FAKTEN else (a, h, w, l) for a, h, w, l in zeilen]
     if r.leistungsort_manuell:
         zeilen.append(("Leistungsort festgelegt", "`rechnung.yaml: leistungsort`", r.leistungsort,
                        f"{_kategorie(r.leistungsort)} (R37)"))
@@ -292,8 +304,8 @@ SCHLUSS_FESTLEGUNG = """
 
 
 def text(r: Resolved, regeln: dict[str, Regel], quellen: dict[str, str], st: Stand, spur: Spur,
-         heute: str) -> str:
-    """Die Begründung als Markdown."""
+         heute: str, geschwaerzt: bool = False) -> str:
+    """Die Begründung als Markdown; `geschwaerzt` ohne Namen und Werte aus Kunden- und Ausstellerdatei."""
     fehlend = [rid for rid in r.regeln if rid not in regeln]
     if fehlend:
         raise BegruendungFehler(f"RULES.md hat keinen Eintrag für {', '.join(fehlend)} (Regeln der Spur).")
@@ -315,7 +327,8 @@ def text(r: Resolved, regeln: dict[str, Regel], quellen: dict[str, str], st: Sta
         spurtext = "geprüft – `rules.entscheide()` kommt auf denselben Fakten heute zu derselben Entscheidung."
     else:
         spurtext = "**weicht ab**"
-        achtung.append(f"Die Spur in der Datei passt nicht zur heutigen Entscheidung: {spur.abweichung}")
+        abweichung = spur.abweichung_geschwaerzt if geschwaerzt else spur.abweichung
+        achtung.append(f"Die Spur in der Datei passt nicht zur heutigen Entscheidung: {abweichung}")
     achtung += [f"Warnung aus `resolve`: {w}" for w in r.warnungen]
 
     ort = _land(r.leistungsort)
@@ -325,7 +338,7 @@ def text(r: Resolved, regeln: dict[str, Regel], quellen: dict[str, str], st: Sta
         f"# Begründung der Steuerentscheidung – Rechnung {r.nummer}",
         "",
         f"- **Dokument:** {st.dokument}",
-        f"- **Kunde:** {r.kunde.firma} ({r.kunde.land})",
+        f"- **Kunde:** `{r.kunde.kuerzel}`" if geschwaerzt else f"- **Kunde:** {r.kunde.firma} ({r.kunde.land})",
         f"- **Ergebnis:** `{r.ergebnis}`",
         f"- **Leistungsort:** {ort}",
     ]
@@ -343,9 +356,10 @@ def text(r: Resolved, regeln: dict[str, Regel], quellen: dict[str, str], st: Sta
     teile.append(
         "## Fakten\n\n"
         "Angegeben von Mensch oder AI, vom Werkzeug nicht geprüft. Die Werte stammen aus "
-        "`rechnung.resolved.json`, also aus Kunden- und Stammdaten im Stand des Auflösens.\n\n"
+        "`rechnung.resolved.json`, also aus Kunden- und Stammdaten im Stand des Auflösens."
+        + (" Werte aus Kunden- und Ausstellerdatei sind geschwärzt." if geschwaerzt else "") + "\n\n"
         "| Angabe | Herkunft | Wert | Das Werkzeug liest daraus |\n| --- | --- | --- | --- |\n"
-        + "\n".join(f"| {' | '.join(_zelle(w) for w in z)} |" for z in fakten(r))
+        + "\n".join(f"| {' | '.join(_zelle(w) for w in z)} |" for z in fakten(r, geschwaerzt))
     )
 
     kette = ["## Regeln in der Reihenfolge der Spur", "",
@@ -380,19 +394,19 @@ def text(r: Resolved, regeln: dict[str, Regel], quellen: dict[str, str], st: Sta
 def lade(ordner: Path) -> Resolved:
     pfad = ordner / resolve.RESOLVED_DATEI
     if not pfad.is_file():
-        raise BegruendungFehler(
-            f"{pfad} fehlt. Erst `rechnung resolve {ordner.name}` ausführen. Bricht das ab, wurde nichts "
-            f"entschieden; die Meldung nennt dann Regel und Feld."
-        )
+        text = (f"fehlt. Erst `rechnung resolve {ordner.name}` ausführen. Bricht das ab, wurde nichts "
+                f"entschieden; die Meldung nennt dann Regel und Feld.")
+        raise BegruendungFehler(f"{pfad} {text}", geschwaerzt=f"{pfad.name} {text}")
     try:
         return Resolved.model_validate(json.loads(pfad.read_text(encoding="utf-8")))
     except (ValueError, ValidationError) as e:
         raise BegruendungFehler(f"{pfad} ist nicht lesbar: {e}") from e
 
 
-def begruende(ordner: Path) -> tuple[str, bool]:
+def begruende(ordner: Path, geschwaerzt: bool = False) -> tuple[str, bool]:
     """Begründung für den Rechnungsordner (auch `pro-forma/<n>`); zweiter Wert: passt die Spur?"""
     r = lade(ordner)
     regeln, quellen = regeln_laden()
     spur = spur_pruefen(r)
-    return text(r, regeln, quellen, stand(ordner, r), spur, resolve.vorlage_version()), spur.passt
+    return (text(r, regeln, quellen, stand(ordner, r), spur, resolve.vorlage_version(), geschwaerzt),
+            spur.passt)

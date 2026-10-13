@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from datetime import date, datetime
 from decimal import Decimal
@@ -16,7 +17,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from rechnung import config, rules, vorlage
+from rechnung import config, meldung, rules, sicht, vorlage
 from rechnung.models import (
     Input,
     Kunde,
@@ -26,13 +27,13 @@ from rechnung.models import (
     Stammdaten,
     Steuergruppe,
 )
-from rechnung.models import EINHEITEN
+from rechnung.models import EINHEITEN, PLATZHALTER
 
 INPUT_DATEI = "rechnung.yaml"
 RESOLVED_DATEI = "rechnung.resolved.json"
 
 
-class ResolveFehler(Exception):
+class ResolveFehler(meldung.Fehler):
     """Fachlicher Fehler mit einer Meldung, die sagt, was zu tun ist."""
 
 
@@ -62,13 +63,37 @@ _YAML_ERKLAERUNG: list[tuple[str, str]] = [
 ]
 
 
+def _herkunft(pfad: Path) -> tuple[str, str]:
+    """Wie eine Datei in der geschwärzten Meldung heißt, und wer bei einem Fehler darin handelt.
+
+    rechnung.yaml schreibt die AI selbst, ihr Inhalt ist für sie sichtbar. Kunden- und
+    Ausstellerdatei pflegt der Mensch; aus ihnen erscheint in der geschwärzten Meldung kein Wert.
+    """
+    if pfad.name == INPUT_DATEI:
+        return INPUT_DATEI, meldung.EINGABE
+    if pfad.name == "ich.yaml":
+        return "Ausstellerdatei ich.yaml", meldung.STAMMDATEN
+    return f"Kundendatei {pfad.stem}.yaml", meldung.STAMMDATEN
+
+
+def _dateifehler(pfad: Path, text: str, ohne_werte: str | None = None) -> ResolveFehler:
+    """Meldung zu einer Datei; geschwärzt mit dem Namen statt dem Pfad.
+
+    Bei rechnung.yaml ist die geschwärzte Fassung dieselbe Meldung; bei Kunden- und
+    Ausstellerdatei `ohne_werte`, die keinen Inhalt der Datei wiedergibt.
+    """
+    name, art = _herkunft(pfad)
+    geschwaerzt = text if art == meldung.EINGABE else (ohne_werte or text)
+    return ResolveFehler(f"{pfad}{text}", art=art, geschwaerzt=f"{name}{geschwaerzt}")
+
+
 def _yaml_fehler(pfad: Path, text: str, e: yaml.YAMLError) -> ResolveFehler:
     """Eine YAML-Syntaxmeldung, die man ohne Traceback versteht: Ort, Zeile, Erklärung."""
     mark = getattr(e, "problem_mark", None)
     roh = " ".join(str(t) for t in (getattr(e, "context", None), getattr(e, "problem", None)) if t)
     erklaerung = next((d for muster, d in _YAML_ERKLAERUNG if muster in roh), "YAML-Syntax ist ungültig.")
     if mark is None:
-        return ResolveFehler(f"{pfad}: {erklaerung}\n  (YAML: {roh or e})")
+        return _dateifehler(pfad, f": {erklaerung}\n  (YAML: {roh or e})", f": {erklaerung}")
     zeile, spalte = mark.line + 1, mark.column + 1
     zeilen = text.splitlines()
     # Steht der Fehler am Dateiende, ist die letzte Zeile mit Inhalt die interessante.
@@ -77,25 +102,30 @@ def _yaml_fehler(pfad: Path, text: str, e: yaml.YAMLError) -> ResolveFehler:
         nr -= 1
     auszug = zeilen[nr - 1] if zeilen else ""
     zeiger = " " * (spalte - 1) + "^" if nr == zeile else ""
-    meldung = [f"{pfad}, Zeile {zeile}, Spalte {spalte}: {erklaerung}", f"  {nr:>4} | {auszug}"]
+    kopf = f", Zeile {zeile}, Spalte {spalte}: {erklaerung}"
+    zeilen_ = [kopf, f"  {nr:>4} | {auszug}"]
     if zeiger:
-        meldung.append(f"       | {zeiger}")
-    meldung.append(f"  (YAML: {roh})")
-    return ResolveFehler("\n".join(meldung))
+        zeilen_.append(f"       | {zeiger}")
+    zeilen_.append(f"  (YAML: {roh})")
+    return _dateifehler(pfad, "\n".join(zeilen_), kopf)
 
 
 def _yaml(pfad: Path) -> dict:
     if not pfad.is_file():
-        raise ResolveFehler(f"Datei fehlt: {pfad}")
+        name, art = _herkunft(pfad)
+        raise ResolveFehler(f"Datei fehlt: {pfad}", art=art, geschwaerzt=f"Datei fehlt: {name}")
     text = pfad.read_text(encoding="utf-8")
     try:
         daten = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise _yaml_fehler(pfad, text, e) from None
     if daten is None:
-        raise ResolveFehler(f"Datei ist leer: {pfad}")
+        name, art = _herkunft(pfad)
+        raise ResolveFehler(f"Datei ist leer: {pfad}", art=art, geschwaerzt=f"Datei ist leer: {name}")
     if not isinstance(daten, dict):
-        raise ResolveFehler(f"Datei muss ein YAML-Objekt enthalten: {pfad}")
+        name, art = _herkunft(pfad)
+        raise ResolveFehler(f"Datei muss ein YAML-Objekt enthalten: {pfad}", art=art,
+                            geschwaerzt=f"Datei muss ein YAML-Objekt enthalten: {name}")
     return daten
 
 
@@ -117,21 +147,38 @@ def _wert(wert: object) -> str:
     return str(wert)
 
 
+# Fehlt eines davon, kennt die Antwort nur der Mensch: Art `frage`, nie raten.
+FRAGE_MUSTER = re.compile(r"^(leistungsdatum|leistung|taetigkeit|einordnung|ort) fehlt")
+
+
 def _fehler(pfad: Path, e: ValidationError) -> ResolveFehler:
-    zeilen = [f"{pfad}:"]
+    name, art = _herkunft(pfad)
+    zeilen, geschwaerzt = [f"{pfad}:"], [f"{name}:"]
+    fragen = []
     for f in e.errors():
         feld = ".".join(str(t) for t in f["loc"])
         msg = f["msg"].removeprefix("Value error, ")
+        fragen.append(bool(FRAGE_MUSTER.match(msg)))
         wert = f.get("input")
+        ohne = msg
         # Den Wert nur zeigen, wenn er zum Feld gehört: nicht bei fehlenden Feldern und nicht bei
         # Prüfungen über das ganze Objekt, deren input die ganze Datei ist.
         if f["type"] != "missing" and f["loc"] and not (isinstance(wert, dict) and not _klammer_dict(wert)):
             msg += f" (Wert: {_wert(wert)})"
+            if art == meldung.EINGABE and not (f["loc"] and f["loc"][-1] in sicht.PRIVATE_FELDER):
+                ohne = msg
+        if art != meldung.EINGABE:
+            ohne = PLATZHALTER.sub("{…}", ohne)
         zeilen.append(f"  {feld}: {msg}" if f["loc"] else f"  {msg}")
+        geschwaerzt.append(f"  {feld}: {ohne}" if f["loc"] else f"  {ohne}")
         if _klammer_dict(wert):
-            zeilen.append("    → Geschweifte Klammern entfernen: {…} am Anfang eines Werts macht YAML "
-                          "zu einem Dictionary. Platzhalter durch den echten Wert ersetzen.")
-    return ResolveFehler("\n".join(zeilen))
+            hinweis = ("    → Geschweifte Klammern entfernen: {…} am Anfang eines Werts macht YAML "
+                       "zu einem Dictionary. Platzhalter durch den echten Wert ersetzen.")
+            zeilen.append(hinweis)
+            geschwaerzt.append(hinweis)
+    if art == meldung.EINGABE and fragen and all(fragen):
+        art = meldung.FRAGE
+    return ResolveFehler("\n".join(zeilen), art=art, geschwaerzt="\n".join(geschwaerzt))
 
 
 def stammdaten_ordner(cfg: config.Config, beispiel: bool = False) -> Path:
@@ -152,7 +199,9 @@ def lade_stammdaten(cfg: config.Config, beispiel: bool = False) -> Stammdaten:
     if not pfad.is_file():
         raise ResolveFehler(
             f"Stammdaten fehlen: {pfad}\n"
-            f"`rechnung init --stammdaten` legt dort ein ausgefülltes Gerüst an."
+            f"`rechnung init --stammdaten` legt dort ein ausgefülltes Gerüst an.",
+            art=meldung.STAMMDATEN,
+            geschwaerzt="Stammdaten fehlen: Ausstellerdatei ich.yaml. Der Mensch legt sie an.",
         )
     try:
         return Stammdaten.model_validate(_yaml(pfad))
@@ -166,7 +215,9 @@ def lade_kunde(cfg: config.Config, kuerzel: str, beispiel: bool = False) -> Kund
         vorhanden = sorted(p.stem for p in kunden_ordner(cfg, beispiel).glob("*.yaml"))
         raise ResolveFehler(
             f"Kunde {kuerzel!r} nicht gefunden: {pfad}\n"
-            f"Vorhanden: {', '.join(vorhanden) or '(keine)'}"
+            f"Vorhanden: {', '.join(vorhanden) or '(keine)'}",
+            art=meldung.FRAGE,
+            geschwaerzt=f"Kunde {kuerzel!r} nicht gefunden. Den Kunden wählt der Mensch.",
         )
     try:
         kunde = Kunde.model_validate(_yaml(pfad))
@@ -202,16 +253,19 @@ def finde_ordner(cfg: config.Config, nummer: str) -> Path:
     if not treffer:
         treffer = [p for p in sorted(wurzel.glob("*/*")) if p.is_dir() and p.name.endswith(nummer)]
     if not treffer:
-        raise ResolveFehler(f"Keine Rechnung {nummer!r} unter {wurzel}")
+        raise ResolveFehler(f"Keine Rechnung {nummer!r} unter {wurzel}", art=meldung.EINGABE,
+                            geschwaerzt=f"Keine Rechnung {nummer!r} im Gewerbe-Ordner.")
     if len(treffer) > 1:
         namen = ", ".join(p.name for p in treffer)
-        raise ResolveFehler(f"{nummer!r} ist mehrdeutig: {namen}")
+        text = f"{nummer!r} ist mehrdeutig: {namen}"
+        raise ResolveFehler(text, art=meldung.EINGABE, geschwaerzt=text)
     return treffer[0]
 
 
 LEISTUNGSDATUM_PFLICHT = "# PFLICHT: Tag der Leistung, JJJJ-MM-TT"
 TAETIGKEIT_PFLICHT = "# PFLICHT: was geleistet wird, in eigenen Worten"
 EINORDNUNG_PFLICHT = "# PFLICHT: ein Wort aus der Liste unten"
+BESCHREIBUNG_PFLICHT = "# PFLICHT: was geleistet wurde, wie es auf der Rechnung steht"
 ORT_KOMMENTAR = "# nur bei kulturell … unterhaltend: Land (z. B. GB) oder online"
 
 
@@ -307,12 +361,13 @@ def neu(
     Still das Rechnungsdatum einzusetzen hieße, eine Pflichtangabe zu raten. Ebenso die Einordnung
     der Leistung: ohne Angabe bleibt `leistung:` leer, mit der Liste der Begriffe als Kommentar.
     """
-    kunde = lade_kunde(cfg, kuerzel)
+    lade_kunde(cfg, kuerzel)   # bricht ab, wenn es den Kunden nicht gibt oder die Datei ungültig ist
     datum = datum or date.today()
     nummer = neue_nummer(cfg, datum.year)
     ordner = jahresordner(cfg, datum.year) / nummer
     if ordner.exists():
-        raise ResolveFehler(f"Ordner existiert schon: {ordner}")
+        raise ResolveFehler(f"Ordner existiert schon: {ordner}",
+                            geschwaerzt=f"Der Ordner für {nummer} existiert schon.")
     ordner.mkdir(parents=True)
     (ordner / "belege").mkdir()
 
@@ -332,7 +387,9 @@ def neu(
             sprache_zeile=sprache_zeile,
             waehrung_zeile=waehrung_zeile,
             zahlungsziel=cfg.zahlungsziel_tage,
-            beschreibung=f"Leistung für {kunde.firma}",
+            # Kein Kundenname: rechnung.yaml enthält nur, was die AI sehen darf (sicht.EINSTUFUNG).
+            beschreibung=json.dumps(taetigkeit, ensure_ascii=False) if taetigkeit
+            else f"            {BESCHREIBUNG_PFLICHT}",
         ),
         encoding="utf-8",
     )
@@ -384,10 +441,9 @@ def rechne(
     for i, p in enumerate(eingabe.positionen, start=1):
         satz = rules.satz_position(int(basissatz), stammdaten.kleinunternehmer, p.steuersatz is not None)
         if isinstance(satz, rules.Abbruch):
-            raise ResolveFehler(
-                f"Position {i}: steuersatz ist gesetzt, aber das Ergebnis {entscheidung.ergebnis} weist "
-                f"keine deutsche Umsatzsteuer aus (RULES.md {satz.regel}). Den Satz aus der Position entfernen."
-            )
+            text = (f"Position {i}: steuersatz ist gesetzt, aber das Ergebnis {entscheidung.ergebnis} weist "
+                    f"keine deutsche Umsatzsteuer aus (RULES.md {satz.regel}). Den Satz aus der Position entfernen.")
+            raise ResolveFehler(text, art=meldung.AUSSERHALB, geschwaerzt=text)
         satz = Decimal(satz)
         positionen.append(
             ResolvedPosition(

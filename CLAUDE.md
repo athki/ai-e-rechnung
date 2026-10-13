@@ -150,9 +150,21 @@ Beträge ausrechnen; festgeschriebene Rechnungen anfassen; echte Daten in Tests,
 Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Regeln in
 `.claude/settings.json`, Pydantic-Schema, Freeze). Sie stehen hier, damit es gar nicht erst versucht wird.
 
+Geschwärzte Sicht (`sicht.py`, Schalter `RECHNUNG_GESCHWAERZT`, nur als Env, fail-closed): Die AI
+weiß, was geleistet wurde und wie viel davon, nie, wer beteiligt ist und was es kostet. Unter dem
+Schalter geben `resolve`, `bauen`, `pruefen`, `begruendung` und `neu` keine Namen, Anschriften, Werte
+aus Kunden- oder Ausstellerdatei, Beträge oder absoluten Pfade aus (`<gewerbe>/…`). Abbrüche kommen
+als `Abbruch (<art>): …` mit einer der Arten aus `meldung.py` (`eingabe`, `frage`, `stammdaten`,
+`ausserhalb`); eine Meldung ohne geschwärzte Fassung wird zurückgehalten. Jedes Feld von
+`rechnung.yaml` ist in `sicht.EINSTUFUNG` als „ai“ oder „privat“ eingestuft (Test). Der Hook sperrt
+unter dem Schalter auch das Lesen in den Gewerbe-Wurzeln (Env und config.toml): Stammdaten,
+resolved.json, PDFs, status.yaml, `pro-forma/`, `belege/`; Repo und `stammdaten.example/` bleiben frei.
+Lesen über Bash ist damit nicht ganz gesperrt – echte Durchsetzung kommt mit dem MCP-Server. Den
+Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
+
 ## Technik
 
-- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,rules,resolve,render,vorlage,pruefen,festschreiben,begruendung,doctor,cli}.py`
+- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,resolve,render,vorlage,pruefen,festschreiben,begruendung,sicht,doctor,cli}.py`
 - `pydantic` v2 mit `extra="forbid"` auf allen Modellen; `typer` für die CLI; `pyyaml`
 - `jinja2` mit LaTeX-Delimitern (`\VAR{ }`, `\BLOCK{ }`, `\#{ }`) und `StrictUndefined`
 - LaTeX: `latexmk -interaction=nonstopmode -no-shell-escape -outdir=<tmp>`; Engine `pdflatex`,

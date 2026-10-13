@@ -116,3 +116,104 @@ def test_settings_json_deny_regeln():
         assert f"Edit(//**/{muster})" in deny
     befehl = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert befehl.endswith(".claude/hooks/schutz.sh")
+    assert set(settings["hooks"]["PreToolUse"][0]["matcher"].split("|")) >= {"Read", "Grep", "Glob", "Bash"}
+
+
+# ---------------------------------------------------------------- Lesesperre unter RECHNUNG_GESCHWAERZT
+
+def lesen(tmp_path, werkzeug, schalter="1", echt=None, cwd=None, **tool_input):
+    """Hook mit Test-Wurzel <tmp>/Gewerbe-Test aus der Env und, falls angegeben, echter Wurzel aus config.toml.
+
+    Läuft unter /bin/bash: auf macOS ist das Bash 3.2, und der Hook muss dort laufen.
+    """
+    toml = tmp_path / "config.toml"
+    toml.write_text(f'gewerbe = "{echt}"\n' if echt else "", encoding="utf-8")
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path),
+           "RECHNUNG_CONFIG": str(toml), "RECHNUNG_GEWERBE": str(tmp_path / "Gewerbe-Test")}
+    if schalter is not None:
+        env["RECHNUNG_GESCHWAERZT"] = schalter
+    eingabe = {"tool_name": werkzeug, "tool_input": tool_input}
+    if cwd:
+        eingabe["cwd"] = str(cwd)
+    return subprocess.run(["/bin/bash", str(HOOK)], input=json.dumps(eingabe), capture_output=True,
+                          text=True, env=env)
+
+
+@pytest.fixture
+def wurzeln(tmp_path):
+    for w in ("Gewerbe-Test", "Gewerbe"):
+        (tmp_path / w / "stammdaten" / "kunden").mkdir(parents=True)
+        (tmp_path / w / "rechnung-ausgang" / "2026" / "2026-0001" / "belege").mkdir(parents=True)
+    return tmp_path
+
+
+RE = "rechnung-ausgang/2026/2026-0001"
+
+
+@pytest.mark.parametrize("rel", [
+    "stammdaten/ich.yaml", "stammdaten/kunden/muster.yaml", f"{RE}/rechnung.resolved.json",
+    f"{RE}/rechnung_2026-0001.pdf", f"{RE}/status.yaml", f"{RE}/pro-forma/1/rechnung.yaml",
+    f"{RE}/belege/hotel.jpg", f"{RE}/../../../stammdaten/ich.yaml",
+])
+@pytest.mark.parametrize("wurzel", ["Gewerbe-Test", "Gewerbe"])
+def test_read_in_beiden_wurzeln_gesperrt(wurzeln, wurzel, rel):
+    aus = lesen(wurzeln, "Read", echt=wurzeln / "Gewerbe", file_path=str(wurzeln / wurzel / rel))
+    assert aus.returncode == 2, aus.stderr
+    assert "RECHNUNG_GESCHWAERZT" in aus.stderr
+
+
+@pytest.mark.parametrize("pfad", [
+    f"Gewerbe-Test/{RE}/rechnung.yaml",
+    "demo-output/inland-muster-gmbh/rechnung_DEMO-2026-0001.pdf",
+    "stammdaten.example/ich.yaml",
+])
+def test_read_erlaubt(wurzeln, pfad):
+    assert lesen(wurzeln, "Read", echt=wurzeln / "Gewerbe", file_path=str(wurzeln / pfad)).returncode == 0
+
+
+def test_ohne_schalter_liest_der_hook_nicht_mit(wurzeln):
+    for schalter in (None, "", "0"):
+        aus = lesen(wurzeln, "Read", schalter=schalter,
+                    file_path=str(wurzeln / "Gewerbe-Test" / "stammdaten" / "ich.yaml"))
+        assert aus.returncode == 0, schalter
+
+
+def test_grep_und_glob_ueber_die_wurzel(wurzeln):
+    assert lesen(wurzeln, "Grep", pattern="x", path=str(wurzeln)).returncode == 2
+    assert lesen(wurzeln, "Grep", pattern="x", path=str(wurzeln / "Gewerbe-Test" / RE)).returncode == 2
+    assert lesen(wurzeln, "Glob", pattern=f"{wurzeln}/Gewerbe-Test/**/*.yaml").returncode == 2
+    assert lesen(wurzeln, "Grep", pattern="x", path=str(REPO)).returncode == 0
+    assert lesen(wurzeln, "Glob", pattern="**/*.py", path=str(REPO)).returncode == 0
+
+
+@pytest.mark.parametrize(("befehl", "code"), [
+    ("cat ~/Gewerbe-Test/stammdaten/ich.yaml", 2),
+    ("cat $RECHNUNG_GEWERBE/stammdaten/kunden/a.yaml", 2),
+    ("pdftotext ~/Gewerbe-Test/" + RE + "/rechnung_2026-0001.pdf -", 2),
+    ("ls ~/Gewerbe-Test", 2),
+    ("find ~/Gewerbe-Test/rechnung-ausgang/ -name x", 2),
+    ("cat ~/Gewerbe/stammdaten/ich.yaml", 2),
+    ("RECHNUNG_GESCHWAERZT=0 rechnung resolve 0001", 2),
+    ("RECHNUNG_GESCHWAERZT= rechnung resolve 0001", 2),
+    ('RECHNUNG_GESCHWAERZT="" rechnung resolve 0001', 2),
+    ("docker run -e RECHNUNG_GESCHWAERZT=1 rechnung pruefen x", 0),
+    ("export RECHNUNG_GEWERBE=/anderswo", 2),
+    ("env -u RECHNUNG_GESCHWAERZT rechnung resolve 0001", 2),
+    ("unset RECHNUNG_GESCHWAERZT; rechnung resolve 0001", 2),
+    ("cat ~/Gewerbe-Test/" + RE + "/rechnung.yaml", 0),
+    ("cat $RECHNUNG_GEWERBE/" + RE + "/rechnung.yaml", 0),
+    ("uv run rechnung begruendung 0001", 0),
+    ("rechnung pruefen 0001", 0),
+    ("printenv RECHNUNG_GEWERBE", 0),
+    ("uv run pytest -q", 0),
+])
+def test_bash_lesesperre(wurzeln, befehl, code):
+    aus = lesen(wurzeln, "Bash", echt=wurzeln / "Gewerbe", command=befehl)
+    assert aus.returncode == code, aus.stderr
+
+
+def test_bash_in_der_wurzel(wurzeln):
+    ordner = wurzeln / "Gewerbe-Test"
+    assert lesen(wurzeln, "Bash", cwd=ordner, command="cat stammdaten/ich.yaml").returncode == 2
+    assert lesen(wurzeln, "Bash", cwd=ordner, command="grep -r Muster .").returncode == 2
+    assert lesen(wurzeln, "Bash", cwd=ordner / RE, command="cat rechnung.yaml").returncode == 0

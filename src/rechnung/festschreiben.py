@@ -28,6 +28,8 @@ from pathlib import Path
 
 import yaml
 
+from rechnung import meldung
+
 STATUS_DATEI = "status.yaml"
 EINGABE_DATEI = "rechnung.yaml"
 RESOLVED_DATEI = "rechnung.resolved.json"
@@ -36,7 +38,7 @@ ENTWURF = "entwurf"
 FESTGESCHRIEBEN = "festgeschrieben"
 
 
-class FestschreibFehler(Exception):
+class FestschreibFehler(meldung.Fehler):
     pass
 
 
