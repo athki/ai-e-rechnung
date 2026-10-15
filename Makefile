@@ -1,12 +1,13 @@
 IMAGE := rechnung
 # Leerer Gewerbe-Ordner für den Schattencontainer; nie der echte.
 SCHATTEN_GEWERBE := $(CURDIR)/build/schatten-gewerbe
+SCHATTEN_MCP := $(CURDIR)/build/schatten-mcp
 DOCKER_RUN := docker run --rm -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE)
 
 .PHONY: test doctor hooks beispiel beispiel-neu lean abgleich beweise beweise-image schatten schatten-image
 
 test: hooks
-	uv run pytest -q
+	uv run --extra mcp pytest -q
 
 doctor:
 	uv run rechnung doctor
@@ -73,6 +74,11 @@ schatten: hooks schatten-image
 	@# Geschwärzte Sicht (RECHNUNG_GESCHWAERZT): dieselben Kommandos, ohne Namen und Beträge.
 	docker run --rm -e RECHNUNG_GESCHWAERZT=1 -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE) pruefen /gewerbe/demo-output/reverse-charge-exemple-sarl
 	docker run --rm -e RECHNUNG_GESCHWAERZT=1 -v "$(SCHATTEN_GEWERBE)":/gewerbe $(IMAGE) begruendung /gewerbe/demo-output/reverse-charge-exemple-sarl > /dev/null
+	@# MCP-Server im Container, gestartet wie von Claude Desktop (docker run -i … mcp), gegen einen
+	@# Ordner mit den Beispiel-Stammdaten: neu → schreiben → resolve über stdio.
+	rm -rf "$(SCHATTEN_MCP)" && mkdir -p "$(SCHATTEN_MCP)"
+	docker run --rm -v "$(SCHATTEN_MCP)":/gewerbe $(IMAGE) init --beispiel > /dev/null
+	uv run --extra mcp python tests/mcp_stdio.py docker run -i --rm -v "$(SCHATTEN_MCP)":/gewerbe $(IMAGE) mcp
 	$(MAKE) beweise
 	@# Alte, unbenannte Images dieses Projekts wegräumen (Kennzeichnung im Dockerfile); fremde bleiben, der Build-Cache auch.
 	docker image prune -f --filter label=ai-e-rechnung=schatten

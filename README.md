@@ -93,6 +93,60 @@ den Schalter und die Gewerbe-Wurzel setzt man in `.claude/settings.local.json` (
 Schalter sperrt der Hook auch das Lesen von Stammdaten und abgeleiteten Dateien im Gewerbe-Ordner.
 Ehrlich: Über Bash ist Lesen in Claude Code damit nicht ganz gesperrt.
 
+## Mit einer AI: MCP-Server
+
+Mit dem MCP-Server ist die Grenze echt. Die AI kommt nur über seine Werkzeuge an das Werkzeug heran
+und bekommt nur deren geschwärzte Antworten, unabhängig vom Schalter. Das Kürzel des Kunden sieht sie
+dort auch nicht.
+
+| Werkzeug | Was es tut | Was die AI zurückbekommt |
+| --- | --- | --- |
+| `neu` | legt eine Rechnung an; den Kunden wählt der Mensch | Nummer, Sprache |
+| `preisliste` | Kürzel, Einheit, Art, Bezeichnung | ohne Preise |
+| `lesen` / `schreiben` | `rechnung.yaml`: Daten, `leistung:`, Positionen, Einleitung, Belege | was sie selbst schreiben darf |
+| `resolve`, `begruendung`, `offen` | Leistungsort, Ergebnis, Regeln, Stand der Preise | ohne Kunde und Beträge |
+| `bauen`, `pruefen` | PDF bauen, Pflichtangaben nachweisen | Dateiname, ✓/✗ je Angabe |
+| `anschreiben_schreiben`, `anschreiben_pruefen` | Begleittext mit Platzhaltern | Liste der Platzhalter |
+
+Preise, `festschreiben` und `pro-forma` sind keine Werkzeuge; sie bleiben beim Menschen. Den Kunden
+fragt `neu` per Auswahl im Client ab (MCP-Elicitation, z. B. Claude Code). Kann der Client das nicht,
+legt der Mensch die Rechnung mit `rechnung neu --kunde …` an oder nennt der AI das Kürzel.
+`rechnung mcp --kunde <kürzel>` legt den Kunden beim Start fest. `--preise-im-client` bietet zusätzlich
+`preise_bestaetigen` an: ein Formular im Client, dessen Werte an den Server gehen, nicht an die AI. Ob
+ein Client das wirklich so hält, ist je Client zu prüfen; im Zweifel bleibt `rechnung preise` im
+Terminal.
+
+Zum Ausprobieren mit Docker, einem Ordner mit den erfundenen Beispiel-Stammdaten und Claude Desktop:
+
+```sh
+docker build -t rechnung .
+mkdir -p ~/rechnung-probe
+docker run --rm -v ~/rechnung-probe:/gewerbe rechnung init --beispiel
+```
+
+In `claude_desktop_config.json` (Pfad absolut):
+
+```json
+{
+  "mcpServers": {
+    "rechnung": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "/Users/<du>/rechnung-probe:/gewerbe", "rechnung", "mcp"]
+    }
+  }
+}
+```
+
+Ohne Docker, mit installiertem TeX, in Claude Code:
+
+```sh
+claude mcp add rechnung -e RECHNUNG_GEWERBE=<gewerbe> -- uv --directory <repo> run --extra mcp rechnung mcp
+```
+
+Die Preise bestätigt der Mensch dann im Terminal:
+`docker run -it --rm -v ~/rechnung-probe:/gewerbe rechnung preise <nr>` bzw. `rechnung preise <nr>`.
+Was ein Werkzeug zurückgibt, geht an den Modellanbieter; was der Mensch in den Chat tippt, auch.
+
 ## Zwei Orte, strikt getrennt
 
 **Repo (Code):** Bibliothek, CLI, LaTeX-Vorlage, Tests und erfundene Beispiel-Stammdaten in
@@ -139,7 +193,7 @@ Das Werkzeug läuft jederzeit auch im Container. Der Gewerbe-Ordner ist der einz
 Netzwerk braucht der Kern nicht.
 
 ```sh
-make schatten                                            # beide Images bauen, Demo bauen und prüfen, Beweise prüfen
+make schatten                                            # beide Images bauen, Demo und MCP-Server prüfen, Beweise prüfen
 docker run --rm -v "<gewerbe>":/gewerbe rechnung doctor  # gegen den eigenen Gewerbe-Ordner
 ```
 

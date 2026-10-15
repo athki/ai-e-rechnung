@@ -111,6 +111,19 @@ def test_init_ist_idempotent(tmp_path):
     assert (tmp_path / "stammdaten" / "kunden" / "x.yaml").exists()
 
 
+def test_beispiel_stammdaten_kopiert_und_ueberschreibt_nichts(tmp_path):
+    cfg = config.laden(env={"RECHNUNG_GEWERBE": str(tmp_path), "RECHNUNG_KUNDEN": "Kundschaft"},
+                       pfad=tmp_path / "fehlt.toml")
+    config.init(cfg)
+    schreibe(tmp_path / "stammdaten" / "ich.yaml", "eigene: Datei\n")
+    ergebnis = dict(config.beispiel_stammdaten(cfg))
+    assert ergebnis[tmp_path / "stammdaten" / "ich.yaml"] is False
+    assert (tmp_path / "stammdaten" / "ich.yaml").read_text(encoding="utf-8") == "eigene: Datei\n"
+    assert ergebnis[tmp_path / "stammdaten" / "preise.yaml"] is True
+    assert (tmp_path / "Kundschaft" / "muster-gmbh.yaml").is_file()
+    assert not any(neu for _, neu in config.beispiel_stammdaten(cfg))
+
+
 def test_init_ohne_gewerbe_oder_mit_fehlender_wurzel(tmp_path):
     with pytest.raises(config.ConfigFehler):
         config.init(config.laden(env={}, pfad=tmp_path / "fehlt.toml"))

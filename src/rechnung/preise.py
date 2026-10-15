@@ -40,6 +40,18 @@ class PreisFehler(meldung.Fehler):
     art = meldung.PREISE
 
 
+def betrag(text: str) -> Decimal | None:
+    """Eingabe eines Preises: 1200, 1200.50 oder 1200,50; sonst None."""
+    text = text.strip().replace(" ", "")
+    if text.count(",") == 1 and "." not in text:
+        text = text.replace(",", ".")
+    try:
+        wert = Decimal(text)
+    except ArithmeticError:
+        return None
+    return wert if wert.is_finite() and wert >= 0 else None
+
+
 def _menge(wert: Decimal) -> str:
     """Menge ohne Darstellungsunterschiede: 2, 2.0 und 2.00 sind dieselbe Menge."""
     return format(wert.normalize(), "f")

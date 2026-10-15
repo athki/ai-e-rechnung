@@ -180,12 +180,25 @@ geschwärzte Fassung wird zurückgehalten. Jedes Feld von `rechnung.yaml` ist in
 eingestuft (Test); seit der Preisliste ist keines mehr „privat“. Der Hook sperrt unter dem Schalter auch
 das Lesen in den Gewerbe-Wurzeln (Env und config.toml): Stammdaten mit Preisliste, resolved.json,
 rechnung.privat.yaml, PDFs, status.yaml, `pro-forma/`, `belege/`; Repo und `stammdaten.example/` bleiben frei.
-Lesen über Bash ist damit nicht ganz gesperrt – echte Durchsetzung kommt mit dem MCP-Server. Den
+Lesen über Bash ist damit nicht ganz gesperrt – echte Durchsetzung bietet der MCP-Server. Den
 Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
+
+MCP-Server (`mcp_server.py`, `rechnung mcp`, stdio, Extra `mcp`, nie vom Kern importiert): Die AI
+bekommt nur seine Werkzeuge (`neu`, `preisliste`, `lesen`, `schreiben`, `resolve`, `begruendung`,
+`offen`, `bauen`, `pruefen`, `anschreiben_schreiben`, `anschreiben_pruefen`; Liste fest im Test) und
+nur geschwärzte Antworten, immer, ohne Schalter; auch das Kürzel des Kunden nicht. Jeder Fehler geht
+als `Abbruch (<art>)` hinaus, ein unerwarteter zurückgehalten. Den Kunden wählt der Mensch:
+`--kunde` beim Start, sonst Elicitation im Client, sonst nennt er der AI das Kürzel. `schreiben` nimmt
+nur strukturierte Felder (leistungsdatum, leistung, positionen, einleitung, belege); Preis, Referenz,
+Leistungsort und die Felder des Menschen gehen nicht. Preise, `festschreiben`, `pro-forma` sind keine
+Werkzeuge; `--preise-im-client` bietet `preise_bestaetigen` per Formular an (je Client zu prüfen, ob
+die Werte am Modell vorbeigehen). Optionen auch als `RECHNUNG_MCP_KUNDE`,
+`RECHNUNG_MCP_PREISE_IM_CLIENT`. `rechnung init --beispiel` kopiert die erfundenen Stammdaten zum
+Ausprobieren in den Gewerbe-Ordner.
 
 ## Technik
 
-- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,preise,resolve,render,vorlage,pruefen,festschreiben,begruendung,anschreiben,sicht,doctor,cli}.py`
+- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,preise,resolve,render,vorlage,pruefen,festschreiben,begruendung,anschreiben,sicht,doctor,cli,mcp_server}.py`; `mcp` (SDK 2.x) als optionales Extra, `make test` und das Image nehmen es mit
 - `pydantic` v2 mit `extra="forbid"` auf allen Modellen; `typer` für die CLI; `pyyaml`
 - `jinja2` mit LaTeX-Delimitern (`\VAR{ }`, `\BLOCK{ }`, `\#{ }`) und `StrictUndefined`
 - LaTeX: `latexmk -interaction=nonstopmode -no-shell-escape -outdir=<tmp>`; Engine `pdflatex`,
@@ -195,7 +208,7 @@ Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
   `stammdaten.example/`; Tests laufen ohne Config und ohne Gewerbe-Ordner (Temp-Verzeichnis)
 - Feldnamen und CLI-Kommandos auf Deutsch (`kunde`, `positionen`, `leistungsdatum`, `netto`, `brutto`,
   `neu`, `resolve`, `preise`, `preisliste`, `bauen`, `pruefen`, `pro-forma`, `festschreiben`,
-  `anschreiben`, `offen`, `demo`, `doctor`)
+  `anschreiben`, `offen`, `demo`, `doctor`, `mcp`)
 - Sprache der Rechnung: `de` oder `en`, eine je Rechnung (die Vorlage setzt jedes feste Label einsprachig);
   Datums-, Zahlen- und Währungsformat folgen der Sprache
 - Commit-Wächter: `make hooks` schaltet `.githooks/` ein. Gegen die Sperrliste neben der Config
@@ -203,7 +216,7 @@ Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
   Push noch einmal jeden Commit, der hochgeht, samt Autor; bei PDFs auch Text und Metadaten. Ohne
   Sperrliste still. `make test` und `make schatten` schalten ihn mit ein;
   `rechnung doctor` ist rot, wenn eine Sperrliste da ist und der Wächter aus ist.
-- Kein Netzwerkzugriff im Kern. Künftige AI-Funktionen kommen in ein eigenes, optional importierbares Modul.
+- Kein Netzwerkzugriff im Kern. AI-Funktionen kommen in eigene, optional importierbare Module (`mcp_server.py`).
 - Lean (`lean/`, README englisch): Beweise über die Steuerregeln, außerhalb des Werkzeugs. Version fest in
   `lean/lean-toolchain`, keine Abhängigkeiten (kein Mathlib), `lakefile.toml`. Namen spiegeln `rules.py`
   und RULES.md (Felder in `snake_case`, Theoreme mit Regel-ID, z. B. `R14_…`). Zwei Ebenen: `Gesetz/`
@@ -242,7 +255,8 @@ Der Vertrag:
 - Der Gewerbe-Ordner ist der einzige Mount-Punkt; mehr sieht der Container nicht. Der Kern braucht kein
   Netzwerk. Der Beweis-Container braucht keinen Mount.
 - Definition von „läuft“: `rechnung demo` und `rechnung pruefen` auf allen Demo-Rechnungen im
-  Rechnungs-Container, `make beweise` grün im Beweis-Container.
+  Rechnungs-Container, der MCP-Server darin über stdio (`tests/mcp_stdio.py`: neu → schreiben → resolve), `make beweise` grün im Beweis-Container.
 - Bewusste Abstriche: Container läuft als root, kein User-Mapping, keine Secrets, kein Netzwerk-Setup.
-  Aufruf ist `docker run --rm -v <gewerbe>:/gewerbe rechnung <kommando>`, nicht mehr.
+  Aufruf ist `docker run --rm -v <gewerbe>:/gewerbe rechnung <kommando>`, nicht mehr; für den
+  MCP-Server zusätzlich `-i` (stdio): `docker run -i --rm -v <gewerbe>:/gewerbe rechnung mcp`.
 - `rechnung doctor` prüft auf dem Host gegen dieselbe Paketliste, die das Dockerfile installiert.

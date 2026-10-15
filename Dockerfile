@@ -32,9 +32,9 @@ ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 WORKDIR /app
 COPY pyproject.toml uv.lock .python-version README.md LICENSE ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra mcp --no-install-project
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra mcp
 
 ENV PATH=/opt/venv/bin:$PATH \
     RECHNUNG_GEWERBE=/gewerbe

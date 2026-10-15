@@ -338,7 +338,7 @@ def text(r: Resolved, regeln: dict[str, Regel], quellen: dict[str, str], st: Sta
         f"# Begründung der Steuerentscheidung – Rechnung {r.nummer}",
         "",
         f"- **Dokument:** {st.dokument}",
-        f"- **Kunde:** `{r.kunde.kuerzel}`" if geschwaerzt else f"- **Kunde:** {r.kunde.firma} ({r.kunde.land})",
+        f"- **Kunde:** `{r.kunde.kuerzel or '<kuerzel>'}`" if geschwaerzt else f"- **Kunde:** {r.kunde.firma} ({r.kunde.land})",
         f"- **Ergebnis:** `{r.ergebnis}`",
         f"- **Leistungsort:** {ort}",
     ]
@@ -403,9 +403,14 @@ def lade(ordner: Path) -> Resolved:
         raise BegruendungFehler(f"{pfad} ist nicht lesbar: {e}") from e
 
 
-def begruende(ordner: Path, geschwaerzt: bool = False) -> tuple[str, bool]:
-    """Begründung für den Rechnungsordner (auch `pro-forma/<n>`); zweiter Wert: passt die Spur?"""
+def begruende(ordner: Path, geschwaerzt: bool = False, ohne_kuerzel: bool = False) -> tuple[str, bool]:
+    """Begründung für den Rechnungsordner (auch `pro-forma/<n>`); zweiter Wert: passt die Spur?
+
+    `ohne_kuerzel` (MCP-Server): auch das Kürzel des Kunden steht nicht im Text, nur `<kuerzel>`.
+    """
     r = lade(ordner)
+    if ohne_kuerzel:
+        r = r.model_copy(update={"kunde": r.kunde.model_copy(update={"kuerzel": None})})
     regeln, quellen = regeln_laden()
     spur = spur_pruefen(r)
     return (text(r, regeln, quellen, stand(ordner, r), spur, resolve.vorlage_version(), geschwaerzt),

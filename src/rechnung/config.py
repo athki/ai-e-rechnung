@@ -233,3 +233,23 @@ def stammdaten_geruest(cfg: Config) -> list[tuple[Path, bool]]:
         ziel.write_text(text, encoding="utf-8")
         ergebnis.append((ziel, True))
     return ergebnis
+
+
+def beispiel_stammdaten(cfg: Config) -> list[tuple[Path, bool]]:
+    """Kopiert die erfundenen Stammdaten aus stammdaten.example/ in den Gewerbe-Ordner – zum Ausprobieren
+    (Container, MCP-Server). Überschreibt nie; gibt je Datei (Pfad, neu_angelegt) zurück."""
+    ordner = cfg.ordner("stammdaten")
+    if not ordner.is_dir():
+        raise ConfigFehler(f"{ordner} fehlt – erst `rechnung init` ausführen.")
+    ergebnis = []
+    for quelle in sorted(BEISPIEL_STAMMDATEN.rglob("*.yaml")):
+        relativ = quelle.relative_to(BEISPIEL_STAMMDATEN)
+        ziel = (cfg.ordner("kunden") / relativ.name if relativ.parts[0] == "kunden"
+                else ordner / relativ)
+        if ziel.exists():
+            ergebnis.append((ziel, False))
+            continue
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_text(quelle.read_text(encoding="utf-8"), encoding="utf-8")
+        ergebnis.append((ziel, True))
+    return ergebnis

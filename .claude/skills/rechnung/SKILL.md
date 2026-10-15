@@ -13,7 +13,9 @@ kostet. Du liest keine Kundendaten, keine Ausstellerdaten, keine Preisliste, kei
 keine `rechnung.resolved.json`, keine PDFs, keine `status.yaml`, nichts unter `pro-forma/` oder
 `belege/`. Was du vom Werkzeug brauchst, gibt es dir geschwärzt aus.
 
-Jeder Abschnitt unten entspricht einem Werkzeug des späteren MCP-Servers.
+Jeder Abschnitt unten entspricht einem Werkzeug des MCP-Servers (`rechnung mcp`, README). Stehen
+dir dessen Werkzeuge zur Verfügung (`neu`, `schreiben`, `resolve` …), nimm sie statt der Befehle
+hier: Sie schwärzen immer, und `neu` fragt den Kunden selbst beim Menschen ab.
 
 ## 1. Wurzel feststellen
 

@@ -63,6 +63,25 @@ def _geld(betrag: Decimal, waehrung: str) -> str:
 
 
 @app.command()
+def mcp(
+    kunde: Annotated[str, typer.Option(
+        "--kunde", envvar="RECHNUNG_MCP_KUNDE",
+        help="Kunde fest wählen (Kürzel); `neu` fragt dann nicht. Für eine Demo mit einem Profil.")] = "",
+    preise_im_client: Annotated[bool, typer.Option(
+        "--preise-im-client", envvar="RECHNUNG_MCP_PREISE_IM_CLIENT",
+        help="Preise per Formular im Client bestätigen (Elicitation), nicht nur im Terminal.")] = False,
+) -> None:
+    """MCP-Server über stdio: das Werkzeug für eine AI, immer geschwärzt. Braucht das Extra `mcp`."""
+    try:
+        from rechnung import mcp_server
+    except ImportError as e:
+        typer.secho("Der MCP-Server braucht das Extra `mcp`: uv sync --extra mcp "
+                    "bzw. pip install 'ai-e-rechnung[mcp]'", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from e
+    mcp_server.starten(mcp_server.Einstellungen(kunde=kunde or None, preise_im_client=preise_im_client))
+
+
+@app.command()
 def doctor() -> None:
     """Prüft Python, LaTeX, pdftotext, Fonts, Config, Gewerbe-Ordner und Docker."""
     pruefungen = doctor_mod.alle()
@@ -82,6 +101,9 @@ def doctor() -> None:
 @app.command()
 def init(
     stammdaten: Annotated[bool, typer.Option("--stammdaten", help="Zusätzlich ein leeres ich.yaml anlegen.")] = False,
+    beispiel: Annotated[bool, typer.Option(
+        "--beispiel", help="Zusätzlich die erfundenen Beispiel-Stammdaten (Aussteller, sechs Kunden, Preisliste) "
+                           "kopieren – zum Ausprobieren. Überschreibt nichts.")] = False,
 ) -> None:
     """Legt unter der Gewerbe-Wurzel die Ordner an, die das Werkzeug besitzt. Rührt sonst nichts an."""
     cfg = _config()
@@ -93,14 +115,16 @@ def init(
     typer.echo(f"Gewerbe-Wurzel: {_pfad(cfg.gewerbe, cfg)}")
     for pfad, neu_angelegt in ergebnis:
         typer.echo(f"  {'angelegt ' if neu_angelegt else 'vorhanden'}  {pfad.relative_to(cfg.gewerbe)}/")
-    if stammdaten:
+    if stammdaten or beispiel:
         try:
-            dateien = config.stammdaten_geruest(cfg)
+            dateien = config.beispiel_stammdaten(cfg) if beispiel else config.stammdaten_geruest(cfg)
         except config.ConfigFehler as e:
             raise _abbruch(e) from e
         for ziel, neu_angelegt in dateien:
             typer.echo(f"  {'angelegt ' if neu_angelegt else 'vorhanden'}  {ziel.relative_to(cfg.gewerbe)}")
-        if any(neu_angelegt for _, neu_angelegt in dateien):
+        if beispiel:
+            typer.echo("\nErfundene Beispieldaten zum Ausprobieren, z. B. mit `rechnung mcp`.")
+        elif any(neu_angelegt for _, neu_angelegt in dateien):
             typer.echo("\nJetzt ausfüllen; `rechnung resolve` sagt dir, wenn etwas fehlt.")
 
 
@@ -371,18 +395,6 @@ def begruendung(
         raise typer.Exit(1)
 
 
-def _betrag(text: str) -> Decimal | None:
-    """Eingabe eines Preises: 1200, 1200.50 oder 1200,50; sonst None."""
-    text = text.strip().replace(" ", "")
-    if text.count(",") == 1 and "." not in text:
-        text = text.replace(",", ".")
-    try:
-        wert = Decimal(text)
-    except ArithmeticError:
-        return None
-    return wert if wert.is_finite() and wert >= 0 else None
-
-
 def _ja(text: str, standard: bool) -> bool:
     """Ja/Nein auf Deutsch: j, ja, n, nein (y und yes gehen auch); Enter nimmt den Standard."""
     while True:
@@ -400,7 +412,7 @@ def _ja(text: str, standard: bool) -> bool:
 def _frage_preis(text: str, vorschlag: Decimal | None) -> Decimal:
     while True:
         eingabe = typer.prompt(text, default=str(rules.mindestens_zwei(vorschlag)) if vorschlag is not None else None)
-        wert = _betrag(str(eingabe))
+        wert = preise_mod.betrag(str(eingabe))
         if wert is not None:
             return wert
         typer.secho("    Ein Betrag, z. B. 900 oder 287,30.", fg=typer.colors.YELLOW)
