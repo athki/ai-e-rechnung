@@ -480,8 +480,9 @@ vollständige Tabelle steht in Teil 4.
 - **Regel:** Ist die Leistung steuerbar (R2) und nicht steuerfrei (R13), beträgt die Steuer 19 % des
   Entgelts, für die in § 12 Abs. 2 genannten Umsätze 7 %.
 - **Annahmen:** Ob eine Position unter § 12 Abs. 2 fällt, entscheidet der Mensch (Teil 1).
-- **Werkzeug:** Satz 19 % als Vorgabe, `positionen[].steuersatz: 7` je Position. Das Feld nimmt nur `7`
-  an: 19 % und 0 % folgen aus dem Ergebnis der Rechnung, eine Position mit 0 % bei steuerpflichtiger
+- **Werkzeug:** Satz 19 % als Vorgabe, `positionen[].steuersatz: 7` je Position in
+  `rechnung.privat.yaml`; der Mensch setzt es mit `rechnung preise`, die Preisliste kann es vorschlagen.
+  Das Feld nimmt nur `7` an: 19 % und 0 % folgen aus dem Ergebnis der Rechnung, eine Position mit 0 % bei steuerpflichtiger
   Leistung wäre ein zu niedriger Ausweis (eine Steuerbefreiung nach § 4 deckt das Werkzeug nicht ab).
 - **Status:** Annahme – ungeprüft.
 - **Nachweis:** bewiesen – `Aussage.R10_satz_je_position`; `satz_position()` ist mit dem Modell abgeglichen.
@@ -504,8 +505,8 @@ vollständige Tabelle steht in Teil 4.
   sie steuerfrei (R13), weist die Rechnung keinen deutschen Steuerbetrag größer als 0 aus. Ein
   höherer Ausweis würde nach § 14c geschuldet.
 - **Annahmen:** keine.
-- **Werkzeug:** `steuersatz` je Position darf in diesen Fällen nicht gesetzt sein; `resolve` bricht
-  sonst ab.
+- **Werkzeug:** `steuersatz` je Position darf in diesen Fällen nicht gesetzt sein; `rechnung preise`
+  bietet es nicht an, `resolve` bricht sonst ab.
 - **Status:** Annahme – ungeprüft.
 - **Nachweis:** bewiesen – `Aussage.R12_genau_bei_null_prozent_regelbesteuert`.
 
@@ -529,7 +530,7 @@ vollständige Tabelle steht in Teil 4.
 - **Regel:** Eine Rechnung eines Kleinunternehmers enthält keinen Steuersatz größer 0 und keinen
   Steuerbetrag größer 0 – in keinem Fall, auch nicht bei manueller Festlegung (R37).
 - **Annahmen:** keine.
-- **Werkzeug:** `kleinunternehmer: true` schließt `positionen[].steuersatz` aus.
+- **Werkzeug:** `kleinunternehmer: true` schließt `positionen[].steuersatz` in `rechnung.privat.yaml` aus.
 - **Status:** Annahme – ungeprüft.
 - **Nachweis:** bewiesen – `Aussage.R14_kleinunternehmer_nie_steuer`.
 
@@ -940,7 +941,7 @@ welche Regeln angewandt wurden (`regeln`, R35).
 | R31 (Fundstelle) | `rules.fundstelle()` | `test_kern_antwortet_wie_lean` (Abgleich) |
 | R16, R28, R31 (Wortlaut) | `rules.hinweis()` | `test_hinweis_*` |
 | R19, R24, R25, R37 (Pflichtfelder) | `models.Input`, `models.Leistung` | `tests/test_resolve.py` |
-| R10, R12, R14 (Satz je Position) | `rules.satz_position()`, `models.Position` | `test_satz_position_antwortet_wie_lean` (Abgleich), `test_satz_position`, `test_positions_steuersatz_*` |
+| R10, R12, R14 (Satz je Position) | `rules.satz_position()`, `models.PrivatPosition`, `preise.bestaetigen()` | `test_satz_position_antwortet_wie_lean` (Abgleich), `test_satz_position`, `test_positions_steuersatz_*` |
 | R32 | `resolve.rechne()` | `tests/test_resolve.py` |
 | R30 | `rules.frist_reverse_charge()`, Warnung in `resolve.rechne()` | `test_frist_reverse_charge`, `test_reverse_charge_fristwarnung` |
 | R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |

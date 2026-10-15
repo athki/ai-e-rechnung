@@ -1,0 +1,9 @@
+# Private Werte der Rechnung DEMO-2026-0001: Preise und Referenz.
+# Schreibt `rechnung preise`; die AI liest und schreibt diese Datei nicht.
+# Ändert sich eine Position in rechnung.yaml, ist die Bestätigung veraltet: `rechnung preise` neu.
+waehrung: EUR
+bestaetigt_am: 2026-10-15T07:13:53+00:00
+positionen_hash: 5e3b0cc7177414748ac5adb2bdc9902f8b3b4787559abddc5627cb09bd39b7cf
+positionen:
+  - kuerzel: beratung
+    einzelpreis: 150.00

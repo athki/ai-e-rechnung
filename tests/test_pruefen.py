@@ -12,6 +12,8 @@ import pytest
 
 from rechnung import config, pruefen, render, resolve as r
 
+from hilfen import bestaetige
+
 BRAUCHT_LATEX = pytest.mark.skipif(
     shutil.which("latexmk") is None or shutil.which("pdftotext") is None,
     reason="latexmk oder pdftotext fehlt",
@@ -25,10 +27,10 @@ leistung:
   taetigkeit: Teilnahme als Panelist
   einordnung: sonstige
 positionen:
-  - beschreibung: {beschreibung}
+  - kuerzel: vortrag
     menge: 1
-    einheit: pauschal
-    einzelpreis: 1000.00
+    einheit: stunde
+    beschreibung: {beschreibung}
 """
 
 
@@ -46,6 +48,7 @@ def baue(kunde="sample-ltd", beschreibung="Teilnahme als Panelist"):
     ordner, nummer = r.neu(cfg, kunde, date(2026, 6, 10), date(2026, 9, 23))
     (ordner / r.INPUT_DATEI).write_text(
         RECHNUNG.format(kunde=kunde, beschreibung=beschreibung), encoding="utf-8")
+    bestaetige(nummer, "1000.00")
     ergebnis, _ = r.resolve(cfg, nummer)
     pdf = render.baue_pdf(ergebnis, ordner, cfg.engine)
     return ergebnis, pdf

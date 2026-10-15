@@ -5,14 +5,15 @@
 # Gesperrt:
 #   **/rechnung.resolved.json, **/*.pdf, **/status.yaml   (abgeleitet bzw. vom Werkzeug gepflegt)
 #   **/pro-forma/**   (gesendete Pro-forma-Revisionen, eingefroren)
-#   <gewerbe>/<stammdaten>/ich.yaml und **/stammdaten/ich.yaml
+#   **/rechnung.privat.yaml   (Preise und Referenz, schreibt nur `rechnung preise`)
+#   <gewerbe>/<stammdaten>/ich.yaml und **/stammdaten/ich.yaml, ebenso preise.yaml (Preisliste)
 #   jede Datei in einem Rechnungsordner, dessen status.yaml "festgeschrieben" sagt
 #
 # Lesesperre, nur unter dem Schalter RECHNUNG_GESCHWAERZT (siehe src/rechnung/sicht.py), nur in den
 # Gewerbe-Wurzeln – der aus RECHNUNG_GEWERBE und der aus config.toml, damit der echte Ordner auch
 # dann geschützt ist, wenn die Env auf einen Test-Ordner zeigt:
-#   <wurzel>/<stammdaten>/**, <wurzel>/<kunden>/**, und darunter überall *.resolved.json, PDFs,
-#   status.yaml, pro-forma/**, belege/**
+#   <wurzel>/<stammdaten>/** (mit der Preisliste), <wurzel>/<kunden>/**, und darunter überall
+#   *.resolved.json, rechnung.privat.yaml, PDFs, status.yaml, pro-forma/**, belege/**
 # Read/Grep/Glob über den Pfad; Bash, wenn der Befehl eine Wurzel nennt (außer einem bloßen
 # `rechnung …`-Aufruf und Pfaden in Rechnungsordnern) oder in einer Wurzel läuft. Dazu sperrt er
 # Befehle, die RECHNUNG_GESCHWAERZT, RECHNUNG_GEWERBE oder RECHNUNG_CONFIG überschreiben oder löschen.
@@ -49,7 +50,11 @@ stammdaten="${RECHNUNG_STAMMDATEN:-$(toml_wert "$cfg" stammdaten)}"
 stammdaten="${stammdaten:-stammdaten}"
 gewerbe="${gewerbe/#\~/$HOME}"
 ich_yaml=""
-[[ -n "$gewerbe" ]] && ich_yaml="${gewerbe%/}/${stammdaten%/}/ich.yaml"
+preise_yaml=""
+if [[ -n "$gewerbe" ]]; then
+    ich_yaml="${gewerbe%/}/${stammdaten%/}/ich.yaml"
+    preise_yaml="${gewerbe%/}/${stammdaten%/}/preise.yaml"
+fi
 
 # Prüft einen Pfad. Gibt einen Grund aus, wenn er gesperrt ist.
 gesperrt() {
@@ -59,10 +64,15 @@ gesperrt() {
         *.pdf|*.PDF) echo "PDFs sind abgeleitet"; return ;;
         */status.yaml|status.yaml) echo "status.yaml pflegt nur 'rechnung festschreiben'"; return ;;
         */pro-forma/*|pro-forma/*) echo "gesendete Pro-forma-Revisionen sind eingefroren"; return ;;
+        */rechnung.privat.yaml|rechnung.privat.yaml) echo "rechnung.privat.yaml schreibt nur 'rechnung preise'"; return ;;
         */stammdaten/ich.yaml) echo "stammdaten/ich.yaml pflegt nur der Nutzer"; return ;;
+        */stammdaten/preise.yaml) echo "die Preisliste pflegt nur der Nutzer"; return ;;
     esac
     if [[ -n "$ich_yaml" && "$pfad" == "$ich_yaml" ]]; then
         echo "ich.yaml pflegt nur der Nutzer"; return
+    fi
+    if [[ -n "$preise_yaml" && "$pfad" == "$preise_yaml" ]]; then
+        echo "die Preisliste pflegt nur der Nutzer"; return
     fi
     # Festgeschriebene Rechnung: status.yaml im selben Ordner oder eine Ebene hoeher (belege/).
     local dir
@@ -146,6 +156,7 @@ lese_gesperrt() {
             esac
             case "$rel" in
                 *rechnung.resolved.json) echo "rechnung.resolved.json"; return ;;
+                *rechnung.privat.yaml) echo "rechnung.privat.yaml (Preise)"; return ;;
                 *.pdf|*.PDF) echo "PDF"; return ;;
                 *status.yaml) echo "status.yaml"; return ;;
             esac
@@ -171,7 +182,7 @@ bash_lesen() {
     # Was hinter einer Nennung der Wurzel steht, wenn sie die Wurzel selbst meint (Ende, Trenner, /).
     local trenner='^[/[:space:]";|&)]'
     local schreibweise="'"
-    local geschuetzt='resolved\.json|\.pdf|\.PDF|status\.yaml|pro-forma|belege'
+    local geschuetzt='resolved\.json|privat\.yaml|\.pdf|\.PDF|status\.yaml|pro-forma|belege'
     local suche='\b(find|rg|tree|du)\b|\bgrep\b[^;|&]*[[:space:]]-[a-zA-Z]*[rR]|\bls\b[^;|&]*[[:space:]]-[a-zA-Z]*R'
 
     # Den Schalter einschalten (=1) ist harmlos; gesperrt ist ausschalten (leer, 0) und jede neue Wurzel.
@@ -254,7 +265,7 @@ case "$werkzeug" in
         # Lesen bleibt hier erlaubt (cat, pdftotext, grep), und ein geschützter Name irgendwo im
         # Befehlstext – etwa in einem Regex oder in einem Dokument, das geschrieben wird –
         # ist für sich genommen kein Grund. Ein zu grober Hook wird abgeschaltet und schützt dann nichts.
-        ziel='([^[:space:];|&"'"'"']*(rechnung\.resolved\.json|\.pdf|\.PDF|status\.yaml|ich\.yaml|pro-forma/[^[:space:];|&"'"'"']*))'
+        ziel='([^[:space:];|&"'"'"']*(rechnung\.resolved\.json|rechnung\.privat\.yaml|stammdaten/preise\.yaml|\.pdf|\.PDF|status\.yaml|ich\.yaml|pro-forma/[^[:space:];|&"'"'"']*))'
         # 1) Umleitung auf ein geschütztes Ziel   2) tee   3) dateiverändernde Befehle
         # 4) sed/perl -i   5) Python-Schreibaufrufe (undurchsichtig, deshalb großzügig gesperrt)
         muster=(
@@ -265,7 +276,7 @@ case "$werkzeug" in
             "(write_text|write_bytes|shutil\.(copy|move)|os\.(remove|rename))[^;|&]*"
         )
         # Ein geschützter Name als Pfad in Anführungszeichen – nicht bloß als Wort in einem Text.
-        zielpfad="[\"'][^\"']*/[^\"']*(rechnung\.resolved\.json|\.pdf|status\.yaml|ich\.yaml|pro-forma/)"
+        zielpfad="[\"'][^\"']*/[^\"']*(rechnung\.resolved\.json|rechnung\.privat\.yaml|stammdaten/preise\.yaml|\.pdf|status\.yaml|ich\.yaml|pro-forma/)"
         for m in "${muster[@]}"; do
             if grep -qE "$m" <<<"$befehl"; then
                 # Python ist undurchsichtig: blocken, sobald ein geschützter PFAD auftaucht.
@@ -280,9 +291,11 @@ case "$werkzeug" in
                 blockiere "Bash-Befehl schreibt auf eine geschützte Datei"
             fi
         done
-        if [[ -n "$ich_yaml" ]] && grep -qE "(>|>>|\btee\b|\bcp\b|\bmv\b|\brm\b)[^;|&]*$(sed 's/[][\.*^$/]/\\&/g' <<<"$ich_yaml")" <<<"$befehl"; then
-            blockiere "Bash-Befehl schreibt auf ich.yaml"
-        fi
+        for datei in "$ich_yaml" "$preise_yaml"; do
+            if [[ -n "$datei" ]] && grep -qE "(>|>>|\btee\b|\bcp\b|\bmv\b|\brm\b)[^;|&]*$(sed 's/[][\.*^$/]/\\&/g' <<<"$datei")" <<<"$befehl"; then
+                blockiere "Bash-Befehl schreibt auf $(basename "$datei")"
+            fi
+        done
         ;;
 esac
 exit 0

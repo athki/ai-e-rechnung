@@ -1,0 +1,62 @@
+# Preisliste, erfunden. Im Gewerbe-Ordner unter stammdaten/preise.yaml; pflegt nur der Mensch.
+#
+# Schlüssel ist das Kürzel, das in rechnung.yaml unter positionen: steht. Die AI sieht Kürzel,
+# Bezeichnung und Einheit (`rechnung preisliste`), nie den Preis.
+#
+#   bezeichnung  wie die Position auf der Rechnung heißt; ein Text für beide Sprachen oder de/en
+#   einheit      pauschal | stunde | tag | stueck | kilometer – rechnung.yaml muss dieselbe nehmen
+#   preis        Einzelpreis in EUR; bei anderen Währungen schlägt `rechnung preise` nichts vor
+#   art          leistung (Default) oder auslage – eine Auslage hat keinen festen Preis, ihr Betrag
+#                kommt je Rechnung vom Beleg
+#   steuersatz   nur 7, als Vorschlag (§ 12 Abs. 2 UStG); ob er gilt, entscheidet das Werkzeug je Rechnung
+
+beratung:
+  bezeichnung: { de: Beratung, en: Consulting }
+  einheit: stunde
+  preis: 150.00
+
+briefing:
+  bezeichnung: { de: Policy-Briefing, en: Policy briefing }
+  einheit: pauschal
+  preis: 2400.00
+
+panel:
+  bezeichnung: { de: Teilnahme als Panelist, en: Panel participation }
+  einheit: stunde
+  preis: 200.00
+
+vortrag:
+  bezeichnung: { de: Vortrag, en: Talk }
+  einheit: stunde
+  preis: 450.00
+
+coaching:
+  bezeichnung: { de: Bewerbungscoaching, en: Application coaching }
+  einheit: stunde
+  preis: 90.00
+
+reisezeit:
+  bezeichnung: { de: Reisezeit, en: Travel time }
+  einheit: stunde
+  preis: 60.00
+
+fahrt:
+  bezeichnung: { de: Fahrtkosten, en: Mileage }
+  einheit: kilometer
+  preis: 0.30
+
+buch:
+  bezeichnung: { de: Buch, en: Book }
+  einheit: stueck
+  preis: 24.00
+  steuersatz: 7
+
+flug:
+  bezeichnung: { de: Reisekosten Flug, en: "Travel: flight" }
+  einheit: pauschal
+  art: auslage
+
+bahnticket:
+  bezeichnung: { de: Bahnticket, en: Train ticket }
+  einheit: pauschal
+  art: auslage

@@ -14,9 +14,11 @@ import yaml
 from pydantic import BaseModel
 from typer.testing import CliRunner
 
-from rechnung import config, meldung, resolve as r, sicht
+from rechnung import anschreiben, config, meldung, resolve as r, sicht
 from rechnung.cli import app
 from rechnung.models import Input
+
+from hilfen import bestaetige
 
 # ---------------------------------------------------------------- Einstufung
 
@@ -47,10 +49,10 @@ def test_jedes_feld_von_rechnung_yaml_ist_eingestuft():
     assert set(sicht.EINSTUFUNG.values()) <= {sicht.AI, sicht.PRIVAT}
 
 
-def test_privat_sind_preis_und_referenz():
-    privat = {f for f, e in sicht.EINSTUFUNG.items() if e == sicht.PRIVAT}
-    assert privat == {"positionen.einzelpreis", "referenz"}
-    assert sicht.PRIVATE_FELDER == ("einzelpreis", "referenz")
+def test_rechnung_yaml_hat_kein_privates_feld_mehr():
+    """Preise und Referenz stehen in rechnung.privat.yaml; rechnung.yaml enthält nur, was die AI sieht."""
+    assert {f for f, e in sicht.EINSTUFUNG.items() if e == sicht.PRIVAT} == set()
+    assert sicht.PRIVATE_FELDER == ("einzelpreis", "preis", "referenz")
 
 
 @pytest.mark.parametrize(("wert", "aktiv"), [
@@ -95,9 +97,12 @@ def test_ergebnis_zeigt_nur_die_positivliste(gewerbe_geschwaerzt):
     s = sicht.ergebnis(ergebnis)
     assert set(s) == {"nummer", "kunde", "datum", "leistungsdatum", "leistungsdatum_bis", "sprache",
                       "leistung", "leistungsort", "leistungsort_manuell", "ergebnis", "regeln",
-                      "positionen", "belege", "warnungen"}
-    assert set(s["positionen"][0]) == {"pos", "beschreibung", "menge", "einheit", "steuersatz"}
-    assert (s["ergebnis"], s["leistungsort"]) == ("reverse_charge", "FR")
+                      "positionen", "belege", "warnungen", "preise"}
+    assert set(s["positionen"][0]) == {"pos", "kuerzel", "beschreibung", "menge", "einheit", "steuersatz"}
+    assert (s["ergebnis"], s["leistungsort"], s["preise"]) == ("reverse_charge", "FR", "bestaetigt")
+    # Vor der Bestätigung dieselben Felder, mit dem Stand der Preise.
+    e = sicht.entwurf(r.entwurf(config.laden(), nummer))
+    assert set(e) == set(s) and set(e["positionen"][0]) == set(s["positionen"][0])
 
 
 # ---------------------------------------------------------------- Keine privaten Werte in der Ausgabe
@@ -123,7 +128,10 @@ def private_werte() -> set[str]:
             if schluessel == "iban":
                 werte.add(daten.replace(" ", ""))
     for datei in config.BEISPIEL_STAMMDATEN.rglob("*.yaml"):
-        sammle(yaml.safe_load(datei.read_text(encoding="utf-8")))
+        # Die Preisliste enthält als Text nur Bezeichnung, Einheit und Art – die sieht die AI.
+        # Ihre Preise sind Zahlen; die fängt GELD.
+        if datei.name != "preise.yaml":
+            sammle(yaml.safe_load(datei.read_text(encoding="utf-8")))
     return werte
 
 
@@ -150,7 +158,7 @@ def lauf(*args: str) -> str:
     return aus.output
 
 
-def neu(gewerbe: Path, kuerzel: str, waehrung: str = "EUR") -> str:
+def neu(gewerbe: Path, kuerzel: str, waehrung: str = "EUR", preise: bool = True) -> str:
     einordnung, ort = LEISTUNG[kuerzel]
     args = ["neu", "--kunde", kuerzel, "--leistungsdatum", "2026-10-01", "--datum", "2026-10-05",
             "--taetigkeit", "Arbeit nach Absprache", "--einordnung", einordnung, "--waehrung", waehrung]
@@ -160,9 +168,10 @@ def neu(gewerbe: Path, kuerzel: str, waehrung: str = "EUR") -> str:
     ordner = sorted((gewerbe / "rechnung-ausgang" / "2026").iterdir())[-1]
     datei = ordner / r.INPUT_DATEI
     text = datei.read_text(encoding="utf-8")
-    text = text.replace("menge: 1\n", f"menge: {MENGE}\n", 1).replace("einzelpreis: 0.00\n",
-                                                                      f"einzelpreis: {PREIS}\n", 1)
+    text = text.replace("menge: 1\n", f"menge: {MENGE}\n", 1).replace("  - kuerzel: ", "  - kuerzel: briefing", 1)
     datei.write_text(text, encoding="utf-8")
+    if preise:
+        bestaetige(ordner.name, PREIS)
     return ordner.name
 
 
@@ -199,12 +208,19 @@ def test_kein_privater_wert_in_resolve_bauen_pruefen_begruendung(gewerbe_geschwa
     ausgaben = [lauf("init")]
     for kuerzel in LEISTUNG:
         nummer = neu(gewerbe_geschwaerzt, kuerzel, "USD" if kuerzel == "sample-inc" else "EUR")
+        ordner = r.finde_ordner(config.laden(), nummer)
+        (ordner / anschreiben.DATEI).write_text("[anrede],\nanbei [nummer] über [brutto] für [firma].\n[name]\n",
+                                                encoding="utf-8")
         for kommando in (["resolve", nummer], ["bauen", nummer], ["pruefen", nummer],
                          ["begruendung", nummer], ["bauen", nummer, "--pro-forma"],
-                         ["pruefen", nummer, "--pro-forma"]):
+                         ["pruefen", nummer, "--pro-forma"], ["anschreiben", nummer], ["preise", nummer]):
             ausgaben.append(lauf(*kommando))
+    # Eine Rechnung ohne bestätigte Preise: resolve zeigt den Entwurf, bauen bricht ab.
+    offen = neu(gewerbe_geschwaerzt, "muster-gmbh", preise=False)
+    ausgaben += [lauf("resolve", offen), lauf("bauen", offen), lauf("preisliste"), lauf("offen")]
     assert any("reverse_charge" in a for a in ausgaben)
     assert any("grün:" in a for a in ausgaben)
+    assert any("anschreiben.md ist gültig" in a for a in ausgaben)
     pruefe_ohne_private_werte(ausgaben)
 
 
@@ -235,6 +251,9 @@ def test_abbruch_ausserhalb_des_geltungsbereichs(gewerbe_geschwaerzt):
     """Privatperson, Tätigkeit in einem anderen EU-Staat (R18): erklären und anhalten."""
     lauf("neu", "--kunde", "privat-de", "--leistungsdatum", "2026-10-01", "--taetigkeit", "Vortrag",
          "--einordnung", "unterrichtend", "--ort", "FR")
+    datei = r.finde_ordner(config.laden(), "0001") / r.INPUT_DATEI
+    datei.write_text(datei.read_text(encoding="utf-8").replace("  - kuerzel: ", "  - kuerzel: briefing"),
+                     encoding="utf-8")
     aus = lauf("resolve", "0001")
     assert aus.startswith("Abbruch (ausserhalb): Leistungsort FR ist ein anderer EU-Staat"), aus
     pruefe_ohne_private_werte([aus])
@@ -255,11 +274,11 @@ def test_abbruch_wegen_eigener_eingabe_bleibt_ganz_ohne_preis(gewerbe_geschwaerz
     datei = r.finde_ordner(config.laden(), nummer) / r.INPUT_DATEI
     text = datei.read_text(encoding="utf-8")
     datei.write_text(text.replace("einheit: pauschal ", "einheit: kiste ", 1)
-                     .replace(f"einzelpreis: {PREIS}", "einzelpreis: 12x.45"), encoding="utf-8")
+                     .replace(f"menge: {MENGE}\n", f"menge: {MENGE}\n    einzelpreis: 12x.45\n", 1), encoding="utf-8")
     aus = lauf("resolve", nummer)
     assert aus.startswith("Abbruch (eingabe): rechnung.yaml:"), aus
     assert "einheit" in aus and "„kiste“" in aus
-    assert "einzelpreis" in aus and "12x" not in aus
+    assert "einzelpreis" in aus and "12x" not in aus     # aus Versehen in rechnung.yaml: Wert bleibt weg
 
 
 def test_abbruch_wegen_fehlendem_leistungsdatum_ist_eine_frage(gewerbe_geschwaerzt):
@@ -283,3 +302,47 @@ def test_ohne_schalter_bleibt_alles_wie_es_war(gewerbe_geschwaerzt, monkeypatch)
     kunde_aendern(gewerbe_geschwaerzt, "exemple-sarl", "unternehmer: true\n", "")
     assert "Land FR" in lauf("resolve", nummer)
 
+
+
+# ---------------------------------------------------------------- Preise an der AI vorbei
+
+
+def test_resolve_ohne_preise_zeigt_den_entwurf_und_den_weg(gewerbe_geschwaerzt):
+    nummer = neu(gewerbe_geschwaerzt, "muster-gmbh", preise=False)
+    aus = CliRunner().invoke(app, ["resolve", nummer])
+    assert aus.exit_code == 0, aus.output
+    assert "Ergebnis        inland" in aus.output
+    assert f"fehlen – der Mensch bestätigt sie im eigenen Terminal: rechnung preise {nummer}" in aus.output
+    assert not (r.finde_ordner(config.laden(), nummer) / r.RESOLVED_DATEI).exists()
+    pruefe_ohne_private_werte([aus.output])
+
+
+def test_bauen_ohne_preise_ist_ein_abbruch_der_art_preise(gewerbe_geschwaerzt):
+    nummer = neu(gewerbe_geschwaerzt, "muster-gmbh", preise=False)
+    aus = lauf("bauen", nummer)
+    assert aus.startswith("Abbruch (preise): Preise für"), aus
+    assert f"rechnung preise {nummer}" in aus
+
+
+def test_preise_unter_dem_schalter_verweigert(gewerbe_geschwaerzt):
+    nummer = neu(gewerbe_geschwaerzt, "muster-gmbh", preise=False)
+    aus = CliRunner().invoke(app, ["preise", nummer], input="900\nj\n")
+    assert aus.exit_code == 1
+    assert aus.output.startswith("Abbruch (preise): `rechnung preise` läuft nur ohne RECHNUNG_GESCHWAERZT")
+    assert not (r.finde_ordner(config.laden(), nummer) / "rechnung.privat.yaml").exists()
+
+
+def test_preisliste_unter_dem_schalter_ohne_preise(gewerbe_geschwaerzt, monkeypatch):
+    aus = lauf("preisliste")
+    assert "vortrag" in aus and "pauschal" in aus and "Preise sind geschwärzt" in aus
+    assert not GELD.findall(aus)
+    monkeypatch.delenv(sicht.SCHALTER)
+    assert "450,00 EUR" in lauf("preisliste")
+
+
+def test_anschreiben_unter_dem_schalter_prueft_nur(gewerbe_geschwaerzt):
+    nummer = neu(gewerbe_geschwaerzt, "exemple-sarl")
+    datei = r.finde_ordner(config.laden(), nummer) / anschreiben.DATEI
+    datei.write_text("Rechnung [nummer], [betrag]\n", encoding="utf-8")
+    aus = lauf("anschreiben", nummer)
+    assert aus.startswith("Abbruch (eingabe): Unbekannte Platzhalter in anschreiben.md: [betrag]"), aus

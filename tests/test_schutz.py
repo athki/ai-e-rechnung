@@ -29,6 +29,8 @@ def hook(tmp_path, werkzeug, gewerbe=None, **tool_input):
     "/g/rechnung-ausgang/2026/2026-0001/status.yaml",
     "/g/stammdaten/ich.yaml",
     "/g/rechnung-ausgang/2026/2026-0001/pro-forma/1/rechnung.yaml",
+    "/g/rechnung-ausgang/2026/2026-0001/rechnung.privat.yaml",
+    "/g/stammdaten/preise.yaml",
 ])
 @pytest.mark.parametrize("werkzeug", ["Write", "Edit", "MultiEdit"])
 def test_geschuetzte_pfade_blockiert(tmp_path, werkzeug, pfad):
@@ -41,6 +43,8 @@ def test_geschuetzte_pfade_blockiert(tmp_path, werkzeug, pfad):
     "/g/rechnung-ausgang/2026/2026-0001/rechnung.yaml",
     "/g/stammdaten/kunden/sample-ltd.yaml",
     str(REPO / "stammdaten.example" / "ich.yaml"),
+    str(REPO / "stammdaten.example" / "preise.yaml"),
+    "/g/rechnung-ausgang/2026/2026-0001/anschreiben.md",
     str(REPO / "src" / "rechnung" / "cli.py"),
 ])
 def test_erlaubte_pfade(tmp_path, pfad):
@@ -83,6 +87,8 @@ def test_festgeschriebene_rechnung_ist_gesperrt(tmp_path):
     "cp entwurf.pdf '/g/2026-0001/rechnung.pdf'",
     "rm -rf /g/2026-0001/pro-forma/1",
     "echo x > /g/2026-0001/pro-forma/1/rechnung.yaml",
+    "echo 'einzelpreis: 1' >> /g/2026-0001/rechnung.privat.yaml",
+    "sed -i '' 's/900/9000/' /g/stammdaten/preise.yaml",
 ])
 def test_bash_schreiben_blockiert(tmp_path, befehl):
     assert hook(tmp_path, "Bash", command=befehl).returncode == 2
@@ -111,7 +117,8 @@ def test_bash_lesen_erlaubt(tmp_path, befehl):
 def test_settings_json_deny_regeln():
     settings = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))
     deny = settings["permissions"]["deny"]
-    for muster in ["rechnung.resolved.json", "*.pdf", "status.yaml", "stammdaten/ich.yaml", "pro-forma/**"]:
+    for muster in ["rechnung.resolved.json", "*.pdf", "status.yaml", "stammdaten/ich.yaml", "pro-forma/**",
+                   "rechnung.privat.yaml", "stammdaten/preise.yaml"]:
         assert f"Write(//**/{muster})" in deny
         assert f"Edit(//**/{muster})" in deny
     befehl = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
@@ -154,6 +161,7 @@ RE = "rechnung-ausgang/2026/2026-0001"
     "stammdaten/ich.yaml", "stammdaten/kunden/muster.yaml", f"{RE}/rechnung.resolved.json",
     f"{RE}/rechnung_2026-0001.pdf", f"{RE}/status.yaml", f"{RE}/pro-forma/1/rechnung.yaml",
     f"{RE}/belege/hotel.jpg", f"{RE}/../../../stammdaten/ich.yaml",
+    "stammdaten/preise.yaml", f"{RE}/rechnung.privat.yaml",
 ])
 @pytest.mark.parametrize("wurzel", ["Gewerbe-Test", "Gewerbe"])
 def test_read_in_beiden_wurzeln_gesperrt(wurzeln, wurzel, rel):

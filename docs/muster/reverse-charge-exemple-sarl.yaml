@@ -6,7 +6,7 @@ leistung:
   taetigkeit: "Policy briefing for the management team"
   einordnung: beratung
 positionen:
-  - beschreibung: "Policy briefing, Paris"
+  - kuerzel: briefing
     menge: 1
     einheit: pauschal
-    einzelpreis: 2400.00
+    beschreibung: "Policy briefing, Paris"

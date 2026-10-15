@@ -10,8 +10,12 @@
       "Edit(//**/status.yaml)",
       "Write(//**/pro-forma/**)",
       "Edit(//**/pro-forma/**)",
+      "Write(//**/rechnung.privat.yaml)",
+      "Edit(//**/rechnung.privat.yaml)",
       "Write(//**/stammdaten/ich.yaml)",
-      "Edit(//**/stammdaten/ich.yaml)"
+      "Edit(//**/stammdaten/ich.yaml)",
+      "Write(//**/stammdaten/preise.yaml)",
+      "Edit(//**/stammdaten/preise.yaml)"
     ]
   },
   "hooks": {

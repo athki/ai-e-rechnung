@@ -1,4 +1,5 @@
 import re
+import shutil
 
 import pytest
 
@@ -43,6 +44,23 @@ def test_doctor_mit_gewerbe_meldet_fehlende_unterordner(tmp_path, monkeypatch):
     ergebnis = {p.name: p for p in doctor.pruefe_gewerbe(doctor.config.laden())}
     assert ergebnis["Gewerbe-Ordner"].status == doctor.OK
     assert ergebnis["Unterordner"].status == doctor.WARNUNG
+
+
+def test_doctor_prueft_die_preisliste(tmp_path, monkeypatch):
+    monkeypatch.setenv("RECHNUNG_CONFIG", str(tmp_path / "fehlt.toml"))
+    monkeypatch.setenv("RECHNUNG_GEWERBE", str(tmp_path))
+    cfg = doctor.config.laden()
+    doctor.config.init(cfg)
+    assert doctor.pruefe_preisliste(cfg).status == doctor.WARNUNG
+    doctor.config.stammdaten_geruest(cfg)
+    assert doctor.pruefe_preisliste(cfg).status == doctor.FEHLER     # Gerüst: nur Kommentare
+    (tmp_path / "stammdaten" / "preise.yaml").write_text(
+        (doctor.config.BEISPIEL_STAMMDATEN / "preise.yaml").read_text(encoding="utf-8").replace(
+            "preis: 450.00", "preis: 9x"), encoding="utf-8")
+    p = doctor.pruefe_preisliste(cfg)
+    assert p.status == doctor.FEHLER and "9x" not in p.detail
+    shutil.copy2(doctor.config.BEISPIEL_STAMMDATEN / "preise.yaml", tmp_path / "stammdaten" / "preise.yaml")
+    assert doctor.pruefe_preisliste(cfg).status == doctor.OK
 
 
 def test_doctor_gewerbe_nicht_erreichbar(tmp_path, monkeypatch):

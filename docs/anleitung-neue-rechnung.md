@@ -16,12 +16,16 @@ uv run rechnung <kommando>
 
 ```sh
 uv run rechnung neu --kunde <kuerzel>
-# rechnung.yaml ausfüllen (leistungsdatum und leistung: sind Pflicht), Belege nach belege/ legen
-uv run rechnung resolve       MM-2026-0001     # zeigt Leistungsort, Ergebnis, Summen; schreibt rechnung.resolved.json
+# rechnung.yaml ausfüllen (leistungsdatum, leistung: und Positionen mit Kürzel sind Pflicht),
+# Belege nach belege/ legen
+uv run rechnung resolve       MM-2026-0001     # zeigt Leistungsort, Ergebnis und ob die Preise bestätigt sind
+uv run rechnung preise        MM-2026-0001     # Preise bestätigen (Vorschlag aus der Preisliste), Referenz
+uv run rechnung resolve       MM-2026-0001     # jetzt mit Summen; schreibt rechnung.resolved.json
 uv run rechnung bauen         MM-2026-0001 --pro-forma   # optional: Pro forma an den Kunden, dann
 uv run rechnung pro-forma     MM-2026-0001 --gesendet-am 2026-06-12   # festhalten, was raus ist
 uv run rechnung bauen         MM-2026-0001     # erzeugt die PDF
 uv run rechnung pruefen       MM-2026-0001     # weist die Pflichtangaben im PDF nach
+uv run rechnung anschreiben   MM-2026-0001     # optional: Text aus anschreiben.md mit eingesetzten Werten
 # PDF selbst per Mail verschicken
 uv run rechnung festschreiben MM-2026-0001 --gesendet-am 2026-06-18
 ```
@@ -37,6 +41,7 @@ ausschließlich durch `festschreiben`.
 | --- | --- | --- |
 | Config | `~/.config/rechnung/config.toml` | `rechnung doctor`, Zeile „Config“ |
 | Eigene Stammdaten | `<gewerbe>/stammdaten/ich.yaml` | `rechnung doctor`, dann `rechnung resolve` meldet Lücken |
+| Preisliste | `<gewerbe>/stammdaten/preise.yaml` | `rechnung preisliste` |
 | Ordnerstruktur | `<gewerbe>/` | `rechnung init` legt die vier Ordner an |
 | LaTeX, pdftotext | System | `rechnung doctor` muss grün sein |
 
@@ -78,10 +83,36 @@ register:                            # optional, belegt die Unternehmereigenscha
   name: Companies House
   nummer: "01234567"
 referenz: Sample Panel 2026          # optional, erscheint als "Ihre Referenz"
+anrede: Dear Jane Sample             # optional, wörtlich; sonst "Sehr geehrte Damen und Herren" / "Dear Madam or Sir"
 unternehmer: true                    # true | false – bestimmt mit der Einordnung den Leistungsort
 sprache: en                          # de | en, Default aus der Config
 waehrung: EUR                        # EUR | USD | GBP, Default aus der Config
 ```
+
+### 1a. Preisliste
+
+Die Preise stehen nicht in der Rechnung, sondern in `<gewerbe>/stammdaten/preise.yaml`. In
+`rechnung.yaml` steht je Position nur ein Kürzel und die Menge. So kann eine AI die Rechnung
+schreiben, ohne einen Preis zu sehen. `rechnung init --stammdaten` legt die Datei mit Erklärung an,
+ein vollständiges Beispiel liegt in `stammdaten.example/preise.yaml`:
+
+```yaml
+vortrag:                              # das Kürzel
+  bezeichnung: { de: Vortrag, en: Talk }   # oder ein Text für beide Sprachen
+  einheit: stunde                     # pauschal | stunde | tag | stueck | kilometer
+  preis: 450.00                       # in EUR, je Einheit
+buch:
+  bezeichnung: { de: Buch, en: Book }
+  einheit: stueck
+  preis: 24.00
+  steuersatz: 7                       # nur als Vorschlag; ob 7 % gilt, entscheidet das Werkzeug
+bahnticket:
+  bezeichnung: { de: Bahnticket, en: Train ticket }
+  einheit: pauschal
+  art: auslage                        # kein fester Preis: Betrag je Rechnung vom Beleg
+```
+
+`rechnung preisliste` zeigt die Liste (unter `RECHNUNG_GESCHWAERZT` ohne Preise).
 
 ### 2. Rechnung anlegen
 
@@ -112,9 +143,12 @@ und legt an:
   belege/            leer
 ```
 
+Das Kürzel der ersten Position bleibt ebenfalls leer und markiert.
+
 ### 3. `rechnung.yaml` ausfüllen
 
-Die einzige Datei, die von Hand geschrieben wird.
+Die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Sie sagt, was geleistet wurde
+und wie viel davon – nie, was es kostet.
 
 ```yaml
 kunde: sample-ltd                    # Pflicht, Kürzel der Kundendatei
@@ -128,16 +162,18 @@ leistung:                            # Pflicht – daraus folgt der Leistungsort
 sprache: en                          # überschreibt Kunde und Config
 waehrung: EUR                        # überschreibt Kunde und Config
 zahlungsziel_tage: 14                # überschreibt die Config
-referenz: Sample Panel 2026          # überschreibt die Kundendatei
-einleitung: >                        # der Satz über der Tabelle; ohne Angabe bleibt die Stelle leer
-  For my participation as a panelist …
+einleitung: >                        # der Satz über der Tabelle, nach der Anrede; ohne Angabe bleibt die Stelle leer
+  for my participation as a panelist …
 
 positionen:                          # mindestens eine
-  - beschreibung: Teilnahme als Panelist, Sample Policy Forum, London
+  - kuerzel: panel                   # Pflicht, aus der Preisliste
+    menge: 2
+    einheit: stunde                  # Pflicht, wie in der Preisliste
+    beschreibung: Panel participation, Sample Policy Forum, London   # optional, sonst die Bezeichnung
+  - kuerzel: flug
     menge: 1
-    einheit: pauschal                # pauschal | stunde | tag | stueck | kilometer — Pflicht
-    einzelpreis: 0.00
-    steuersatz: 7                    # nur 7 (ermäßigt, § 12 Abs. 2); leer = Satz der Rechnung
+    einheit: pauschal
+    beschreibung: "Travel: flight FRA–LON–FRA, receipt attached"
 
 belege:                              # optional
   - datei: flug.pdf
@@ -162,7 +198,8 @@ Bei Unternehmern als Kunden ist der Leistungsort immer ihr Sitz; die Einordnung 
 festgehalten. Katalog Nr. 6 (Finanz- und Versicherungsumsätze) und elektronische Dienstleistungen
 an Privatpersonen in der EU deckt das Werkzeug nicht ab.
 
-Die Reihenfolge, in der Angaben gewinnen: **Rechnung schlägt Kunde schlägt Config.**
+Die Reihenfolge, in der Angaben gewinnen: **Rechnung schlägt Kunde schlägt Config.** Für die
+Referenz: `rechnung.privat.yaml` schlägt die Kundendatei.
 
 Platzhalter aus Vorlagen oder Notizen (`{Event}`, `{354.82}`) vollständig ersetzen, Klammern
 eingeschlossen. Bleibt ein `{…}` in einem Text stehen, bricht `resolve` ab, statt ihn ins PDF zu
@@ -189,7 +226,8 @@ United Kingdom               ─────────────────
 ```
 
 Oben die Rechnung selbst, in der Mitte deine Steuerdaten („Unsere …“), unten die des Kunden
-(„Ihre …“): `referenz`, `ustid` und `register` aus Kunden- oder Rechnungsdatei. Beim Register steht
+(„Ihre …“): `referenz` (aus `rechnung.privat.yaml` oder der Kundendatei), `ustid` und `register`
+aus der Kundendatei. Beim Register steht
 die Nummer vorn, das Register in Klammern dahinter. Fehlen alle drei Kundenangaben, entfällt der
 untere Abschnitt samt Strich. Lange Werte brechen in ihrer Spalte um.
 
@@ -204,9 +242,29 @@ als zusätzliche Seite ans PDF gehängt und mit „Anlage 1 zu Rechnung Nr. …�
 uv run rechnung resolve MM-2026-0001
 ```
 
-Zeigt Leistungsort, Ergebnis, angewandte Regeln, Sätze, Summen, Fälligkeit und den Hinweistext.
-**Hier schaust du genau hin**, besonders auf Leistungsort und Ergebnis: Sie folgen aus Kundendatei
-und Einordnung, nicht aus deiner Absicht.
+Ohne bestätigte Preise zeigt es Leistungsort, Ergebnis und Positionen und sagt „Preise fehlen“; es
+schreibt noch nichts. Mit bestätigten Preisen zeigt es dazu Sätze, Summen, Fälligkeit und den
+Hinweistext und schreibt `rechnung.resolved.json`. **Hier schaust du genau hin**, besonders auf
+Leistungsort und Ergebnis: Sie folgen aus Kundendatei und Einordnung, nicht aus deiner Absicht.
+
+### 5a. Preise bestätigen
+
+```sh
+uv run rechnung preise MM-2026-0001
+```
+
+Im eigenen Terminal, nicht über eine AI: Unter `RECHNUNG_GESCHWAERZT` verweigert der Befehl. Er zeigt
+jede Position mit dem Preis aus der Liste als Vorschlag; Enter übernimmt ihn, eine Zahl ersetzt ihn
+(`287,30` oder `287.30`). Auslagen sind leer. Wo das Werkzeug 7 % erlaubt (Inland, nicht als
+Kleinunternehmer), fragt es je Position danach. Dann die Referenz des Kunden für diese Rechnung (ohne
+Angabe die der Kundendatei), die Summen zur Kontrolle und „Bestätigen?“.
+
+Festgehalten wird in `rechnung.privat.yaml`: die Preise als Schnappschuss (eine spätere Änderung der
+Preisliste wirkt nicht zurück), der 7-%-Schalter, die Referenz und ein Hash der Positionen. Änderst
+du danach eine Position in `rechnung.yaml` – Kürzel, Menge, Einheit oder Beschreibung – oder die
+Währung, sind die Preise **veraltet**: `bauen` baut nichts, bis du neu bestätigst. Die Einleitung
+oder das Datum zu ändern, lässt die Preise gültig. `--aus-liste` übernimmt die Liste ohne Rückfrage
+(für Skripte; verweigert bei Auslagen), `--referenz "PO 4711"` setzt die Referenz.
 
 ### 6. Bauen
 
@@ -214,7 +272,8 @@ und Einordnung, nicht aus deiner Absicht.
 uv run rechnung bauen MM-2026-0001
 ```
 
-Ruft `resolve` selbst noch einmal auf und erzeugt die PDF. Gebaut wird in einem Temp-Verzeichnis;
+Ruft `resolve` selbst noch einmal auf und erzeugt die PDF; ohne gültig bestätigte Preise bricht es
+ab. Gebaut wird in einem Temp-Verzeichnis;
 im Rechnungsordner landen nur die PDF (`rechnung_MM-2026-0001.pdf`, englisch `invoice_…`) und
 `rechnung.resolved.json`. Beliebig oft wiederholbar.
 
@@ -233,9 +292,9 @@ uv run rechnung pro-forma MM-2026-0001 --gesendet-am 2026-06-12
 Jede Seite trägt „PRO FORMA – KEINE RECHNUNG“, der Betreff „(keine Rechnung)“, Nummer, Datum und
 Fälligkeit heißen „vorläufig“, und statt der Zahlungsaufforderung steht die Bitte um Prüfung.
 `rechnung pro-forma` hält fest, was du verschickt hast: `pro-forma/1/` mit der PDF und Kopien von
-`rechnung.yaml` und `rechnung.resolved.json`, schreibgeschützt, dazu ein Eintrag in `status.yaml`. Will
-der Kunde etwas geändert haben: `rechnung.yaml` anpassen, neu bauen, wieder senden – das wird
-`pro-forma/2/`. Ist alles bestätigt, das Rechnungsdatum in `rechnung.yaml` auf den Tag der echten
+`rechnung.yaml`, `rechnung.privat.yaml` und `rechnung.resolved.json`, schreibgeschützt, dazu ein
+Eintrag in `status.yaml`. Will der Kunde etwas geändert haben: `rechnung.yaml` anpassen oder mit
+`rechnung preise` Preise bzw. Referenz ändern, neu bauen, wieder senden – das wird `pro-forma/2/`. Ist alles bestätigt, das Rechnungsdatum in `rechnung.yaml` auf den Tag der echten
 Rechnung setzen und normal weiter mit Schritt 6.
 
 Wichtig: Der Name allein macht ein Dokument nicht zur Nicht-Rechnung (§ 14 Abs. 1 UStG). Folgt auf
@@ -253,14 +312,21 @@ Zieht den Text aus der fertigen PDF und weist jede Pflichtangabe nach. Rot heiß
 
 Macht das Werkzeug **nicht**. Die PDF liegt im Rechnungsordner; verschick sie per Mail, wie du magst.
 
+Für den Begleittext kann eine AI `anschreiben.md` im Rechnungsordner entwerfen, mit Platzhaltern statt
+Namen und Beträgen: `[anrede]`, `[nummer]`, `[datum]`, `[leistungsdatum]`, `[faelligkeit]`, `[netto]`,
+`[brutto]`, `[firma]`, `[referenz]`, `[name]`. `uv run rechnung anschreiben MM-2026-0001` setzt die
+Werte aus der gebauten Rechnung ein und gibt den Text aus; ein unbekannter Platzhalter oder ein
+Platzhalter ohne Wert ist ein Abbruch.
+
 ### 9. Festschreiben
 
 ```sh
 uv run rechnung festschreiben MM-2026-0001 --gesendet-am 2026-06-18
 ```
 
-Danach ist die Rechnung unveränderbar: Status, Schreibschutz auf PDF und `resolved.json`, Hashes in
-`status.yaml`. `bauen` verweigert den Neubau. `--gesendet-am` ist Pflicht und darf nicht in der
+Danach ist die Rechnung unveränderbar: Status, Schreibschutz auf PDF, `resolved.json` und
+`rechnung.privat.yaml`, Hashes in `status.yaml`. Festgeschrieben wird nur, was zu `rechnung.yaml` und
+den Preisen passt. `bauen` verweigert den Neubau. `--gesendet-am` ist Pflicht und darf nicht in der
 Zukunft liegen.
 
 **Korrektur nach dem Festschreiben:** niemals am Original. Stornorechnung plus neue Rechnung — im
@@ -275,7 +341,11 @@ Werkzeug noch nicht gebaut (geplant).
 | `rechnung.yaml, Zeile 7, Spalte 18: …` | YAML-Syntaxfehler; die Meldung zeigt die Zeile und markiert die Stelle | siehe „YAML-Fallen“ unten |
 | `leistungsdatum fehlt: …` | Feld ist nach `rechnung neu` noch leer | Tag der Leistung als `JJJJ-MM-TT` eintragen |
 | `positionen.0.einheit: Field required` | Pflichtfeld fehlt | Feld ergänzen; Einheit wird nie geraten |
-| `positionen.0.einzelpreis: … (Wert: {354.82})` | Platzhalter-Klammern stehen gelassen | Klammern entfernen: `einzelpreis: 354.82` |
+| `kuerzel fehlt` / `kuerzel „…“ steht nicht in der Preisliste` | Position ohne oder mit unbekanntem Kürzel | Kürzel aus `rechnung preisliste` eintragen oder die Liste ergänzen |
+| `einheit „stunde“, die Preisliste führt … in „pauschal“` | Einheit passt nicht zur Liste | Einheit der Liste nehmen, Menge darin angeben |
+| `positionen.0.menge: … (Wert: {2})` | Platzhalter-Klammern stehen gelassen | Klammern entfernen: `menge: 2` |
+| `Abbruch (preise): Preise … sind noch nicht bestätigt` / `… veraltet` | keine oder eine alte Bestätigung | `rechnung preise <nr>` im eigenen Terminal |
+| `referenz: steht nicht in rechnung.yaml` | Referenz aus einer alten Rechnungsdatei | mit `rechnung preise` eintragen |
 | `einleitung: enthält den Platzhalter {Event} …` | `{…}` aus einer Vorlage nicht ersetzt | echten Text einsetzen |
 | `leistungdatum: Extra inputs are not permitted` | Feldname vertippt | Tippfehler korrigieren |
 | `leistung: taetigkeit fehlt …` / `einordnung fehlt …` | Block nach `rechnung neu` noch leer | Tätigkeit und Begriff aus der Liste eintragen |
@@ -287,7 +357,7 @@ Werkzeug noch nicht gebaut (geplant).
 | `Währung USD mit Umsatzsteuerausweis …` | Fremdwährung mit deutscher USt | In EUR fakturieren; Umrechnung ist noch nicht gebaut |
 | `Beleg fehlt: …` | Datei steht im YAML, liegt aber nicht in `belege/` | Datei hinlegen oder Eintrag löschen |
 | `Rechnung … ist festgeschrieben` | Neubau einer eingefrorenen Rechnung | Storno und neue Rechnung |
-| `… passt nicht mehr zu rechnung.yaml` | `rechnung pro-forma` nach einer Änderung ohne neuen Bau | `bauen --pro-forma`, ansehen, dann festhalten |
+| `… passt nicht mehr zu rechnung.yaml oder den Preisen` | `rechnung pro-forma` oder `festschreiben` nach einer Änderung ohne neuen Bau | neu bauen, ansehen, dann festhalten |
 | `Land XX ist in rules.LAENDER nicht hinterlegt` | Neues Land | In `src/rechnung/rules.py` eintragen |
 
 ### YAML-Fallen
@@ -296,8 +366,8 @@ Aus dem ersten echten Testlauf. Die Faustregel: **Text mit Satzzeichen in Anfüh
 
 | Falle | Was passiert | So geht es richtig |
 | --- | --- | --- |
-| ` #` mitten im Wert, z. B. `referenz: PO #594` | Alles ab ` #` ist ein Kommentar; „#594“ verschwindet still | `referenz: "PO #594"` |
-| `{…}` am Wertanfang, z. B. `einzelpreis: {354.82}` | YAML liest ein Dictionary; `resolve` meldet den Wert und rät, die Klammern zu entfernen | `einzelpreis: 354.82` |
+| ` #` mitten im Wert, z. B. `beschreibung: Workshop #3` | Alles ab ` #` ist ein Kommentar; „#3“ verschwindet still | `beschreibung: "Workshop #3"` |
+| `{…}` am Wertanfang, z. B. `menge: {2}` | YAML liest ein Dictionary; `resolve` meldet den Wert und rät, die Klammern zu entfernen | `menge: 2` |
 | `: ` mitten im Text, z. B. `einleitung: Panel: Zukunft der Arbeit` | Syntaxfehler „Doppelpunkt mit Leerzeichen mitten im Wert“ | `einleitung: "Panel: Zukunft der Arbeit"` |
 | Block nur halb auskommentiert: `# belege:` über `  - flug.pdf` | Syntaxfehler „Listeneintrag ohne Schlüssel darüber“ | beide Zeilen aus- oder beide einkommentieren |
 | `??` als Platzhalter, z. B. `beschreibung: ??` | Wird als Text gedruckt; nur in Zahlenfeldern fällt es auf | Platzhalter vor dem Bauen ersetzen; im PDF nach `??` suchen |
@@ -384,19 +454,21 @@ Welche Angaben `pruefen` im PDF-Text nachweist und mit welcher Fundstelle im USt
 Wenn dieses Werkzeug einmal über einen MCP-Server oder direkt aus Claude bedient wird, gilt derselbe
 Vertrag wie für einen Menschen. Er steht ausführlich in `CLAUDE.md`, hier das Wesentliche:
 
-**Eine AI darf:** `rechnung.yaml` anlegen und ändern, Kundendateien als Vorschlag anlegen (der Mensch
+**Eine AI darf:** `rechnung.yaml` und `anschreiben.md` anlegen und ändern, Kundendateien als Vorschlag anlegen (der Mensch
 bestätigt, weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen), Code und Vorlage ändern.
 
-**Eine AI darf nicht:** `rechnung.resolved.json`, PDFs, `status.yaml`, `pro-forma/` oder `ich.yaml` schreiben,
-Rechnungsnummern vergeben, Beträge ausrechnen, festgeschriebene Rechnungen anfassen. Das ist
+**Eine AI darf nicht:** `rechnung.resolved.json`, PDFs, `status.yaml`, `pro-forma/`, `rechnung.privat.yaml`,
+`ich.yaml` oder `preise.yaml` schreiben, Preise bestätigen, Rechnungsnummern vergeben, Beträge ausrechnen, festgeschriebene Rechnungen anfassen. Das ist
 zusätzlich technisch erzwungen, über einen PreToolUse-Hook und Deny-Regeln.
 
 **Gut automatisierbar**, weil deterministisch und mit klaren Exit-Codes: `neu`, `resolve`, `bauen`,
 `pruefen`, `doctor`. Jeder Fehler ist eine Meldung, die sagt, was zu tun ist.
 
-**Nicht automatisieren:** `festschreiben` und `pro-forma`. Es verlangt zu wissen, wann die Rechnung tatsächlich beim
+**Nicht automatisieren:** `preise`, `festschreiben` und `pro-forma`. `preise`, weil die Beträge an der AI
+vorbei gehen sollen. Es verlangt zu wissen, wann die Rechnung tatsächlich beim
 Kunden war, und es ist unumkehrbar.
 
 **Sinnvoller Ablauf für einen Assistenten:** `neu` → `rechnung.yaml` füllen → `resolve` ausführen und
-dem Menschen **zeigen**, was herauskommt (vor allem Einordnung, Leistungsort und Ergebnis) → Bestätigung abwarten → `bauen`
+dem Menschen **zeigen**, was herauskommt (vor allem Einordnung, Leistungsort und Ergebnis) → Bestätigung
+abwarten → der Mensch bestätigt die Preise im eigenen Terminal → `bauen`
 → `pruefen` → dem Menschen die PDF geben. Das Festschreiben macht der Mensch nach dem Versand.

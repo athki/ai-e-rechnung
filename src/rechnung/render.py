@@ -141,6 +141,7 @@ def kontext(r: Resolved, pro_forma: bool = False) -> dict:
         "faelligkeit": datum(r.faelligkeit, sprache),
         "waehrung": r.waehrung,
         "referenz": escape(r.referenz) if r.referenz else None,
+        "anrede": escape(r.anrede),
         "einleitung": escape(r.einleitung) if r.einleitung else None,
         "empfaenger": empfaenger,
         "kunde_ustid": escape(r.kunde.ustid) if r.kunde.ustid else None,

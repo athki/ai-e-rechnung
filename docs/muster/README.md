@@ -11,22 +11,24 @@ rechnung demo --pruefen
 und danach aus `demo-output/<name>/` hierher kopiert, die Rechnung als `<name>.pdf`. Die Muster zeigen die
 Standardvorlage: Wer einen eigenen Vorlagen-Ordner konfiguriert hat, baut sie ohne Config,
 `RECHNUNG_CONFIG=/dev/null rechnung demo --pruefen`. Die `.yaml` daneben ist jeweils die Eingabe, aus
-der die PDF entstanden ist.
+der die PDF entstanden ist: was geleistet wurde und wie viel davon, mit Kürzeln aus
+`stammdaten.example/preise.yaml`. Die `.privat.yaml` ist die `rechnung.privat.yaml` dazu, mit den
+bestätigten Preisen und der Referenz.
 
 | Datei | Kunde | Einordnung | Sprache | Ergebnis |
 | --- | --- | --- | --- | --- |
 | `inland-muster-gmbh` | Unternehmen im Inland | `beratung` | de | 1.200,00 netto + 19 % = 1.428,00 EUR |
 | `reverse-charge-exemple-sarl` | Unternehmen in der EU mit USt-IdNr. | `beratung` | en | 2.400,00 EUR, 0 %, Reverse Charge, beide USt-IdNrn. |
 | `nicht-steuerbar-sample-ltd` | Unternehmen im Drittland | `unterrichtend`, GB | en | 2 Std. × 200,00 + Flug 287,30 = 687,30 EUR, 0 %, § 3a Abs. 2 UStG, Flugbeleg angehängt |
-| `nicht-steuerbar-privat-ch` | Privatperson im Drittland | `unterrichtend`, CH | de | Vortrag in Zürich: 900,00 EUR, 0 %, § 3a Abs. 3 Nr. 3 UStG |
+| `nicht-steuerbar-privat-ch` | Privatperson im Drittland | `unterrichtend`, CH | de | Vortrag in Zürich, 2 Std. × 450,00 = 900,00 EUR, 0 %, § 3a Abs. 3 Nr. 3 UStG |
 | `inland-privat-de` | Privatperson im Inland | `beratung` | de | 180,00 netto + 19 % = 214,20 EUR |
 | `kleinunternehmer-muster-gmbh` | Unternehmen im Inland | `beratung` | de | 480,00 EUR, steuerfrei nach § 19 UStG, keine Steuerzeile |
 
 Für die letzte setzt die Demo im Beispiel-Aussteller `kleinunternehmer: true`; die Eingabe selbst
 sieht aus wie jede andere.
 
-`nicht-steuerbar-sample-ltd` geht vorher durch zwei Pro-forma-Revisionen (die zweite ergänzt die
-Referenz „PO 4711“); die Demo legt sie in `demo-output/nicht-steuerbar-sample-ltd/pro-forma/1/` und
+`nicht-steuerbar-sample-ltd` geht vorher durch zwei Pro-forma-Revisionen (die zweite ergänzt in
+`rechnung.privat.yaml` die Referenz „PO 4711“); die Demo legt sie in `demo-output/nicht-steuerbar-sample-ltd/pro-forma/1/` und
 `…/2/` ab. Als Muster liegt hier die zweite: `nicht-steuerbar-sample-ltd.pro-forma.pdf`.
 
 Alle sechs bestehen `rechnung pruefen`, also den Nachweis der Pflichtangaben im PDF-Text.

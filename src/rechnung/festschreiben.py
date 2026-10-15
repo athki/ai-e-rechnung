@@ -5,14 +5,16 @@ Ausstellung unveränderbar aufzubewahren. Ausgestellt im Sinne des § 14 UStG is
 wenn sie den Empfänger erreicht – deshalb ist `--gesendet-am` Pflicht und kein Beiwerk.
 
 Das Werkzeug verschickt nichts. Es hält fest, dass du verschickt hast, und zieht daraus die
-Konsequenz: Status in status.yaml, Schreibschutz auf PDF und resolved.json, Hashes gespeichert.
+Konsequenz: Status in status.yaml, Schreibschutz auf PDF, resolved.json und rechnung.privat.yaml,
+Hashes gespeichert.
 Danach verweigert `bauen` den Neubau. Eine Korrektur ist eine Stornorechnung plus eine neue
 Rechnung, nie eine Änderung am Original.
 
 Vor dem Festschreiben darf beliebig oft gebaut und geprüft werden; nichts friert von selbst ein.
 
 Pro forma: `rechnung pro-forma <nr> --gesendet-am` friert den gesendeten Stand als Revision ein
-(`pro-forma/<n>/` mit PDF und Kopien von rechnung.yaml und rechnung.resolved.json, schreibgeschützt,
+(`pro-forma/<n>/` mit PDF und Kopien von rechnung.yaml, rechnung.privat.yaml und
+rechnung.resolved.json, schreibgeschützt,
 Eintrag in status.yaml). Eine Pro forma ist keine Rechnung; `festschreiben` friert nur die echte ein.
 """
 
@@ -33,6 +35,7 @@ from rechnung import meldung
 STATUS_DATEI = "status.yaml"
 EINGABE_DATEI = "rechnung.yaml"
 RESOLVED_DATEI = "rechnung.resolved.json"
+PRIVAT_DATEI = "rechnung.privat.yaml"   # Preise und Referenz (preise.py)
 PRO_FORMA_ORDNER = "pro-forma"
 ENTWURF = "entwurf"
 FESTGESCHRIEBEN = "festgeschrieben"
@@ -95,6 +98,7 @@ def festschreiben(ordner: Path, gesendet_am: date, am: date | None = None) -> di
     """
     resolved = ordner / RESOLVED_DATEI
     eingabe = ordner / EINGABE_DATEI
+    privat = ordner / PRIVAT_DATEI
     pdf = _pdf(ordner)
 
     if ist_festgeschrieben(ordner):
@@ -104,9 +108,10 @@ def festschreiben(ordner: Path, gesendet_am: date, am: date | None = None) -> di
             f"{vorher.get('gesendet_am', 'unbekannt')}). Für eine Korrektur eine Stornorechnung "
             f"und eine neue Rechnung schreiben."
         )
-    for pflicht in (pdf, resolved, eingabe):
+    for pflicht in (pdf, resolved, eingabe, privat):
         if not pflicht.is_file():
             raise FestschreibFehler(f"{pflicht.name} fehlt – erst `rechnung bauen` ausführen.")
+    _passt_zum_build(pdf, resolved, eingabe, privat, f"rechnung bauen {ordner.name}", zeit=False)
 
     vorher = status_lesen(ordner)
     daten = {
@@ -115,6 +120,7 @@ def festschreiben(ordner: Path, gesendet_am: date, am: date | None = None) -> di
         "festgeschrieben_am": (am or date.today()).isoformat(),
         "hash": {
             EINGABE_DATEI: hash_datei(eingabe),
+            PRIVAT_DATEI: hash_datei(privat),
             RESOLVED_DATEI: hash_datei(resolved),
             pdf.name: hash_datei(pdf),
         },
@@ -123,10 +129,22 @@ def festschreiben(ordner: Path, gesendet_am: date, am: date | None = None) -> di
         daten["pro_forma"] = vorher["pro_forma"]
     _status_schreiben(ordner, daten)
 
-    for datei in (pdf, resolved):
+    for datei in (pdf, resolved, privat):
         schreibschutz(datei)
     schreibschutz(ordner / STATUS_DATEI)
     return daten
+
+
+def _passt_zum_build(pdf: Path, resolved: Path, eingabe: Path, privat: Path, bauen: str, zeit: bool = True) -> None:
+    """Eingefroren wird nur, was zu rechnung.yaml und den Preisen passt; bei der Pro forma auch nur, was
+    nach dem letzten Auflösen gebaut wurde (`zeit`)."""
+    daten = json.loads(resolved.read_text(encoding="utf-8"))
+    if (daten.get("input_hash") != hash_datei(eingabe) or daten.get("privat_hash") != hash_datei(privat)
+            or (zeit and pdf.stat().st_mtime < resolved.stat().st_mtime)):
+        raise FestschreibFehler(
+            f"{pdf.name} passt nicht mehr zu rechnung.yaml oder den Preisen – erst `{bauen}` ausführen "
+            f"und die neue PDF ansehen."
+        )
 
 
 def pro_forma_festhalten(ordner: Path, gesendet_am: date, am: date | None = None) -> dict:
@@ -137,16 +155,12 @@ def pro_forma_festhalten(ordner: Path, gesendet_am: date, am: date | None = None
     if ist_festgeschrieben(ordner):
         raise FestschreibFehler("Die Rechnung ist festgeschrieben – eine Pro forma gibt es danach nicht mehr.")
     eingabe = ordner / EINGABE_DATEI
+    privat = ordner / PRIVAT_DATEI
     resolved = ordner / RESOLVED_DATEI
     pdf = _pdf(ordner, pro_forma=True)
-    if not pdf.is_file():
+    if not pdf.is_file() or not privat.is_file():
         raise FestschreibFehler(f"{pdf.name} fehlt – erst `rechnung bauen {ordner.name} --pro-forma` ausführen.")
-    stand = json.loads(resolved.read_text(encoding="utf-8")).get("input_hash")
-    if stand != hash_datei(eingabe) or pdf.stat().st_mtime < resolved.stat().st_mtime:
-        raise FestschreibFehler(
-            f"{pdf.name} passt nicht mehr zu rechnung.yaml – erst `rechnung bauen {ordner.name} "
-            f"--pro-forma` ausführen und die neue PDF ansehen."
-        )
+    _passt_zum_build(pdf, resolved, eingabe, privat, f"rechnung bauen {ordner.name} --pro-forma")
 
     status = status_lesen(ordner)
     revisionen = list(status.get("pro_forma") or [])
@@ -155,8 +169,8 @@ def pro_forma_festhalten(ordner: Path, gesendet_am: date, am: date | None = None
     if ziel.exists():
         raise FestschreibFehler(f"{ziel} existiert schon, steht aber nicht in status.yaml – bitte prüfen.")
     ziel.mkdir(parents=True)
-    kopien = [ziel / EINGABE_DATEI, ziel / RESOLVED_DATEI, ziel / _pdf(ordner, True, n).name]
-    for quelle, kopie in zip((eingabe, resolved, pdf), kopien):
+    kopien = [ziel / EINGABE_DATEI, ziel / PRIVAT_DATEI, ziel / RESOLVED_DATEI, ziel / _pdf(ordner, True, n).name]
+    for quelle, kopie in zip((eingabe, privat, resolved, pdf), kopien):
         shutil.copy2(quelle, kopie)
         schreibschutz(kopie)
 

@@ -262,7 +262,7 @@ def fakten(r: Resolved, geschwaerzt: bool = False) -> list[tuple[str, str, str, 
                        f"{_kategorie(r.leistungsort)} (R37)"))
     for p in r.positionen:
         if p.steuersatz == 7:
-            zeilen.append((f"Ermäßigter Satz, Position {p.pos}", f"`rechnung.yaml: positionen[{p.pos}].steuersatz`",
+            zeilen.append((f"Ermäßigter Satz, Position {p.pos}", f"`rechnung.privat.yaml: positionen[{p.pos}].steuersatz`",
                            "7", "§ 12 Abs. 2 UStG (R10)"))
     return zeilen
 

@@ -6,7 +6,7 @@ leistung:
   taetigkeit: "Beratung zum Marktzugang"
   einordnung: beratung
 positionen:
-  - beschreibung: "Beratung Marktzugang"
+  - kuerzel: beratung
     menge: 4
     einheit: stunde
-    einzelpreis: 120.00
+    beschreibung: "Beratung Marktzugang"

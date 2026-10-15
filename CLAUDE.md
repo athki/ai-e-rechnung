@@ -19,13 +19,16 @@ Code oder Build-Artefakte.
 <gewerbe>/
   stammdaten/
     ich.yaml                 # Aussteller, einmal
+    preise.yaml              # Preisliste: Kürzel -> Bezeichnung, Einheit, Preis (pflegt nur der Mensch)
     kunden/<kuerzel>.yaml    # ein Kunde pro Datei (Kundenstammdaten)
   rechnung-ausgang/JJJJ/<nummer>/
-    rechnung.yaml            # Input (einzige Datei, die Menschen und AI schreiben)
+    rechnung.yaml            # Input (einzige Datei, die Menschen und AI schreiben): was und wie viel
+    rechnung.privat.yaml     # Preise und Referenz, schreibt nur `rechnung preise` (der Mensch)
+    anschreiben.md           # Entwurf des Anschreibens mit Platzhaltern (optional, AI oder Mensch)
     rechnung.resolved.json   # abgeleitet, eingefroren
     rechnung_<nummer>.pdf    # abgeleitet; englisch invoice_<nummer>.pdf
     rechnung-pro-forma_<nummer>.pdf   # Arbeitskopie der Pro forma, bei jedem Bau überschrieben
-    pro-forma/<n>/           # gesendete Pro-forma-Revision: PDF, rechnung.yaml, resolved.json, schreibgeschützt
+    pro-forma/<n>/           # gesendete Pro-forma-Revision: PDF, rechnung.yaml, rechnung.privat.yaml, resolved.json
     status.yaml              # ab der ersten gesendeten Pro forma bzw. dem Festschreiben: Status, Daten, Hashes
     belege/
   steuerberater/JJJJ/        # Export-Ziel
@@ -36,12 +39,13 @@ Builds laufen in einem temporären Verzeichnis (`tempfile.mkdtemp()`); nur die P
 `rechnung.resolved.json` werden in den Rechnungsordner kopiert. Kein `.aux`, `.log`, `.tex` dort, nie.
 
 Ohne Gewerbe-Wurzel läuft alles gegen `stammdaten.example/` im Repo (Demo-Modus).
-`rechnung demo` baut daraus sechs Beispielrechnungen, je Ergebnis mindestens eine, nach `./demo-output/` (gitignored).
+`rechnung demo` baut daraus sechs Beispielrechnungen, je Ergebnis mindestens eine, nach `./demo-output/` (gitignored);
+die Preise bestätigt die Demo selbst aus `stammdaten.example/preise.yaml`.
 
 ## Pipeline
 
 ```
-rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()──▶ rechnung_<nummer>.pdf
+rechnung.yaml + rechnung.privat.yaml ──resolve()──▶ rechnung.resolved.json ──render()──▶ rechnung_<nummer>.pdf
 ```
 
 - Alle Logik in `resolve.py` und `rules.py`. Das Template druckt nur Felder; keine Entscheidungen in LaTeX.
@@ -52,8 +56,21 @@ rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()─�
   Der Ordnername ist die vollständige Rechnungsnummer.
 - Währung `EUR`, `USD` oder `GBP`; Fremdwährung nur, wenn keine deutsche USt ausgewiesen wird (sonst
   wäre der Steuerbetrag zusätzlich in Euro anzugeben, § 16 Abs. 6 UStG – nicht gebaut, `resolve` bricht ab).
-- Mengeneinheit je Position ist Pflicht (`pauschal`, `stunde`, `tag`, `stueck`, `kilometer`, gemappt auf
-  UN/ECE Rec. 20). Kein Default im Modell; `rechnung neu` füllt `pauschal` sichtbar in die Datei vor.
+- Position = `kuerzel` aus der Preisliste, `menge`, `einheit`, optional `beschreibung` (sonst die
+  Bezeichnung der Liste in der Sprache der Rechnung). Nie ein Preis. Mengeneinheit ist Pflicht (`pauschal`,
+  `stunde`, `tag`, `stueck`, `kilometer`, gemappt auf UN/ECE Rec. 20) und muss zur Liste passen; kein
+  Default im Modell, `rechnung neu` füllt `pauschal` sichtbar vor und lässt das Kürzel leer.
+- Preise (`preise.py`): `rechnung preise <nr>` zeigt jede Position mit dem Listenpreis als Vorschlag
+  (nur in EUR), Auslagen (`art: auslage`) leer; 7 % nur, wo `rules.satz_position()` es erlaubt. Die
+  Bestätigung landet als Schnappschuss in `rechnung.privat.yaml` mit Hash der Positionen (Reihenfolge,
+  Kürzel, Menge, Einheit, Beschreibung) und Währung. Ohne gültige Bestätigung zeigt `resolve` nur den
+  Entwurf (Leistungsort, Ergebnis, „Preise fehlen/veraltet“) und schreibt nichts; `bauen` bricht ab
+  (Art `preise`). `--aus-liste` übernimmt die Liste ohne Rückfrage. Unter dem Schalter verweigert `preise`.
+- `referenz` (Bestellnummer) steht in `rechnung.privat.yaml`, sonst gilt die der Kundendatei. Anrede aus
+  `anrede:` der Kundendatei, sonst „Sehr geehrte Damen und Herren“ / „Dear Madam or Sir“; sie steht über
+  der Einleitung. `rechnung anschreiben <nr>` setzt Platzhalter aus fester Liste (`anschreiben.FELDER`)
+  in `anschreiben.md` ein; unbekannt = Abbruch; unter dem Schalter nur Prüfung. `rechnung offen` listet,
+  was noch nicht festgeschrieben ist und was fehlt.
 - `leistung:` ist Pflicht und wird nie geraten: `taetigkeit` (in eigenen Worten), `einordnung` (ein Begriff
   aus § 3a UStG, Liste in RULES.md Teil 4 und als Kommentar in jeder neuen `rechnung.yaml`), `ort` bei
   Tätigkeitsleistungen (Land oder `online`). `rechnung neu` lässt den Block leer; `--taetigkeit`,
@@ -61,19 +78,19 @@ rechnung.yaml ──resolve()──▶ rechnung.resolved.json ──render()─�
 - Leistungsdatum ist Pflicht und wird nie geraten. `rechnung neu --kunde <kuerzel>` lässt es in
   `rechnung.yaml` leer (`# PFLICHT: Tag der Leistung, JJJJ-MM-TT`), `resolve` bricht ab, bis es dasteht;
   `--leistungsdatum JJJJ-MM-TT` füllt es vor (für Skripte und AI).
-- `resolved.json` enthält Leistungsort, Ergebnis und die angewandten Regel-IDs (`regeln`), dazu `vorlage_version` (Git-Short-Hash des Repos beim Build) und einen Hash des Inputs.
+- `resolved.json` enthält Leistungsort, Ergebnis und die angewandten Regel-IDs (`regeln`), dazu `vorlage_version` (Git-Short-Hash des Repos beim Build) und Hashes von `rechnung.yaml` und `rechnung.privat.yaml`.
 - `rechnung festschreiben <nr> --gesendet-am JJJJ-MM-TT` macht die Rechnung unveränderbar: Status
-  `festgeschrieben`, PDF und resolved.json read-only, Hashes von yaml, resolved.json und PDF in
-  `status.yaml`. `--gesendet-am` ist Pflicht – unveränderbar wird eine Rechnung, weil sie ausgestellt
-  ist (§ 14 UStG), und das Werkzeug verschickt nichts, es hält nur fest, wann du verschickt hast.
+  `festgeschrieben`, PDF, resolved.json und rechnung.privat.yaml read-only, Hashes von yaml,
+  rechnung.privat.yaml, resolved.json und PDF in `status.yaml`; nur, wenn der Bau zu beiden Eingaben
+  passt. `--gesendet-am` ist Pflicht – unveränderbar wird eine Rechnung, weil sie ausgestellt ist (§ 14 UStG), und das Werkzeug verschickt nichts, es hält nur fest, wann du verschickt hast.
   Vorher darf beliebig oft gebaut und geprüft werden. Danach verweigert `bauen` den Neubau, und
   `pruefen` meldet jede nachträgliche Änderung an den eingefrorenen Dateien.
 - Pro forma (RULES.md R38): `rechnung bauen <nr> --pro-forma` baut aus denselben Daten eine Pro forma
   (Belegart `proforma`: Kopfzeile „PRO FORMA – KEINE RECHNUNG“, „(keine Rechnung)“ im Betreff, Labels
   „Re.-Nr. (vorl.)“ usw., Bitte um Prüfung statt Zahlungsaufforderung) und überschreibt die Arbeitskopie.
   `rechnung pro-forma <nr> --gesendet-am JJJJ-MM-TT` friert sie als nächste Revision in `pro-forma/<n>/`
-  ein (PDF plus Kopien von yaml und resolved.json, Hashes in `status.yaml`). `festschreiben` friert nur
-  die echte Rechnung ein; danach gibt es keine Pro forma mehr. Das Datum der Rechnung stellt der Mensch
+  ein (PDF plus Kopien von yaml, rechnung.privat.yaml und resolved.json, Hashes in `status.yaml`).
+  `festschreiben` friert nur die echte Rechnung ein; danach gibt es keine Pro forma mehr. Das Datum der Rechnung stellt der Mensch
   vor dem echten Bau in `rechnung.yaml` um.
 - Dateinamen der PDFs tragen die Nummer, das Präfix folgt der Sprache (`rechnung_…` / `invoice_…`);
   ein Sprachwechsel räumt die Datei mit dem anderen Präfix weg.
@@ -106,7 +123,8 @@ darf strenger sein als das Gesetz (abbrechen), aber nie anders entscheiden.
   Stammdaten nicht in Deutschland sitzt (R4).
 - `rules.kern()` ist der Entscheidungskern als reine Funktion über abstrakte Merkmale (3456 Kombinationen,
   Tests laufen über alle); `rules.entscheide()` übersetzt Daten hin und zurück. `steuersatz` je Position
-  nimmt nur `7` (§ 12 Abs. 2); `rules.satz_position()` entscheidet, wo das geht. Beide gleicht
+  (in `rechnung.privat.yaml`, Vorschlag aus der Preisliste) nimmt nur `7` (§ 12 Abs. 2);
+  `rules.satz_position()` entscheidet, wo das geht. Beide gleicht
   `tests/test_abgleich.py` über alle Eingaben mit dem bewiesenen Lean-Modell ab (`lean/abgleich/kern.json`).
 - Manuelle Festlegung nur des Leistungsorts: `leistungsort:` mit `begruendung:`, sonst Validierungsfehler.
 - EU-Länderliste als Konstante in `rules.py`, mit Kommentar und Datum.
@@ -141,10 +159,12 @@ Kennzeichnung, an der Rechnung ihr Fehlen (`pruefen --pro-forma` prüft die Arbe
 
 ## Was die AI darf und was nicht
 
-Darf: `rechnung.yaml` anlegen und ändern; `stammdaten/kunden/*.yaml` als Vorschlag anlegen (der Mensch bestätigt,
-weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen); Code, Tests und Vorlage im Repo ändern.
+Darf: `rechnung.yaml` und `anschreiben.md` anlegen und ändern; `stammdaten/kunden/*.yaml` als Vorschlag anlegen
+(der Mensch bestätigt, weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen); Code, Tests und
+Vorlage im Repo ändern.
 
-Darf nicht: `resolved.json`, PDFs, `status.yaml`, `pro-forma/` oder `stammdaten/ich.yaml` schreiben; Rechnungsnummern vergeben;
+Darf nicht: `resolved.json`, PDFs, `status.yaml`, `pro-forma/`, `rechnung.privat.yaml`, `stammdaten/ich.yaml`
+oder `stammdaten/preise.yaml` schreiben; Preise bestätigen (`rechnung preise`); Rechnungsnummern vergeben;
 Beträge ausrechnen; festgeschriebene Rechnungen anfassen; echte Daten in Tests, Fixtures oder Commits.
 
 Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Regeln in
@@ -152,19 +172,20 @@ Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Re
 
 Geschwärzte Sicht (`sicht.py`, Schalter `RECHNUNG_GESCHWAERZT`, nur als Env, fail-closed): Die AI
 weiß, was geleistet wurde und wie viel davon, nie, wer beteiligt ist und was es kostet. Unter dem
-Schalter geben `resolve`, `bauen`, `pruefen`, `begruendung` und `neu` keine Namen, Anschriften, Werte
-aus Kunden- oder Ausstellerdatei, Beträge oder absoluten Pfade aus (`<gewerbe>/…`). Abbrüche kommen
-als `Abbruch (<art>): …` mit einer der Arten aus `meldung.py` (`eingabe`, `frage`, `stammdaten`,
-`ausserhalb`); eine Meldung ohne geschwärzte Fassung wird zurückgehalten. Jedes Feld von
-`rechnung.yaml` ist in `sicht.EINSTUFUNG` als „ai“ oder „privat“ eingestuft (Test). Der Hook sperrt
-unter dem Schalter auch das Lesen in den Gewerbe-Wurzeln (Env und config.toml): Stammdaten,
-resolved.json, PDFs, status.yaml, `pro-forma/`, `belege/`; Repo und `stammdaten.example/` bleiben frei.
+Schalter geben `resolve`, `bauen`, `pruefen`, `begruendung`, `neu`, `preisliste`, `offen` und
+`anschreiben` keine Namen, Anschriften, Werte aus Kunden- oder Ausstellerdatei, Beträge oder absoluten
+Pfade aus (`<gewerbe>/…`); `preise` verweigert. Abbrüche kommen als `Abbruch (<art>): …` mit einer der
+Arten aus `meldung.py` (`eingabe`, `frage`, `stammdaten`, `ausserhalb`, `preise`); eine Meldung ohne
+geschwärzte Fassung wird zurückgehalten. Jedes Feld von `rechnung.yaml` ist in `sicht.EINSTUFUNG`
+eingestuft (Test); seit der Preisliste ist keines mehr „privat“. Der Hook sperrt unter dem Schalter auch
+das Lesen in den Gewerbe-Wurzeln (Env und config.toml): Stammdaten mit Preisliste, resolved.json,
+rechnung.privat.yaml, PDFs, status.yaml, `pro-forma/`, `belege/`; Repo und `stammdaten.example/` bleiben frei.
 Lesen über Bash ist damit nicht ganz gesperrt – echte Durchsetzung kommt mit dem MCP-Server. Den
 Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
 
 ## Technik
 
-- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,resolve,render,vorlage,pruefen,festschreiben,begruendung,sicht,doctor,cli}.py`
+- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,preise,resolve,render,vorlage,pruefen,festschreiben,begruendung,anschreiben,sicht,doctor,cli}.py`
 - `pydantic` v2 mit `extra="forbid"` auf allen Modellen; `typer` für die CLI; `pyyaml`
 - `jinja2` mit LaTeX-Delimitern (`\VAR{ }`, `\BLOCK{ }`, `\#{ }`) und `StrictUndefined`
 - LaTeX: `latexmk -interaction=nonstopmode -no-shell-escape -outdir=<tmp>`; Engine `pdflatex`,
@@ -173,7 +194,8 @@ Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
 - Tests: `pytest`; jede Regel in `rules.py` hat einen Test; End-to-End-Tests bauen die Ergebnisse aus
   `stammdaten.example/`; Tests laufen ohne Config und ohne Gewerbe-Ordner (Temp-Verzeichnis)
 - Feldnamen und CLI-Kommandos auf Deutsch (`kunde`, `positionen`, `leistungsdatum`, `netto`, `brutto`,
-  `neu`, `resolve`, `bauen`, `pruefen`, `pro-forma`, `festschreiben`, `demo`, `doctor`)
+  `neu`, `resolve`, `preise`, `preisliste`, `bauen`, `pruefen`, `pro-forma`, `festschreiben`,
+  `anschreiben`, `offen`, `demo`, `doctor`)
 - Sprache der Rechnung: `de` oder `en`, eine je Rechnung (die Vorlage setzt jedes feste Label einsprachig);
   Datums-, Zahlen- und Währungsformat folgen der Sprache
 - Commit-Wächter: `make hooks` schaltet `.githooks/` ein. Gegen die Sperrliste neben der Config

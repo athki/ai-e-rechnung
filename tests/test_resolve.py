@@ -7,8 +7,10 @@ from decimal import Decimal
 
 import pytest
 
-from rechnung import config, resolve as r
+from rechnung import config, meldung, preise, resolve as r
 from rechnung.models import Input
+
+from hilfen import bestaetige, privat_schreiben
 
 RECHNUNG = """\
 kunde: {kunde}
@@ -23,10 +25,10 @@ positionen:
 SONSTIGE = "  taetigkeit: Teilnahme als Panelist\n  einordnung: sonstige"
 
 EINE_POSITION = """\
-  - beschreibung: Teilnahme als Panelist
+  - kuerzel: vortrag
     menge: 1
-    einheit: pauschal
-    einzelpreis: 1000.00
+    einheit: stunde
+    beschreibung: Teilnahme als Panelist
 """
 
 
@@ -45,13 +47,21 @@ def cfg(**env) -> config.Config:
     return config.laden(env={**{k: v for k, v in env.items()}}, pfad=config.REPO / "fehlt.toml")
 
 
-def lege_an(gewerbe, kunde="sample-ltd", positionen=EINE_POSITION, leistung=SONSTIGE, **extra) -> str:
+def lege_an(gewerbe, kunde="sample-ltd", positionen=EINE_POSITION, leistung=SONSTIGE,
+            preise_=("1000.00",), sieben=None, **extra) -> str:
+    """Legt eine Rechnung an und bestätigt die Preise, soweit die Eingabe das zulässt; ein Fehler in
+    der Eingabe zeigt sich dann beim Auflösen, wo der Test ihn erwartet."""
     c = config.laden()
     ordner, nummer = r.neu(c, kunde, date(2026, 6, 10), date(2026, 9, 22))
     text = RECHNUNG.format(kunde=kunde, positionen=positionen, leistung=leistung)
     for schluessel, wert in extra.items():
         text += f"{schluessel}: {wert}\n"
     (ordner / r.INPUT_DATEI).write_text(text, encoding="utf-8")
+    if preise_ is not None:
+        try:
+            bestaetige(nummer, *preise_, sieben=sieben)
+        except (r.ResolveFehler, preise.PreisFehler, __import__("rechnung").rules.RegelFehler):
+            pass
     return nummer
 
 
@@ -123,8 +133,9 @@ def test_neu_legt_ordner_und_geruest_an(gewerbe):
     text = (ordner / r.INPUT_DATEI).read_text(encoding="utf-8")
     assert "kunde: sample-inc" in text
     assert "einheit: pauschal" in text       # vorbelegt, aber sichtbar in der Datei
+    assert r.KUERZEL_PFLICHT in text and "einzelpreis" not in text and "referenz:" not in text
     assert "leistungsdatum: 2026-06-10" in text
-    eingabe = Input.model_validate(__import__("yaml").safe_load(text))
+    eingabe = Input.model_validate(__import__("yaml").safe_load(text.replace("  - kuerzel: ", "  - kuerzel: briefing")))
     assert eingabe.positionen[0].einheit == "pauschal"
     assert eingabe.leistung.taetigkeit == "Panel: Zukunft der Arbeit"
     assert eingabe.leistung.ort == "GB"
@@ -168,13 +179,11 @@ def test_inland_neunzehn_prozent(gewerbe):
 
 def test_gemischte_saetze_werden_getrennt(gewerbe):
     positionen = EINE_POSITION + """\
-  - beschreibung: Buch
+  - kuerzel: buch
     menge: 2
     einheit: stueck
-    einzelpreis: 10.00
-    steuersatz: 7
 """
-    nummer = lege_an(gewerbe, "muster-gmbh", positionen)
+    nummer = lege_an(gewerbe, "muster-gmbh", positionen, preise_=("1000.00", "10.00"), sieben=[False, True])
     ergebnis, _ = r.resolve(config.laden(), nummer)
     saetze = {g.satz: (g.netto, g.betrag) for g in ergebnis.steuergruppen}
     assert saetze[Decimal(19)] == (Decimal("1000.00"), Decimal("190.00"))
@@ -185,16 +194,14 @@ def test_gemischte_saetze_werden_getrennt(gewerbe):
 
 def test_rundung_je_zeile_und_summe(gewerbe):
     positionen = """\
-  - beschreibung: Beratung
+  - kuerzel: beratung
     menge: 3
     einheit: stunde
-    einzelpreis: 33.335
-  - beschreibung: Fahrt
+  - kuerzel: fahrt
     menge: 12.5
     einheit: kilometer
-    einzelpreis: 0.42
 """
-    nummer = lege_an(gewerbe, "muster-gmbh", positionen)
+    nummer = lege_an(gewerbe, "muster-gmbh", positionen, preise_=("33.335", "0.42"))
     ergebnis, _ = r.resolve(config.laden(), nummer)
     zeilen = [p.zeilensumme for p in ergebnis.positionen]
     assert zeilen == [Decimal("100.01"), Decimal("5.25")]   # 100.005 -> 100.01 (kaufmännisch)
@@ -284,10 +291,18 @@ def test_kleinunternehmer_inland_ohne_steuer(gewerbe):
 
 def test_kleinunternehmer_mit_positionssatz_bricht_ab(gewerbe):
     kleinunternehmer(gewerbe)
-    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: 1000.00\n    steuersatz: 7")
-    nummer = lege_an(gewerbe, "muster-gmbh", positionen)
-    with pytest.raises(r.ResolveFehler, match="kleinunternehmer"):
+    nummer = lege_an(gewerbe, "muster-gmbh", preise_=None)
+    with pytest.raises(preise.PreisFehler, match="R14") as info:
+        bestaetige(nummer, "1000.00", sieben=[True])
+    assert info.value.art == meldung.AUSSERHALB
+    # Von Hand eingetragen, bricht das Auflösen ab.
+    bestaetige(nummer, "1000.00")
+    ordner = r.finde_ordner(config.laden(), nummer)
+    datei = ordner / preise.PRIVAT_DATEI
+    privat_schreiben(ordner, datei.read_text(encoding="utf-8") + "    steuersatz: 7\n")
+    with pytest.raises(r.ResolveFehler, match="kleinunternehmer") as info:
         r.resolve(config.laden(), nummer)
+    assert info.value.art == meldung.PREISE
 
 
 def test_reverse_charge_ohne_eigene_ustid_bricht_ab(gewerbe):
@@ -315,8 +330,12 @@ def test_fremdwaehrung_ohne_ust_laeuft(gewerbe):
 
 
 def test_positions_steuersatz_bei_null_prozent_bricht_ab(gewerbe):
-    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: 1000.00\n    steuersatz: 7")
-    nummer = lege_an(gewerbe, "sample-ltd", positionen)
+    nummer = lege_an(gewerbe, "sample-ltd", preise_=None)
+    with pytest.raises(preise.PreisFehler, match="nicht_steuerbar"):
+        bestaetige(nummer, "1000.00", sieben=[True])
+    bestaetige(nummer, "1000.00")
+    ordner = r.finde_ordner(config.laden(), nummer)
+    privat_schreiben(ordner, (ordner / preise.PRIVAT_DATEI).read_text(encoding="utf-8") + "    steuersatz: 7\n")
     with pytest.raises(r.ResolveFehler, match="nicht_steuerbar"):
         r.resolve(config.laden(), nummer)
 
@@ -324,8 +343,9 @@ def test_positions_steuersatz_bei_null_prozent_bricht_ab(gewerbe):
 @pytest.mark.parametrize("satz", ["0", "19"])
 def test_positions_steuersatz_nur_sieben(gewerbe, satz):
     """R10: Je Position nur die Ermäßigung; 19 und 0 folgen aus dem Ergebnis der Rechnung."""
-    positionen = EINE_POSITION.replace("einzelpreis: 1000.00", f"einzelpreis: 1000.00\n    steuersatz: {satz}")
-    nummer = lege_an(gewerbe, "muster-gmbh", positionen)
+    nummer = lege_an(gewerbe, "muster-gmbh")
+    ordner = r.finde_ordner(config.laden(), nummer)
+    privat_schreiben(ordner, (ordner / preise.PRIVAT_DATEI).read_text(encoding="utf-8") + f"    steuersatz: {satz}\n")
     with pytest.raises(r.ResolveFehler, match="nur 7"):
         r.resolve(config.laden(), nummer)
 
@@ -361,9 +381,11 @@ def test_resolved_json_ist_lesbar_und_vollstaendig(gewerbe):
     assert daten["aussteller"]["steuernummer"] == "143/123/12345"
     assert daten["kunde"]["firma"] == "Sample Ltd"
     assert daten["kunde"]["register"]["name"] == "Companies House"
-    assert daten["positionen"][0]["einheit_code"] == "LS"
+    assert daten["positionen"][0]["einheit_code"] == "HUR"
+    assert daten["positionen"][0]["kuerzel"] == "vortrag"
     assert daten["positionen"][0]["einzelpreis"] == "1000.00"
     assert len(daten["input_hash"]) == 64
+    assert len(daten["privat_hash"]) == 64
     assert daten["vorlage_version"]
 
 
@@ -372,8 +394,8 @@ def test_input_hash_haengt_am_yaml(gewerbe):
     erster = r.resolve(config.laden(), nummer)[0].input_hash
     ordner = r.finde_ordner(config.laden(), nummer)
     datei = ordner / r.INPUT_DATEI
-    datei.write_text(datei.read_text(encoding="utf-8") + "referenz: Panel 2026\n", encoding="utf-8")
-    assert r.resolve(config.laden(), nummer)[0].input_hash != erster
+    datei.write_text(datei.read_text(encoding="utf-8") + "einleitung: Panel 2026\n", encoding="utf-8")
+    assert r.resolve(config.laden(), nummer)[0].input_hash != erster   # einleitung: Preise bleiben gültig
 
 
 def test_resolve_ohne_schreiben(gewerbe):
@@ -395,8 +417,8 @@ def test_finde_ordner_akzeptiert_das_nummernende(gewerbe, monkeypatch):
     "text, erklaerung",
     [
         ("kunde: sample-ltd\neinleitung: Panel: Zukunft der Arbeit\n", "Anführungszeichen"),
-        ("kunde: sample-ltd\nreferenz: \"PO 4711\n", "nicht geschlossen"),
-        ("kunde: sample-ltd\npositionen:\n  - beschreibung: a\n    menge: 1\n   einheit: pauschal\n",
+        ("kunde: sample-ltd\neinleitung: \"PO 4711\n", "nicht geschlossen"),
+        ("kunde: sample-ltd\npositionen:\n  - kuerzel: vortrag\n    menge: 1\n   einheit: stunde\n",
          "Einrückung"),
         ("kunde: sample-ltd\n# belege:\n  - flug.pdf\n", "auskommentiert"),
     ],
@@ -422,19 +444,19 @@ def test_yaml_syntaxfehler_in_der_kundendatei(gewerbe):
 
 # ---------------------------------------------------------------- Werte in Fehlermeldungen, Platzhalter
 
-def test_klammer_um_den_betrag_zeigt_wert_und_hinweis(gewerbe):
-    pos = EINE_POSITION.replace("einzelpreis: 1000.00", "einzelpreis: {354.82}")
+def test_klammer_um_die_menge_zeigt_wert_und_hinweis(gewerbe):
+    pos = EINE_POSITION.replace("menge: 1", "menge: {2}")
     nummer = lege_an(gewerbe, positionen=pos)
     with pytest.raises(r.ResolveFehler) as info:
         r.resolve(config.laden(), nummer)
     meldung = str(info.value)
-    assert "positionen.0.einzelpreis" in meldung
-    assert "(Wert: {354.82})" in meldung
+    assert "positionen.0.menge" in meldung
+    assert "(Wert: {2})" in meldung
     assert "Geschweifte Klammern entfernen" in meldung
 
 
 def test_falscher_wert_wird_gezeigt(gewerbe):
-    pos = EINE_POSITION.replace("einheit: pauschal", "einheit: stunden")
+    pos = EINE_POSITION.replace("einheit: stunde", "einheit: stunden")
     nummer = lege_an(gewerbe, positionen=pos)
     with pytest.raises(r.ResolveFehler, match="„stunden“"):
         r.resolve(config.laden(), nummer)
@@ -442,8 +464,7 @@ def test_falscher_wert_wird_gezeigt(gewerbe):
 
 @pytest.mark.parametrize(
     "feld, text",
-    [("einleitung", "Für meine Teilnahme bei {Event} berechne ich:"),
-     ("referenz", "PO {Nummer}")],
+    [("einleitung", "Für meine Teilnahme bei {Event} berechne ich:")],
 )
 def test_platzhalter_im_text_bricht_ab(gewerbe, feld, text):
     nummer = lege_an(gewerbe, **{feld: f'"{text}"'})
@@ -485,9 +506,16 @@ def test_neu_mit_leistungsdatum_traegt_es_ein(gewerbe):
     c = config.laden()
     ordner, nummer = r.neu(c, "sample-ltd", date(2026, 6, 10), date(2026, 9, 22),
                            taetigkeit="Panel", einordnung="sonstige")
-    assert "leistungsdatum: 2026-06-10\n" in (ordner / r.INPUT_DATEI).read_text(encoding="utf-8")
+    datei = ordner / r.INPUT_DATEI
+    assert "leistungsdatum: 2026-06-10\n" in datei.read_text(encoding="utf-8")
+    with pytest.raises(r.ResolveFehler, match="kuerzel fehlt"):    # das Kürzel wird nicht geraten
+        r.resolve(c, nummer)
+    datei.write_text(datei.read_text(encoding="utf-8").replace("  - kuerzel:  ", "  - kuerzel: briefing  "),
+                     encoding="utf-8")
+    bestaetige(nummer)
     ergebnis, _ = r.resolve(c, nummer)
     assert ergebnis.leistungsdatum == date(2026, 6, 10)
+    assert ergebnis.positionen[0].beschreibung == "Policy briefing"   # Bezeichnung der Liste, Sprache des Kunden
 
 
 def test_cli_neu_ohne_leistungsdatum_sagt_es(gewerbe):

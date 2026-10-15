@@ -12,6 +12,7 @@
 % Blocks (body, in this order):
 %   \invoiceaddress{recipient lines}{\metarow{label}{value}... \metasep \metarow...}   block 2 + 3
 %   \invoiceheading                                 block 4: "<kind> <number>" + grey hairline
+%   \invoicesalutation{Dear Madam or Sir}            block 5: salutation (toggle), from resolve()
 %   <introduction paragraph>                        block 5: content
 %   \begin{positions}[vat] \pos{..}{..}{..}{..}{..}{..} / \posvat{..}{7 args} \end{positions}   block 6
 %   \begin{totals} \totalrow{label}{\money{EUR}{..}} ... \totalfinal{label}{..} \end{totals}   block 7
@@ -43,12 +44,14 @@
 % same value, so such a copy keeps building and keeps its look:
 %   \providecommand{\InvoiceNewSetting}{value}
 %   \@ifundefinedcolor{NewColor}{\definecolor{NewColor}{HTML}{000000}}{}
-%   \ifdefined\ifNewToggle\else\newif\ifNewToggle \NewToggletrue\fi
+%   \@ifundefined{ifNewToggle}{\newif\ifNewToggle \NewToggletrue}{}
+% (not \ifdefined\ifNewToggle…\fi: TeX counts the skipped \ifNewToggle as a nested \if)
 % tests/test_vorlage.py fails if one is missing; `rechnung doctor` names
 % the settings a custom defaults.sty does not know yet.
 \providecommand{\InvoiceBannerTop}{8mm}
 \providecommand{\InvoiceBannerSize}{\fontsize{9}{11}\selectfont}
 \@ifundefinedcolor{BannerInk}{\colorlet{BannerInk}{Accent}}{}
+\@ifundefined{ifInvoiceSalutation}{\newif\ifInvoiceSalutation \InvoiceSalutationtrue}{}
 
 % ------------------------------------------------------------
 % Language, fixed strings, unit dictionary
@@ -408,6 +411,11 @@
   \nopagebreak\vspace{1.6mm}\nopagebreak
   {\color{RuleGrey}\hrule height \InvoiceRuleLight}\par
   \vspace{3.5mm}}
+
+% ------------------------------------------------------------
+% Block 5: salutation — the text comes from resolve() (customer file or default), with a comma
+% ------------------------------------------------------------
+\newcommand{\invoicesalutation}[1]{\ifInvoiceSalutation\noindent #1,\par\vspace{2mm}\fi}
 
 % ------------------------------------------------------------
 % Block 6: positions table (grey rules, sans grey header, decimal-aligned amounts)

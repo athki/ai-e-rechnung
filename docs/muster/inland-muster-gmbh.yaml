@@ -6,7 +6,7 @@ leistung:
   taetigkeit: "Beratung zum Marktzugang mit Workshop"
   einordnung: beratung
 positionen:
-  - beschreibung: "Beratung Marktzugang, Workshop in Berlin"
+  - kuerzel: beratung
     menge: 8
     einheit: stunde
-    einzelpreis: 150.00
+    beschreibung: "Beratung Marktzugang, Workshop in Berlin"

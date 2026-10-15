@@ -138,19 +138,19 @@ def test_festlegung_wird_als_solche_gezeigt(gewerbe):
 
 
 def test_ermaessigter_satz_steht_bei_den_fakten(gewerbe):
-    positionen = ("  - beschreibung: Vortrag\n    menge: 1\n    einheit: pauschal\n    einzelpreis: 100\n"
-                  "  - beschreibung: Nutzungsrechte\n    menge: 1\n    einheit: pauschal\n    einzelpreis: 50\n"
-                  "    steuersatz: 7\n")
-    ordner = aufgeloest(lege_an(gewerbe, "muster-gmbh", positionen=positionen))
+    positionen = ("  - kuerzel: vortrag\n    menge: 1\n    einheit: stunde\n"
+                  "  - kuerzel: buch\n    menge: 2\n    einheit: stueck\n")
+    ordner = aufgeloest(lege_an(gewerbe, "muster-gmbh", positionen=positionen, preise_=("100", "25"),
+                                sieben=[False, True]))
     text, passt = b.begruende(ordner)
     assert passt
-    assert "`rechnung.yaml: positionen[2].steuersatz` | 7 | § 12 Abs. 2 UStG (R10)" in text
+    assert "`rechnung.privat.yaml: positionen[2].steuersatz` | 7 | § 12 Abs. 2 UStG (R10)" in text
 
 
 def test_geaenderte_eingabe_wird_gemeldet(gewerbe):
     ordner = aufgeloest(lege_an(gewerbe, "sample-ltd"))
     with (ordner / r.INPUT_DATEI).open("a", encoding="utf-8") as f:
-        f.write("referenz: nachgereicht\n")
+        f.write("einleitung: nachgereicht\n")
     text, passt = b.begruende(ordner)
     assert passt
     assert "nach dem letzten `resolve` geändert" in text

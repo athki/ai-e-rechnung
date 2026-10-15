@@ -8,12 +8,13 @@ damit jede Fehlerklasse davon erben kann.
 
 from __future__ import annotations
 
-# Die vier Arten (entscheidungen 2026-10-13): was die AI bei einem Abbruch tut.
+# Die Arten (entscheidungen 2026-10-13): was die AI bei einem Abbruch tut.
 EINGABE = "eingabe"          # eigener Fehler in rechnung.yaml – selbst beheben
 FRAGE = "frage"              # Tatsache, die nur der Mensch kennt – fragen, nie raten
 STAMMDATEN = "stammdaten"    # Kunden-, Ausstellerdatei oder Config unvollständig – der Mensch trägt ein
 AUSSERHALB = "ausserhalb"    # bewusst außerhalb des Geltungsbereichs – erklären und anhalten
-ARTEN = (EINGABE, FRAGE, STAMMDATEN, AUSSERHALB)
+PREISE = "preise"            # Preise fehlen oder sind veraltet – der Mensch bestätigt sie selbst, nie im Chat
+ARTEN = (EINGABE, FRAGE, STAMMDATEN, AUSSERHALB, PREISE)
 
 
 class Fehler(Exception):

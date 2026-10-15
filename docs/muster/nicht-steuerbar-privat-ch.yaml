@@ -7,7 +7,7 @@ leistung:
   einordnung: unterrichtend
   ort: CH
 positionen:
-  - beschreibung: "Vortrag, Zürich"
-    menge: 1
-    einheit: pauschal
-    einzelpreis: 900.00
+  - kuerzel: vortrag
+    menge: 2
+    einheit: stunde
+    beschreibung: "Vortrag, Zürich"

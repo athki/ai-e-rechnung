@@ -1,6 +1,6 @@
 ---
 name: rechnung
-description: Eine Rechnung mit dem Werkzeug `rechnung` erstellen – von `rechnung neu` über rechnung.yaml bis `bauen` und `pruefen`, mit geschwärzter Sicht (die AI sieht keine Kundendaten, Preise oder Beträge). Greift, wenn jemand eine Rechnung schreiben, auflösen, bauen oder prüfen lassen will, oder bei /rechnung. Nicht für Arbeit am Code, an Tests oder an der Vorlage.
+description: Eine Rechnung mit dem Werkzeug `rechnung` erstellen – von `rechnung neu` über rechnung.yaml bis `bauen` und `pruefen`, mit geschwärzter Sicht (die AI sieht keine Kundendaten, Preise oder Beträge; die Preise bestätigt der Mensch selbst). Greift, wenn jemand eine Rechnung schreiben, auflösen, bauen oder prüfen lassen will, oder bei /rechnung. Nicht für Arbeit am Code, an Tests oder an der Vorlage.
 ---
 
 # Rechnung erstellen
@@ -9,9 +9,9 @@ Du bedienst das Werkzeug `rechnung` für den Menschen. Er sagt dir, was er gelei
 entscheidet Leistungsort und Steuer (`rules.py`) und setzt Namen, Anschriften und Beträge selbst ein.
 
 **Die Grenze:** Du weißt, was geleistet wurde und wie viel davon – nie, wer beteiligt ist und was es
-kostet. Du liest keine Kundendaten, keine Ausstellerdaten, keine `rechnung.resolved.json`, keine PDFs,
-keine `status.yaml`, nichts unter `pro-forma/` oder `belege/`. Was du vom Werkzeug brauchst, gibt es
-dir geschwärzt aus.
+kostet. Du liest keine Kundendaten, keine Ausstellerdaten, keine Preisliste, keine `rechnung.privat.yaml`,
+keine `rechnung.resolved.json`, keine PDFs, keine `status.yaml`, nichts unter `pro-forma/` oder
+`belege/`. Was du vom Werkzeug brauchst, gibt es dir geschwärzt aus.
 
 Jeder Abschnitt unten entspricht einem Werkzeug des späteren MCP-Servers.
 
@@ -46,7 +46,8 @@ dem, was der Mensch gesagt hat. Die Rechnungsnummer vergibt das Werkzeug.
 
 ## 3. `rechnung.yaml` füllen
 
-Das ist die einzige Datei, die du schreibst. Sie enthält nur, was du sehen darfst.
+Das ist die einzige Datei, die du schreibst. Sie enthält nur, was du sehen darfst: was geleistet wurde
+und wie viel davon, nie einen Preis.
 
 - `leistungsdatum`: nur, was der Mensch sagt. Nie raten, nie das Rechnungsdatum einsetzen.
 - `leistung:` wird nie geraten.
@@ -55,11 +56,15 @@ Das ist die einzige Datei, die du schreibst. Sie enthält nur, was du sehen darf
     sich aus der Tätigkeit ergibt, und lass es dir bestätigen.
   - `ort`: nur bei Tätigkeitsleistungen (kulturell … unterhaltend); wo erbracht, Land oder `online`.
     Immer fragen.
-- `positionen`: Beschreibung, Menge, Einheit (`pauschal`, `stunde`, `tag`, `stueck`, `kilometer`).
-  `steuersatz: 7` nur, wenn der Mensch den ermäßigten Satz nennt. Den `einzelpreis` trägt in diesem
-  Schritt noch der Mensch ein oder diktiert ihn dir. Du rechnest nie einen Betrag aus.
+- `positionen`: je Position `kuerzel` aus der Preisliste, `menge` und `einheit`; die Einheit muss zur
+  Liste passen. `beschreibung` nur, wenn die Bezeichnung der Liste nicht reicht (z. B. „Vortrag,
+  Konferenz X, Paris“). Die Liste zeigt dir `rechnung preisliste`: Kürzel, Einheit, Art, Bezeichnung,
+  ohne Preise. Passt kein Kürzel, frag den Menschen; erfinde keins, und schreib nie einen Preis, einen
+  Steuersatz oder eine Referenz in die Datei. Du rechnest nie einen Betrag aus.
+- Auslagen (`art: auslage`, z. B. Bahnticket) bekommen eine eigene Position; den Betrag trägt der
+  Mensch bei `rechnung preise` vom Beleg ein.
 - `einleitung:` darfst du entwerfen: ein Satz in der Sprache der Rechnung, ohne Beträge und ohne
-  Namen.
+  Namen. Er steht nach der Anrede („Sehr geehrte Damen und Herren,“), auf Deutsch also klein weiter.
 - `belege:` Dateinamen wählt der Mensch. Rate zu neutralen Namen (`beleg-1.pdf`, nicht
   `hotel-<name>.pdf`).
 - Nie `leistungsort:` setzen. Das ist eine Festlegung des Menschen mit `begruendung:` (RULES.md R37).
@@ -67,7 +72,8 @@ Das ist die einzige Datei, die du schreibst. Sie enthält nur, was du sehen darf
 ## 4. Auflösen – `rechnung resolve <nr>`
 
 Zeig dem Menschen die geschwärzte Ausgabe: Leistung, Positionen, Leistungsort, Ergebnis, Regeln,
-Warnungen. Erklär das Ergebnis mit `rechnung begruendung <nr>`, wenn er fragt. Weiter erst, wenn er
+Warnungen und den Stand der Preise. Erklär das Ergebnis mit `rechnung begruendung <nr>`, wenn er fragt
+(erst, wenn die Preise bestätigt sind und `resolve` das Ergebnis geschrieben hat). Weiter erst, wenn er
 bestätigt.
 
 ### Wenn `resolve` abbricht
@@ -80,30 +86,56 @@ Die Meldung beginnt mit `Abbruch (<art>):`.
 | `frage` | eine Tatsache, die nur der Mensch kennt (Datum, Ort, Tätigkeit), oder eine zurückgehaltene Meldung | fragen, nie raten; bei „Meldung zurückgehalten“ den Menschen bitten, dasselbe Kommando im eigenen Terminal auszuführen |
 | `stammdaten` | Kunden- oder Ausstellerdatei bzw. Config unvollständig | dem Menschen sagen, welches Feld in welcher Datei fehlt; **er trägt es selbst ein, nicht über den Chat** |
 | `ausserhalb` | bewusst außerhalb des Geltungsbereichs (z. B. Privatperson im EU-Ausland, 7 % wo nicht erlaubt) | erklären und anhalten |
+| `preise` | Preise fehlen oder sind veraltet, oder `rechnung.privat.yaml` passt nicht | dem Menschen sagen: `rechnung preise <nr>` im eigenen Terminal; nie nach Beträgen fragen |
 
 Ändere nie `einordnung`, `ort` oder `leistungsort`, um an einem Abbruch vorbeizukommen. Das ist nur
 erlaubt, wenn der Mensch sagt, dass die Fakten falsch beschrieben waren.
 
-## 5. Bauen und prüfen – `rechnung bauen <nr>`, `rechnung pruefen <nr>`
+## 5. Preise – beim Menschen
+
+Steht bei „Preise“ `fehlen` oder `veraltet`, sag dem Menschen, dass er sie **im eigenen Terminal**
+bestätigt: `rechnung preise <nr>`. Nicht über `!` in Claude Code, sonst stehen die Beträge im Chat.
+Setzt die Session `RECHNUNG_GEWERBE` (z. B. auf einen Test-Ordner), arbeitet sein Terminal sonst im
+Ordner aus der Config: Gib ihm den Aufruf mit derselben Wurzel, `RECHNUNG_GEWERBE=<wurzel> rechnung
+preise <nr>`. Der Befehl fragt jeden Einzelpreis ab (Enter übernimmt den Vorschlag), dann die
+Referenz, zeigt die Summen und fragt „Bestätigen? [j/N]“.
+Ruf `rechnung preise` nie selbst auf; unter dem Schalter verweigert es ohnehin. Frag nie nach Preisen
+und bestätige keine Beträge, die er dir in den Chat tippt. Danach `rechnung resolve <nr>` erneut:
+„Preise bestätigt“. Änderst du danach eine Position (Kürzel, Menge, Einheit, Beschreibung), sind die
+Preise veraltet, und er bestätigt neu. `rechnung offen` zeigt, welchen Rechnungen noch etwas fehlt.
+
+## 6. Bauen und prüfen – `rechnung bauen <nr>`, `rechnung pruefen <nr>`
 
 `bauen` erzeugt die PDF, `pruefen` weist die Pflichtangaben im PDF-Text nach. Ist `pruefen` rot, sag
 dem Menschen, welche Angabe fehlt. Den gesuchten Text siehst du geschwärzt nicht. Die PDF öffnet der
 Mensch selbst.
 
 `rechnung bauen <nr> --pro-forma` baut eine Pro forma zur Prüfung durch den Kunden, wenn der Mensch
-das will.
+das will. Ohne bestätigte Preise baut `bauen` nichts (`Abbruch (preise)`).
 
-## 6. Was beim Menschen bleibt
+## 7. Anschreiben – `anschreiben.md`, `rechnung anschreiben <nr>`
 
+Wenn der Mensch einen Begleittext zur Rechnung will, entwirf ihn in `anschreiben.md` im
+Rechnungsordner, in der Sprache der Rechnung. Namen, Beträge und Daten schreibst du nicht aus, sondern
+als Platzhalter: `[anrede]`, `[nummer]`, `[datum]`, `[leistungsdatum]`, `[faelligkeit]`, `[netto]`,
+`[brutto]`, `[firma]`, `[referenz]`, `[name]`. `[anrede]` ohne Komma, das setzt du dahinter. Andere
+Platzhalter gibt es nicht. `rechnung anschreiben <nr>` prüft unter dem Schalter nur die Platzhalter;
+eingesetzt wird im eigenen Terminal des Menschen. Das Werkzeug verschickt nichts.
+
+## 8. Was beim Menschen bleibt
+
+- `rechnung preise`: Preise, 7 % und die Referenz des Kunden für diese Rechnung.
 - `rechnung festschreiben` und `rechnung pro-forma`: Sie halten fest, was er verschickt hat. Du
   rufst sie nicht auf.
-- Kundendateien und `ich.yaml`: Er legt sie an und ändert sie.
-- Preise: In diesem Schritt stehen sie noch in rechnung.yaml. Was er dir in den Chat tippt, siehst du.
+- Kundendateien, `ich.yaml` und die Preisliste: Er legt sie an und ändert sie. Eine fehlende Anrede
+  (`anrede:` in der Kundendatei) ergänzt er selbst; ohne steht „Sehr geehrte Damen und Herren“.
+- Was er dir in den Chat tippt, siehst du – auch Beträge. Bitte ihn, sie dort nicht zu nennen.
 
 ## Was du darfst und was nicht
 
 Wie in CLAUDE.md, „Was die AI darf und was nicht“; dieser Skill erweitert keine Rechte. Insbesondere:
-keine Rechnungsnummern vergeben, keine Beträge ausrechnen, keine festgeschriebene Rechnung anfassen,
+keine Rechnungsnummern vergeben, keine Beträge ausrechnen, keine Preise bestätigen, nicht in
+`rechnung.privat.yaml` oder die Preisliste schreiben, keine festgeschriebene Rechnung anfassen,
 `RECHNUNG_GESCHWAERZT`, `RECHNUNG_GEWERBE` und `RECHNUNG_CONFIG` nicht überschreiben.
 
 ## Ehrlich

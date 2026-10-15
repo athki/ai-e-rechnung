@@ -1,6 +1,7 @@
 # Unternehmen im Drittland (UK): nicht_steuerbar, 0 %. Erfunden.
 firma: Sample Ltd
 ansprechpartner: Jane Sample
+anrede: Dear Jane Sample   # optional; ohne Angabe „Dear Madam or Sir“ bzw. „Sehr geehrte Damen und Herren“
 adresse:
   strasse: 1 Sample Street
   plz: EC1A 1AA

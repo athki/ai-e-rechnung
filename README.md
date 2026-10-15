@@ -8,7 +8,9 @@ Rechnung als PDF, gesetzt mit LaTeX. Der Kern ist deterministisch. Leistungsort,
 und Rechnungsnummer rechnet das Werkzeug, nicht der Mensch und nicht die AI. Der Befehl heißt `rechnung`.
 
 ```
-rechnung.yaml ──resolve──▶ rechnung.resolved.json ──render──▶ rechnung_<nummer>.pdf
+rechnung.yaml          (was und wie viel: Kürzel aus der Preisliste, Menge)  ─┐
+rechnung.privat.yaml   (Preise und Referenz, bestätigt mit `rechnung preise`) ─┴─resolve──▶
+    rechnung.resolved.json ──render──▶ rechnung_<nummer>.pdf
 ```
 
 **Stand:** PDF heute. ZUGFeRD (E-Rechnung nach EN 16931) ist geplant, die Vorlage ist dafür schon
@@ -29,7 +31,8 @@ docker run --rm -v "$PWD/probe":/gewerbe rechnung demo --pruefen --ziel /gewerbe
 
 Danach liegen in `probe/demo/` sechs Beispielrechnungen, je Ergebnis mindestens eine (Inland,
 EU mit Reverse Charge, Drittland, Kleinunternehmer), jede mit `rechnung.yaml`,
-`rechnung.resolved.json` und der PDF; eine davon zusätzlich mit zwei gesendeten Pro-forma-Revisionen.
+`rechnung.privat.yaml`, `rechnung.resolved.json` und der PDF; eine davon zusätzlich mit zwei gesendeten
+Pro-forma-Revisionen.
 `--pruefen` weist in jeder PDF die Pflichtangaben nach
 § 14 Abs. 4 UStG nach. Dieselben liegen als Muster in `docs/muster/`.
 
@@ -47,33 +50,45 @@ uv run rechnung demo     # sechs Beispielrechnungen nach ./demo-output/
 ## Ablauf einer Rechnung
 
 ```sh
-rechnung init --stammdaten            # einmalig: Ordner und ein leeres ich.yaml anlegen
+rechnung init --stammdaten            # einmalig: Ordner, ein leeres ich.yaml und eine leere Preisliste
+rechnung preisliste                   # Kürzel, Einheit und Bezeichnung aus stammdaten/preise.yaml
 rechnung neu --kunde sample-ltd
 #   legt <ausgang>/2026/2026-0001/ mit vorbefülltem rechnung.yaml an;
-#   leistungsdatum und leistung: (was, Einordnung nach § 3a UStG) dort eintragen – Pflicht
-rechnung resolve 2026-0001            # Leistungsort, Ergebnis, Summen, Regeln – schreibt das Ergebnis daneben
+#   leistungsdatum, leistung: (was, Einordnung nach § 3a UStG) und je Position Kürzel und Menge
+#   dort eintragen – Pflicht
+rechnung resolve 2026-0001            # Leistungsort, Ergebnis, Regeln, Stand der Preise
+rechnung preise  2026-0001            # Preise bestätigen: Vorschlag aus der Liste, änderbar; Referenz
+rechnung resolve 2026-0001            # jetzt mit Summen – schreibt das Ergebnis daneben
 rechnung bauen   2026-0001 --pro-forma   # optional: Pro forma zur Prüfung durch den Kunden
 rechnung pro-forma 2026-0001 --gesendet-am 2026-06-12
 #   hält die gesendete Pro forma als Revision fest (pro-forma/1/), schreibgeschützt
 rechnung bauen   2026-0001            # die Rechnung: rechnung_2026-0001.pdf bzw. invoice_2026-0001.pdf
 rechnung pruefen 2026-0001            # weist die Pflichtangaben im PDF-Text nach
+rechnung anschreiben 2026-0001        # setzt Nummer, Betrag, Anrede … in anschreiben.md ein (verschickt nichts)
 rechnung festschreiben 2026-0001 --gesendet-am 2026-06-18
 #   macht die Rechnung unveränderbar: Status, Schreibschutz, Hashes
 rechnung begruendung 2026-0001        # für Prüfer: Fakten, angewandte Regeln, Status und Nachweis (Markdown)
+rechnung offen                        # alle Rechnungen, die noch nicht festgeschrieben sind, und was fehlt
 ```
 
-`rechnung.yaml` ist die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Leistungsort,
-Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer leitet das Werkzeug daraus ab und
-friert sie in `rechnung.resolved.json` ein. Die ausführliche Anleitung steht in
+`rechnung.yaml` ist die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Sie sagt, was
+geleistet wurde und wie viel davon, nie, was es kostet. Die Preise bestätigt der Mensch mit
+`rechnung preise`; sie stehen als Schnappschuss in `rechnung.privat.yaml`, zusammen mit einem Hash der
+Positionen, für die sie gelten. Ändert sich danach eine Position, sind die Preise veraltet, und `bauen`
+baut nichts. Leistungsort, Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer
+leitet das Werkzeug ab und friert sie in `rechnung.resolved.json` ein. Die ausführliche Anleitung steht in
 `docs/anleitung-neue-rechnung.md`.
 
 ## Mit einer AI: geschwärzte Sicht
 
 Die AI soll wissen, was geleistet wurde und wie viel davon, nie, wer beteiligt ist und was es kostet.
-Mit `RECHNUNG_GESCHWAERZT=1` geben `neu`, `resolve`, `bauen`, `pruefen` und `begruendung` keine Namen,
-Anschriften, Werte aus Kunden- oder Ausstellerdatei, Beträge oder absoluten Pfade aus. Abbrüche
-kommen als `Abbruch (<art>): …` und sagen, wer handeln muss (`eingabe`, `frage`, `stammdaten`,
-`ausserhalb`). Für Claude Code beschreibt der Skill `.claude/skills/rechnung/SKILL.md` den Ablauf;
+Deshalb stehen in `rechnung.yaml` keine Preise: Die AI schreibt Kürzel aus der Preisliste und Mengen,
+die Beträge bestätigt der Mensch im eigenen Terminal (`rechnung preise`, später im Web ein Formular).
+Mit `RECHNUNG_GESCHWAERZT=1` geben `neu`, `resolve`, `bauen`, `pruefen`, `begruendung`, `preisliste`,
+`offen` und `anschreiben` keine Namen, Anschriften, Werte aus Kunden- oder Ausstellerdatei, Beträge oder
+absoluten Pfade aus; `rechnung preise` verweigert unter dem Schalter, und `anschreiben` prüft dort nur
+die Platzhalter. Abbrüche kommen als `Abbruch (<art>): …` und sagen, wer handeln muss (`eingabe`,
+`frage`, `stammdaten`, `ausserhalb`, `preise`). Für Claude Code beschreibt der Skill `.claude/skills/rechnung/SKILL.md` den Ablauf;
 den Schalter und die Gewerbe-Wurzel setzt man in `.claude/settings.local.json` (`env`). Unter dem
 Schalter sperrt der Hook auch das Lesen von Stammdaten und abgeleiteten Dateien im Gewerbe-Ordner.
 Ehrlich: Über Bash ist Lesen in Claude Code damit nicht ganz gesperrt.
@@ -88,7 +103,7 @@ kennt nur die Wurzel und darunter vier Unterordner, die ihm gehören:
 
 | Option | Default | Inhalt |
 | --- | --- | --- |
-| `stammdaten` | `stammdaten` | `ich.yaml` (Aussteller) |
+| `stammdaten` | `stammdaten` | `ich.yaml` (Aussteller), `preise.yaml` (Preisliste) |
 | `kunden` | `stammdaten/kunden` | `<kuerzel>.yaml`, ein Kunde pro Datei |
 | `ausgang` | `rechnung-ausgang` | `JJJJ/<nummer>/` je Rechnung |
 | `steuerberater` | `steuerberater` | Export-Ziel |

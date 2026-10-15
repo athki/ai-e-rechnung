@@ -9,6 +9,8 @@ import pytest
 
 from rechnung import config, doctor, render, resolve as r, vorlage
 
+from hilfen import bestaetige
+
 BRAUCHT_LATEX = pytest.mark.skipif(
     shutil.which("latexmk") is None or shutil.which("pdflatex") is None,
     reason="latexmk oder pdflatex fehlt",
@@ -39,10 +41,10 @@ leistung:
   taetigkeit: Teilnahme als Panelist
   einordnung: sonstige
 positionen:
-  - beschreibung: Teilnahme als Panelist
+  - kuerzel: vortrag
     menge: 1
-    einheit: pauschal
-    einzelpreis: 1000.00
+    einheit: stunde
+    beschreibung: Teilnahme als Panelist
 """
 
 
@@ -70,6 +72,7 @@ def lege_an() -> str:
     cfg = config.laden()
     ordner, nummer = r.neu(cfg, "sample-ltd", date(2026, 6, 10), date(2026, 9, 23))
     (ordner / r.INPUT_DATEI).write_text(RECHNUNG, encoding="utf-8")
+    bestaetige(nummer, "1000.00")
     return nummer
 
 
@@ -95,7 +98,9 @@ def test_jede_neue_stellschraube_hat_einen_standardwert_in_invoice_sty():
         if name.startswith("Farbe "):
             muster = r"\\@ifundefinedcolor\{" + re.escape(name[6:]) + r"\}"
         elif name.startswith(r"\if"):
-            muster = r"\\ifdefined" + re.escape(name)
+            # Nicht \ifdefined\ifName\else\newif…\fi: Ist der Schalter schon definiert, zählt TeX das
+            # übersprungene \ifName als verschachteltes \if und verschluckt den Rest der Datei.
+            muster = r"\\@ifundefined\{" + re.escape(name[1:]) + r"\}"
         else:
             muster = r"\\providecommand\*?\{" + re.escape(name) + r"\}"
         if not re.search(muster, mechanik):

@@ -6,7 +6,7 @@ leistung:
   taetigkeit: "Bewerbungscoaching"
   einordnung: beratung
 positionen:
-  - beschreibung: "Bewerbungscoaching, zwei Sitzungen"
+  - kuerzel: coaching
     menge: 2
     einheit: stunde
-    einzelpreis: 90.00
+    beschreibung: "Bewerbungscoaching, zwei Sitzungen"

@@ -182,7 +182,24 @@ def pruefe_gewerbe(cfg: config.Config | None) -> list[Pruefung]:
         ergebnis.append(Pruefung("Unterordner", WARNUNG, f"fehlt: {', '.join(fehlend)} – `rechnung init` ausführen"))
     else:
         ergebnis.append(Pruefung("Unterordner", OK, ", ".join(getattr(cfg, n) for n in config.UNTERORDNER)))
+    if cfg.ordner("stammdaten").is_dir():
+        ergebnis.append(pruefe_preisliste(cfg))
     return ergebnis
+
+
+def pruefe_preisliste(cfg: config.Config) -> Pruefung:
+    """Die Preisliste ist Stammdaten: ohne sie kann keine Rechnung Preise bekommen. Kein Wert aus der
+    Datei in der Meldung – `doctor` läuft auch unter dem Schalter."""
+    from rechnung import resolve
+
+    pfad = cfg.ordner("stammdaten") / "preise.yaml"
+    if not pfad.is_file():
+        return Pruefung("Preisliste", WARNUNG, "fehlt – `rechnung init --stammdaten` legt ein Gerüst an")
+    try:
+        liste = resolve.lade_preisliste(cfg)
+    except resolve.ResolveFehler:
+        return Pruefung("Preisliste", FEHLER, "ungültig – `rechnung preisliste` nennt den Fehler")
+    return Pruefung("Preisliste", OK, f"{len(liste)} Einträge")
 
 
 def pruefe_nummer(cfg: config.Config | None) -> Pruefung:

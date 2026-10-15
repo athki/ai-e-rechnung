@@ -12,6 +12,8 @@ import pytest
 
 from rechnung import config, render, resolve as r
 
+from hilfen import bestaetige
+
 BRAUCHT_LATEX = pytest.mark.skipif(
     shutil.which("latexmk") is None or shutil.which("pdflatex") is None,
     reason="latexmk oder pdflatex fehlt",
@@ -29,10 +31,10 @@ positionen:
 """
 
 EINE_POSITION = """\
-  - beschreibung: Teilnahme als Panelist
+  - kuerzel: vortrag
     menge: 1
-    einheit: pauschal
-    einzelpreis: 1000.00
+    einheit: stunde
+    beschreibung: Teilnahme als Panelist
 """
 
 
@@ -45,13 +47,14 @@ def gewerbe(tmp_path, monkeypatch):
     return tmp_path
 
 
-def lege_an(kunde="sample-ltd", positionen=EINE_POSITION, **extra) -> str:
+def lege_an(kunde="sample-ltd", positionen=EINE_POSITION, preise=("1000.00",), referenz=None, **extra) -> str:
     cfg = config.laden()
     ordner, nummer = r.neu(cfg, kunde, date(2026, 6, 10), date(2026, 9, 23))
     text = RECHNUNG.format(kunde=kunde, positionen=positionen)
     for schluessel, wert in extra.items():
         text += f"{schluessel}: {wert}\n"
     (ordner / r.INPUT_DATEI).write_text(text, encoding="utf-8")
+    bestaetige(nummer, *preise, referenz=referenz)
     return nummer
 
 
@@ -111,7 +114,7 @@ def test_kontext_enthaelt_alles_wichtige(gewerbe):
     assert "United Kingdom" in k["empfaenger"]
     assert k["kunde_ustid"] == "GB123456789"
     assert k["kunde_register"] == "01234567 (Companies House)"
-    assert k["positionen"][0]["einheit"] == "flat"
+    assert k["positionen"][0]["einheit"] == "hour"
     assert k["netto"] == "1000.00"
     assert "Place of supply" in k["hinweis"]
 
@@ -206,7 +209,8 @@ def test_bauen_erzeugt_pdf_und_sonst_nichts(gewerbe):
     assert pdf.is_file() and pdf.stat().st_size > 10_000
     # Im Rechnungsordner liegen nur yaml, resolved.json, pdf und belege/ – kein .tex, .aux, .log.
     inhalt = sorted(p.name for p in ordner.iterdir())
-    assert inhalt == ["belege", f"invoice_{nummer}.pdf", "rechnung.resolved.json", "rechnung.yaml"]
+    assert inhalt == ["belege", f"invoice_{nummer}.pdf", "rechnung.privat.yaml", "rechnung.resolved.json",
+                      "rechnung.yaml"]
 
 
 @BRAUCHT_LATEX
@@ -292,7 +296,7 @@ def test_lange_referenz_bricht_um_statt_aus_der_seite_zu_laufen(gewerbe):
     import subprocess
 
     lang = "Sample Policy Forum 2026, Panel Future of Work, Purchase Order PO-2026-000123-LONDON"
-    nummer = lege_an("sample-ltd", referenz=f'"{lang}"')
+    nummer = lege_an("sample-ltd", referenz=lang)
     ergebnis, _ = r.resolve(config.laden(), nummer)
     pdf = render.baue_pdf(ergebnis, r.finde_ordner(config.laden(), nummer))
     bbox = subprocess.run(["pdftotext", "-bbox", "-f", "1", "-l", "1", str(pdf), "-"],

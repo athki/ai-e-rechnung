@@ -205,16 +205,31 @@ bank:
 """
 
 
-def stammdaten_geruest(cfg: Config) -> tuple[Path, bool]:
-    """Legt ein leeres, kommentiertes ich.yaml im Gewerbe-Ordner an. Überschreibt nie.
+def preise_geruest() -> str:
+    """Kopf der Beispiel-Preisliste mit einem auskommentierten Eintrag – Preise trägt der Mensch ein."""
+    from itertools import takewhile
 
-    Gibt (Pfad, neu_angelegt) zurück.
+    beispiel = (BEISPIEL_STAMMDATEN / "preise.yaml").read_text(encoding="utf-8").splitlines(keepends=True)
+    kopf = "".join(takewhile(lambda z: z.startswith("#"), beispiel))
+    kopf = kopf.replace("# Preisliste, erfunden.", "# Preisliste.", 1)
+    return kopf + ("\n# vortrag:\n#   bezeichnung: { de: Vortrag, en: Talk }\n#   einheit: stunde\n"
+                   "#   preis: 450.00\n")
+
+
+def stammdaten_geruest(cfg: Config) -> list[tuple[Path, bool]]:
+    """Legt ein leeres, kommentiertes ich.yaml und eine Preisliste im Gewerbe-Ordner an. Überschreibt nie.
+
+    Gibt je Datei (Pfad, neu_angelegt) zurück.
     """
     ordner = cfg.ordner("stammdaten")
     if not ordner.is_dir():
         raise ConfigFehler(f"{ordner} fehlt – erst `rechnung init` ausführen.")
-    ziel = ordner / "ich.yaml"
-    if ziel.exists():
-        return ziel, False
-    ziel.write_text(STAMMDATEN_GERUEST, encoding="utf-8")
-    return ziel, True
+    ergebnis = []
+    for name, text in (("ich.yaml", STAMMDATEN_GERUEST), ("preise.yaml", preise_geruest())):
+        ziel = ordner / name
+        if ziel.exists():
+            ergebnis.append((ziel, False))
+            continue
+        ziel.write_text(text, encoding="utf-8")
+        ergebnis.append((ziel, True))
+    return ergebnis

@@ -1,8 +1,9 @@
 """Datenmodell. Alle Modelle verbieten unbekannte Felder (`extra="forbid"`).
 
-Drei Ebenen:
-  Stammdaten, Kunde  – aus dem Gewerbe-Ordner (bzw. stammdaten.example/)
+Vier Ebenen:
+  Stammdaten, Kunde, PreisEintrag – aus dem Gewerbe-Ordner (bzw. stammdaten.example/)
   Input              – rechnung.yaml, die einzige Datei, die Menschen und AI schreiben
+  Privat             – rechnung.privat.yaml: Preise und Referenz, schreibt nur `rechnung preise`
   Resolved           – rechnung.resolved.json, abgeleitet und eingefroren
 
 Beträge sind `Decimal`. YAML-Fließkommazahlen werden über ihre Textform eingelesen,
@@ -146,40 +147,86 @@ class Kunde(Basis):
     # internen Namen von pydantic überdeckt.
     registereintrag: Register | None = Field(default=None, alias="register", serialization_alias="register")
     referenz: str | None = None
+    # Anrede über der Einleitung und im Anschreiben, wörtlich, z. B. „Sehr geehrte Frau Muster“.
+    # Ohne Angabe: „Sehr geehrte Damen und Herren“ bzw. „Dear Madam or Sir“. Geraten wird sie nie.
+    anrede: str | None = None
     unternehmer: bool | None = None
     sprache: Sprache | None = None
     waehrung: Waehrung | None = None
 
 
-class Position(Basis):
-    """Eine Zeile der Rechnung. `menge` und `einheit` sind Pflicht: sie sind der 'Umfang der
-    Leistung' nach § 14 Abs. 4 Nr. 5 UStG und BT-129/BT-130 in EN 16931. `rechnung neu` füllt
-    beide vor, geraten wird hier nichts."""
+def _nur_sieben(v: Decimal | None) -> Decimal | None:
+    if v is not None and v != Decimal(7):
+        raise ValueError(
+            "steuersatz kann nur 7 sein (ermäßigt nach § 12 Abs. 2 UStG, RULES.md R10). Ohne Angabe "
+            "gilt der Satz der Rechnung: 19 % im Inland, sonst 0 %."
+        )
+    return v
 
-    beschreibung: str
+
+KUERZEL = r"^[a-z0-9][a-z0-9-]*$"
+
+
+class PreisEintrag(Basis):
+    """Ein Eintrag der Preisliste stammdaten/preise.yaml, Schlüssel ist das Kürzel.
+
+    Eine Leistung hat einen Preis, eine Auslage (Bahnticket, Hotel) keinen: deren Betrag trägt der
+    Mensch bei `rechnung preise` ein. Preise gelten in EUR. `steuersatz: 7` ist nur ein Vorschlag;
+    ob er gilt, entscheidet `rules.satz_position()` je Rechnung.
+    """
+
+    bezeichnung: dict[Sprache, str]   # im YAML auch ein bloßer Text, dann für beide Sprachen
+    einheit: Einheit
+    art: Literal["leistung", "auslage"] = "leistung"
+    preis: Decimal | None = None
+    steuersatz: Decimal | None = None
+
+    _zahlen = field_validator("preis", "steuersatz", mode="before")(_dezimal)
+    _sieben = field_validator("steuersatz")(_nur_sieben)
+
+    @field_validator("bezeichnung", mode="before")
+    @classmethod
+    def _eine_fuer_beide(cls, v: object) -> object:
+        return {"de": v, "en": v} if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _preis_je_art(self) -> PreisEintrag:
+        if not any(self.bezeichnung.values()):
+            raise ValueError("bezeichnung fehlt: wie die Leistung auf der Rechnung heißt (de, en)")
+        if self.art == "leistung" and self.preis is None:
+            raise ValueError("preis fehlt: eine Leistung hat einen Preis; ohne festen Preis art: auslage")
+        if self.art == "auslage" and self.preis is not None:
+            raise ValueError("preis bei art: auslage – der Betrag einer Auslage kommt je Rechnung vom Beleg")
+        if self.preis is not None and self.preis < 0:
+            raise ValueError("preis ist negativ")
+        return self
+
+
+class Position(Basis):
+    """Eine Zeile der Rechnung: was und wie viel, nie der Preis. `kuerzel` verweist auf die
+    Preisliste; `menge` und `einheit` sind der 'Umfang der Leistung' nach § 14 Abs. 4 Nr. 5 UStG
+    und BT-129/BT-130 in EN 16931. Die Einheit muss zur Preisliste passen, geraten wird nichts."""
+
+    kuerzel: str
     menge: Decimal
     einheit: Einheit
-    einzelpreis: Decimal
-    steuersatz: Decimal | None = None  # nur 7: ermäßigt (§ 12 Abs. 2 UStG); leer = Satz der Rechnung
+    beschreibung: str | None = None   # ohne Angabe die Bezeichnung aus der Preisliste
 
-    _zahlen = field_validator("menge", "einzelpreis", "steuersatz", mode="before")(_dezimal)
+    _zahlen = field_validator("menge", mode="before")(_dezimal)
 
-    @field_validator("beschreibung", mode="before")
+    @field_validator("kuerzel", mode="before")
     @classmethod
-    def _beschreibung_pflicht(cls, v: object) -> object:
-        # `rechnung neu` lässt das Feld ohne --taetigkeit leer; die Meldung soll sagen, was hineingehört.
+    def _kuerzel_pflicht(cls, v: object) -> object:
+        # `rechnung neu` lässt das Feld leer; die Meldung soll sagen, was hineingehört.
         if v in (None, ""):
-            raise ValueError("beschreibung fehlt: was geleistet wurde, wie es auf der Rechnung stehen soll")
+            raise ValueError("kuerzel fehlt: ein Kürzel aus der Preisliste (`rechnung preisliste`)")
         return v
 
-    @field_validator("steuersatz")
+    @field_validator("menge")
     @classmethod
-    def _satz_erlaubt(cls, v: Decimal | None) -> Decimal | None:
-        if v is not None and v != Decimal(7):
-            raise ValueError(
-                "steuersatz kann nur 7 sein (ermäßigt nach § 12 Abs. 2 UStG, RULES.md R10). Ohne Angabe "
-                "gilt der Satz der Rechnung: 19 % im Inland, sonst 0 %."
-            )
+    def _menge_positiv(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("menge muss größer als 0 sein")
         return v
 
 
@@ -250,7 +297,6 @@ class Input(Basis):
     sprache: Sprache | None = None
     waehrung: Waehrung | None = None
     zahlungsziel_tage: int | None = None
-    referenz: str | None = None
     einleitung: str | None = None
     leistung: Leistung
     leistungsort: Land | None = None   # manuelle Festlegung, nur mit begruendung (RULES.md R37)
@@ -272,6 +318,11 @@ class Input(Basis):
                 "leistung fehlt: taetigkeit (was geleistet wird) und einordnung (Begriff aus § 3a UStG) "
                 "eintragen – `rechnung neu` legt den Block mit der Liste der Begriffe an"
             )
+        if isinstance(daten, dict) and "referenz" in daten:
+            raise ValueError(
+                "referenz: steht nicht in rechnung.yaml, sie ist privat. Der Mensch trägt sie mit "
+                "`rechnung preise <nr>` ein (rechnung.privat.yaml) oder in die Kundendatei"
+            )
         if isinstance(daten, dict) and "steuerfall" in daten:
             raise ValueError(
                 "steuerfall: gibt es nicht mehr. Das Ergebnis leitet das Werkzeug aus leistung: und den "
@@ -292,8 +343,43 @@ class Input(Basis):
         return self
 
 
+class PrivatPosition(Basis):
+    """Bestätigter Preis einer Position, in derselben Reihenfolge wie in rechnung.yaml."""
+
+    kuerzel: str
+    einzelpreis: Decimal
+    steuersatz: Decimal | None = None   # nur 7, nur wo rules.satz_position() es erlaubt
+
+    _zahlen = field_validator("einzelpreis", "steuersatz", mode="before")(_dezimal)
+    _sieben = field_validator("steuersatz")(_nur_sieben)
+
+    @field_validator("einzelpreis")
+    @classmethod
+    def _nicht_negativ(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("einzelpreis ist negativ")
+        return v
+
+
+class Privat(Basis):
+    """rechnung.privat.yaml – was zur Rechnung gehört, aber nicht in die Sicht der AI.
+
+    Preise als Schnappschuss (nicht als Verweis auf die Preisliste), 7-%-Schalter, Referenz.
+    `positionen_hash` ist der Hash der bestätigten Positionen aus rechnung.yaml; ändert sich dort
+    eine Position, ist die Bestätigung veraltet und `bauen` baut nichts. Schreibt nur der Mensch
+    über `rechnung preise`; die AI liest und schreibt die Datei nicht.
+    """
+
+    referenz: str | None = None
+    waehrung: Waehrung | None = None
+    positionen_hash: str | None = None
+    bestaetigt_am: datetime | None = None
+    positionen: list[PrivatPosition] = Field(default_factory=list)
+
+
 class ResolvedPosition(Basis):
     pos: int
+    kuerzel: str
     beschreibung: str
     menge: Decimal
     einheit: Einheit
@@ -331,6 +417,7 @@ class Resolved(Basis):
     regeln: list[str]                       # angewandte Regeln aus RULES.md (R35)
     hinweis: dict[str, str] | None = None   # {"de": ..., "en": ...}, nur wenn kein USt-Ausweis
     referenz: str | None = None
+    anrede: str
     einleitung: str | None = None
     positionen: list[ResolvedPosition]
     steuergruppen: list[Steuergruppe]
@@ -341,5 +428,6 @@ class Resolved(Basis):
     vorlage_version: str
     vorlage_eigen: dict[str, str] | None = None   # eigene Vorlagen-Dateien: {Pfad: sha256}
     input_hash: str
+    privat_hash: str                        # Hash von rechnung.privat.yaml beim Build
     erzeugt_am: datetime
     warnungen: list[str] = Field(default_factory=list)

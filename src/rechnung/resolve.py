@@ -1,7 +1,9 @@
-"""Laden, Rechnen, Einfrieren: rechnung.yaml -> rechnung.resolved.json.
+"""Laden, Rechnen, Einfrieren: rechnung.yaml + rechnung.privat.yaml -> rechnung.resolved.json.
 
 Alle Entscheidungen stecken in rules.py, alle Beträge sind Decimal. Diese Datei fügt zusammen
-und schreibt das Ergebnis.
+und schreibt das Ergebnis. Zwei Stufen: `entwurf()` braucht keine Preise – Leistungsort, Ergebnis,
+Positionen mit Beschreibung und der Stand der Preise; `rechne()` setzt die bestätigten Preise ein
+und bricht ab, wenn sie fehlen oder veraltet sind.
 """
 
 from __future__ import annotations
@@ -10,24 +12,27 @@ import hashlib
 import json
 import re
 import subprocess
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import yaml
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from rechnung import config, meldung, rules, sicht, vorlage
+from rechnung import config, meldung, preise, rules, sicht, vorlage
 from rechnung.models import (
     Input,
     Kunde,
     Leistung,
+    PreisEintrag,
+    Privat,
     Resolved,
     ResolvedPosition,
     Stammdaten,
     Steuergruppe,
 )
-from rechnung.models import EINHEITEN, PLATZHALTER
+from rechnung.models import EINHEITEN, KUERZEL, PLATZHALTER
 
 INPUT_DATEI = "rechnung.yaml"
 RESOLVED_DATEI = "rechnung.resolved.json"
@@ -73,6 +78,10 @@ def _herkunft(pfad: Path) -> tuple[str, str]:
         return INPUT_DATEI, meldung.EINGABE
     if pfad.name == "ich.yaml":
         return "Ausstellerdatei ich.yaml", meldung.STAMMDATEN
+    if pfad.name == preise.PREISLISTE_DATEI:
+        return f"Preisliste {preise.PREISLISTE_DATEI}", meldung.STAMMDATEN
+    if pfad.name == preise.PRIVAT_DATEI:
+        return preise.PRIVAT_DATEI, meldung.PREISE
     return f"Kundendatei {pfad.stem}.yaml", meldung.STAMMDATEN
 
 
@@ -235,6 +244,49 @@ def lade_input(ordner: Path) -> Input:
         raise _fehler(pfad, e) from e
 
 
+_PREISLISTE = TypeAdapter(dict[str, PreisEintrag])
+
+
+def lade_preisliste(cfg: config.Config, beispiel: bool = False) -> dict[str, PreisEintrag]:
+    """stammdaten/preise.yaml: Kürzel -> Eintrag. Pflegt nur der Mensch; die AI sieht keine Preise."""
+    pfad = stammdaten_ordner(cfg, beispiel) / preise.PREISLISTE_DATEI
+    if not pfad.is_file():
+        raise ResolveFehler(
+            f"Preisliste fehlt: {pfad}\nVorlage: stammdaten.example/{preise.PREISLISTE_DATEI} im Repo.",
+            art=meldung.STAMMDATEN,
+            geschwaerzt=f"Preisliste {preise.PREISLISTE_DATEI} fehlt. Der Mensch legt sie an.",
+        )
+    try:
+        liste = _PREISLISTE.validate_python(_yaml(pfad))
+    except ValidationError as e:
+        raise _fehler(pfad, e) from e
+    for kuerzel in liste:
+        if not re.fullmatch(KUERZEL, kuerzel):
+            raise ResolveFehler(
+                f"{pfad}: Kürzel {kuerzel!r} – nur Kleinbuchstaben, Ziffern und Bindestrich",
+                art=meldung.STAMMDATEN,
+                geschwaerzt=f"Preisliste {preise.PREISLISTE_DATEI}: ein Kürzel enthält andere Zeichen als "
+                            f"Kleinbuchstaben, Ziffern und Bindestrich.",
+            )
+    return liste
+
+
+def lade_privat(ordner: Path) -> Privat:
+    """rechnung.privat.yaml; fehlt sie, ist noch nichts bestätigt."""
+    pfad = ordner / preise.PRIVAT_DATEI
+    if not pfad.is_file():
+        return Privat()
+    try:
+        return Privat.model_validate(_yaml(pfad))
+    except ValidationError as e:
+        raise _fehler(pfad, e) from e
+
+
+def privat_hash(ordner: Path) -> str:
+    pfad = ordner / preise.PRIVAT_DATEI
+    return hashlib.sha256(pfad.read_bytes()).hexdigest() if pfad.is_file() else ""
+
+
 # ---------------------------------------------------------------- Ordner und Nummer
 
 def jahresordner(cfg: config.Config, jahr: int) -> Path:
@@ -265,7 +317,7 @@ def finde_ordner(cfg: config.Config, nummer: str) -> Path:
 LEISTUNGSDATUM_PFLICHT = "# PFLICHT: Tag der Leistung, JJJJ-MM-TT"
 TAETIGKEIT_PFLICHT = "# PFLICHT: was geleistet wird, in eigenen Worten"
 EINORDNUNG_PFLICHT = "# PFLICHT: ein Wort aus der Liste unten"
-BESCHREIBUNG_PFLICHT = "# PFLICHT: was geleistet wurde, wie es auf der Rechnung steht"
+KUERZEL_PFLICHT = "# PFLICHT: Kürzel aus der Preisliste"
 ORT_KOMMENTAR = "# nur bei kulturell … unterhaltend: Land (z. B. GB) oder online"
 
 
@@ -290,8 +342,8 @@ datum: {datum}              # Rechnungsdatum
 {leistungsdatum_zeile}
 # leistungsdatum_bis:       # nur bei einem Zeitraum
 {sprache_zeile}{waehrung_zeile}# zahlungsziel_tage: {zahlungsziel}   # Default aus der Config
-# referenz:                 # Bestellnummer oder Event des Kunden, falls vorhanden
-# einleitung:               # ein Satz über der Tabelle; ohne Angabe bleibt die Stelle leer
+# einleitung:               # ein Satz über der Tabelle, nach der Anrede; ohne Angabe bleibt die Stelle leer
+# Preise und die Referenz des Kunden stehen nicht hier: `rechnung preise {nummer}` (rechnung.privat.yaml).
 
 # Was geleistet wird und wie es nach § 3a UStG einzuordnen ist – daraus folgt der Leistungsort.
 # Maßgeblich ist die Hauptleistung; Nebenleistungen wie Reisekosten folgen ihr.
@@ -324,15 +376,16 @@ leistung:
 # Bei Unternehmern als Kunden ist der Leistungsort immer ihr Sitz; die Einordnung wird trotzdem
 # festgehalten. Begriffe und Regeln: RULES.md, Teil 4.
 
+# Was und wie viel, nie der Preis. Kürzel und Einheit aus der Preisliste: `rechnung preisliste`.
 positionen:
-  - beschreibung: {beschreibung}
+  - kuerzel:                {kuerzel_pflicht}
     menge: 1
-    einheit: pauschal       # pauschal | stunde | tag | stueck | kilometer
-    einzelpreis: 0.00
-  # - beschreibung: Reisekosten Flug FRA-LON-FRA, Beleg anbei
+    einheit: pauschal       # pauschal | stunde | tag | stueck | kilometer – wie in der Preisliste
+    # beschreibung:         # ohne Angabe die Bezeichnung aus der Preisliste
+  # - kuerzel: flug
   #   menge: 1
   #   einheit: pauschal
-  #   einzelpreis: 0.00
+  #   beschreibung: Reisekosten Flug FRA-LON-FRA, Beleg anbei
 
 # belege:                   # Dateinamen in belege/, z. B. flug.pdf
 #   - flug.pdf
@@ -387,9 +440,7 @@ def neu(
             sprache_zeile=sprache_zeile,
             waehrung_zeile=waehrung_zeile,
             zahlungsziel=cfg.zahlungsziel_tage,
-            # Kein Kundenname: rechnung.yaml enthält nur, was die AI sehen darf (sicht.EINSTUFUNG).
-            beschreibung=json.dumps(taetigkeit, ensure_ascii=False) if taetigkeit
-            else f"            {BESCHREIBUNG_PFLICHT}",
+            kuerzel_pflicht=KUERZEL_PFLICHT,
         ),
         encoding="utf-8",
     )
@@ -419,46 +470,180 @@ def regel_trace(entscheidung: rules.Entscheidung, waehrung: str) -> list[str]:
     return [*entscheidung.regeln, "R32", "R33", *(["R34"] if waehrung != "EUR" else [])]
 
 
-def rechne(
-    eingabe: Input,
-    stammdaten: Stammdaten,
-    kunde: Kunde,
-    cfg: config.Config,
-    nummer: str,
-    version: str = "unbekannt",
-    hash_: str = "",
-    eigen: dict[str, str] | None = None,
-) -> Resolved:
-    """Der eigentliche Kern: aus Eingabe, Stammdaten und Kunde wird das eingefrorene Ergebnis."""
+
+
+# Ohne `anrede:` in der Kundendatei; geraten wird die Anrede nie.
+ANREDE = {"de": "Sehr geehrte Damen und Herren", "en": "Dear Madam or Sir"}
+
+
+@dataclass
+class EntwurfPosition:
+    """Eine Position ohne Preis: was auf der Rechnung steht und was `rechnung preise` vorschlägt."""
+
+    pos: int
+    kuerzel: str
+    beschreibung: str
+    menge: Decimal
+    einheit: str
+    art: str                     # leistung | auslage
+    vorschlag: Decimal | None    # Preis aus der Liste; None bei Auslagen und in Fremdwährung
+    vorschlag_sieben: bool       # die Liste schlägt 7 % vor, und hier geht es
+    sieben_erlaubt: bool         # rules.satz_position() erlaubt 7 % für diese Rechnung (R10, R12, R14)
+
+
+@dataclass
+class Entwurf:
+    """Was ohne Preise feststeht: Grundlage für `resolve` vor der Bestätigung und für `rechnung preise`."""
+
+    ordner: Path
+    eingabe: Input
+    stammdaten: Stammdaten
+    kunde: Kunde
+    datum: date
+    faelligkeit: date
+    sprache: str
+    waehrung: str
+    entscheidung: rules.Entscheidung
+    positionen: list[EntwurfPosition]
+    positionen_hash: str
+    privat: Privat
+    preise: str                  # preise.BESTAETIGT | FEHLEN | VERALTET
+    warnungen: list[str]
+
+    @property
+    def nummer(self) -> str:
+        return self.ordner.name
+
+
+def _positionen(eingabe: Input, liste: dict[str, PreisEintrag], sprache: str, waehrung: str,
+                sieben_erlaubt: bool) -> list[EntwurfPosition]:
+    """Positionen aus rechnung.yaml gegen die Preisliste: Kürzel bekannt, Einheit passt."""
+    ergebnis = []
+    for i, p in enumerate(eingabe.positionen, start=1):
+        eintrag = liste.get(p.kuerzel)
+        if eintrag is None:
+            text = (f"Position {i}: kuerzel „{p.kuerzel}“ steht nicht in der Preisliste. Vorhanden: "
+                    f"{', '.join(sorted(liste)) or '(keine)'} (`rechnung preisliste`).")
+            raise ResolveFehler(text, art=meldung.EINGABE, geschwaerzt=text)
+        if p.einheit != eintrag.einheit:
+            text = (f"Position {i}: einheit „{p.einheit}“, die Preisliste führt {p.kuerzel} in „{eintrag.einheit}“. "
+                    f"Die Einheit der Liste übernehmen und die Menge darin angeben.")
+            raise ResolveFehler(text, art=meldung.EINGABE, geschwaerzt=text)
+        bezeichnung = eintrag.bezeichnung.get(sprache) or next(iter(eintrag.bezeichnung.values()))  # type: ignore[call-overload]
+        ergebnis.append(EntwurfPosition(
+            pos=i,
+            kuerzel=p.kuerzel,
+            beschreibung=p.beschreibung or bezeichnung,
+            menge=p.menge,
+            einheit=p.einheit,
+            art=eintrag.art,
+            vorschlag=eintrag.preis if waehrung == preise.LISTENWAEHRUNG else None,
+            vorschlag_sieben=eintrag.steuersatz is not None and sieben_erlaubt,
+            sieben_erlaubt=sieben_erlaubt,
+        ))
+    return ergebnis
+
+
+def entwurf_aus(cfg: config.Config, ordner: Path) -> Entwurf:
+    """Lädt alles zu einer Rechnung und entscheidet, was ohne Preise zu entscheiden ist."""
+    eingabe = lade_input(ordner)
+    stammdaten = lade_stammdaten(cfg)
+    kunde = lade_kunde(cfg, eingabe.kunde)
+    liste = lade_preisliste(cfg)
+    privat = lade_privat(ordner)
+
     datum = eingabe.datum or date.today()
     sprache = eingabe.sprache or kunde.sprache or cfg.sprache
     waehrung = eingabe.waehrung or kunde.waehrung or cfg.waehrung
 
     entscheidung = rules.entscheide(kunde, eingabe.leistung, stammdaten, eingabe.leistungsort)
-    basissatz = entscheidung.satz
+    # Fremdwährung nur ohne deutsche Steuer (R34); 7 % ändert daran nichts, der Satz der Rechnung genügt.
+    rules.waehrung_erlaubt(waehrung, [entscheidung.satz])
+    sieben = not isinstance(rules.satz_position(int(entscheidung.satz), stammdaten.kleinunternehmer, True),
+                            rules.Abbruch)
+    positionen = _positionen(eingabe, liste, sprache, waehrung, sieben)
+    hash_ = preise.positionen_hash(eingabe.positionen)
+
+    warnungen: list[str] = []
+    if entscheidung.ergebnis == "reverse_charge":
+        frist = rules.frist_reverse_charge(eingabe.leistungsdatum_bis or eingabe.leistungsdatum)
+        if datum > frist:
+            warnungen.append(
+                f"Rechnungsdatum {datum} liegt nach der Frist {frist}: Bei Steuerschuldnerschaft des "
+                f"Leistungsempfängers ist die Rechnung bis zum 15. des Folgemonats auszustellen "
+                f"(§ 14a Abs. 1 Satz 2 UStG, RULES.md R30). Die Rechnung bleibt gültig."
+            )
+
+    return Entwurf(
+        ordner=ordner,
+        eingabe=eingabe,
+        stammdaten=stammdaten,
+        kunde=kunde,
+        datum=datum,
+        faelligkeit=rules.faelligkeit(
+            datum, eingabe.zahlungsziel_tage if eingabe.zahlungsziel_tage is not None else cfg.zahlungsziel_tage
+        ),
+        sprache=sprache,
+        waehrung=waehrung,
+        entscheidung=entscheidung,
+        positionen=positionen,
+        positionen_hash=hash_,
+        privat=privat,
+        preise=preise.stand(privat, hash_, waehrung, [p.kuerzel for p in eingabe.positionen]),
+        warnungen=warnungen,
+    )
+
+
+def entwurf(cfg: config.Config, nummer: str) -> Entwurf:
+    return entwurf_aus(cfg, finde_ordner(cfg, nummer))
+
+
+def preise_fehlen(e: Entwurf) -> ResolveFehler:
+    """Abbruch der Art `preise`: Der Mensch bestätigt im eigenen Terminal, nie über den Chat."""
+    if e.preise == preise.FEHLEN:
+        text = f"Preise für {e.nummer} sind noch nicht bestätigt."
+    else:
+        text = (f"Preise für {e.nummer} sind veraltet: Positionen oder Währung haben sich seit der "
+                f"Bestätigung geändert.")
+    text += f" Der Mensch bestätigt sie im eigenen Terminal: `rechnung preise {e.nummer}`."
+    return ResolveFehler(text, art=meldung.PREISE, geschwaerzt=text)
+
+
+def rechne(
+    e: Entwurf,
+    version: str = "unbekannt",
+    hash_: str = "",
+    hash_privat: str = "",
+    eigen: dict[str, str] | None = None,
+) -> Resolved:
+    """Der eigentliche Kern: Entwurf plus bestätigte Preise ergeben das eingefrorene Ergebnis."""
+    if e.preise != preise.BESTAETIGT:
+        raise preise_fehlen(e)
 
     positionen: list[ResolvedPosition] = []
-    for i, p in enumerate(eingabe.positionen, start=1):
-        satz = rules.satz_position(int(basissatz), stammdaten.kleinunternehmer, p.steuersatz is not None)
+    for p, bestaetigt in zip(e.positionen, e.privat.positionen):
+        satz = rules.satz_position(int(e.entscheidung.satz), e.stammdaten.kleinunternehmer,
+                                   bestaetigt.steuersatz is not None)
         if isinstance(satz, rules.Abbruch):
-            text = (f"Position {i}: steuersatz ist gesetzt, aber das Ergebnis {entscheidung.ergebnis} weist "
-                    f"keine deutsche Umsatzsteuer aus (RULES.md {satz.regel}). Den Satz aus der Position entfernen.")
-            raise ResolveFehler(text, art=meldung.AUSSERHALB, geschwaerzt=text)
-        satz = Decimal(satz)
+            text = (f"Position {p.pos}: 7 % ist bestätigt, aber das Ergebnis {e.entscheidung.ergebnis} weist "
+                    f"keine deutsche Umsatzsteuer aus (RULES.md {satz.regel}). Der Mensch bestätigt die "
+                    f"Preise neu: `rechnung preise {e.nummer}`.")
+            raise ResolveFehler(text, art=meldung.PREISE, geschwaerzt=text)
         positionen.append(
             ResolvedPosition(
-                pos=i,
+                pos=p.pos,
+                kuerzel=p.kuerzel,
                 beschreibung=p.beschreibung,
                 menge=p.menge,
                 einheit=p.einheit,
                 einheit_code=EINHEITEN[p.einheit],
-                einzelpreis=rules.mindestens_zwei(p.einzelpreis),
-                steuersatz=satz,
-                zeilensumme=rules.runde(p.menge * p.einzelpreis),
+                einzelpreis=rules.mindestens_zwei(bestaetigt.einzelpreis),
+                steuersatz=Decimal(satz),
+                zeilensumme=rules.runde(p.menge * bestaetigt.einzelpreis),
             )
         )
 
-    rules.waehrung_erlaubt(waehrung, [p.steuersatz for p in positionen])
+    rules.waehrung_erlaubt(e.waehrung, [p.steuersatz for p in positionen])
 
     gruppen: list[Steuergruppe] = []
     for satz in sorted({p.steuersatz for p in positionen}, reverse=True):
@@ -473,37 +658,27 @@ def rechne(
 
     netto = sum((g.netto for g in gruppen), Decimal(0))
     ust = sum((g.betrag for g in gruppen), Decimal(0))
-
-    warnungen: list[str] = []
-    if entscheidung.ergebnis == "reverse_charge":
-        frist = rules.frist_reverse_charge(eingabe.leistungsdatum_bis or eingabe.leistungsdatum)
-        if datum > frist:
-            warnungen.append(
-                f"Rechnungsdatum {datum} liegt nach der Frist {frist}: Bei Steuerschuldnerschaft des "
-                f"Leistungsempfängers ist die Rechnung bis zum 15. des Folgemonats auszustellen "
-                f"(§ 14a Abs. 1 Satz 2 UStG, RULES.md R30). Die Rechnung bleibt gültig."
-            )
+    eingabe = e.eingabe
 
     return Resolved(
-        nummer=nummer,
-        datum=datum,
+        nummer=e.nummer,
+        datum=e.datum,
         leistungsdatum=eingabe.leistungsdatum,
         leistungsdatum_bis=eingabe.leistungsdatum_bis,
-        faelligkeit=rules.faelligkeit(
-            datum, eingabe.zahlungsziel_tage if eingabe.zahlungsziel_tage is not None else cfg.zahlungsziel_tage
-        ),
-        sprache=sprache,
-        waehrung=waehrung,
-        aussteller=stammdaten,
-        kunde=kunde,
+        faelligkeit=e.faelligkeit,
+        sprache=e.sprache,
+        waehrung=e.waehrung,
+        aussteller=e.stammdaten,
+        kunde=e.kunde,
         leistung=eingabe.leistung,
-        leistungsort=entscheidung.ort.land,
+        leistungsort=e.entscheidung.ort.land,
         leistungsort_manuell=eingabe.leistungsort is not None,
         begruendung=eingabe.begruendung,
-        ergebnis=entscheidung.ergebnis,
-        regeln=regel_trace(entscheidung, waehrung),
-        hinweis=rules.hinweis(entscheidung, sprache),
-        referenz=eingabe.referenz or kunde.referenz,
+        ergebnis=e.entscheidung.ergebnis,
+        regeln=regel_trace(e.entscheidung, e.waehrung),
+        hinweis=rules.hinweis(e.entscheidung, e.sprache),
+        referenz=e.privat.referenz or e.kunde.referenz,
+        anrede=e.kunde.anrede or ANREDE[e.sprache],
         einleitung=eingabe.einleitung,
         positionen=positionen,
         steuergruppen=gruppen,
@@ -514,28 +689,35 @@ def rechne(
         vorlage_version=version,
         vorlage_eigen=eigen,
         input_hash=hash_,
+        privat_hash=hash_privat,
         erzeugt_am=datetime.now().astimezone(),
-        warnungen=warnungen,
+        warnungen=list(e.warnungen),
     )
+
+
+def schreibe_resolved(ergebnis: Resolved, ordner: Path) -> Path:
+    ziel = ordner / RESOLVED_DATEI
+    ziel.write_text(
+        json.dumps(json.loads(ergebnis.model_dump_json(by_alias=True)), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return ziel
 
 
 def resolve(cfg: config.Config, nummer: str, schreiben: bool = True) -> tuple[Resolved, Path]:
-    """Löst eine bestehende Rechnung auf und schreibt das Ergebnis neben die Eingabe."""
-    ordner = finde_ordner(cfg, nummer)
-    eingabe = lade_input(ordner)
-    stammdaten = lade_stammdaten(cfg)
-    kunde = lade_kunde(cfg, eingabe.kunde)
+    """Löst eine Rechnung mit bestätigten Preisen auf und schreibt das Ergebnis neben die Eingabe.
+
+    Ohne gültige Bestätigung Abbruch der Art `preise`; `entwurf()` zeigt, was ohne Preise feststeht.
+    """
+    e = entwurf(cfg, nummer)
     ergebnis = rechne(
-        eingabe, stammdaten, kunde, cfg,
-        nummer=ordner.name,
+        e,
         version=vorlage_version(),
-        hash_=input_hash(ordner),
+        hash_=input_hash(e.ordner),
+        hash_privat=privat_hash(e.ordner),
         eigen=vorlage.nachweis(cfg.vorlage),
     )
-    ziel = ordner / RESOLVED_DATEI
+    ziel = e.ordner / RESOLVED_DATEI
     if schreiben:
-        ziel.write_text(
-            json.dumps(json.loads(ergebnis.model_dump_json(by_alias=True)), indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        schreibe_resolved(ergebnis, e.ordner)
     return ergebnis, ziel
