@@ -40,3 +40,10 @@ waehrung = "EUR"
 # `rechnung doctor` zeigt, was ersetzt wird, und nennt Stellschrauben, die einer älteren
 # eigenen defaults.sty fehlen (für die gelten die Standardwerte).
 # vorlage = "~/meine-vorlage"
+
+# Demo-Betrieb für Ausprobierer und gehostete Demos (meist als RECHNUNG_DEMO=1 statt hier):
+# Stammdaten immer aus stammdaten.example/ (erfundener Aussteller, sechs Testkunden), das
+# MCP-Werkzeug `kunden` nennt der AI die Testkunden, Auslagen bekommen den Beispielpreis der Liste,
+# jede MCP-Antwort trägt den Prototyp-Hinweis. Ein Gewerbe-Ordner mit eigener ich.yaml wird
+# verweigert. Für eigene Rechnungen weglassen.
+# demo = false

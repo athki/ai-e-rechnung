@@ -18,9 +18,9 @@ uv run rechnung <kommando>
 uv run rechnung neu --kunde <kuerzel>
 # rechnung.yaml ausfüllen (leistungsdatum, leistung: und Positionen mit Kürzel sind Pflicht),
 # Belege nach belege/ legen
-uv run rechnung resolve       MM-2026-0001     # zeigt Leistungsort, Ergebnis und ob die Preise bestätigt sind
-uv run rechnung preise        MM-2026-0001     # Preise bestätigen (Vorschlag aus der Preisliste), Referenz
-uv run rechnung resolve       MM-2026-0001     # jetzt mit Summen; schreibt rechnung.resolved.json
+uv run rechnung resolve       MM-2026-0001     # Leistungsort, Ergebnis; übernimmt die Listenpreise, schreibt
+                                               # mit Summen rechnung.resolved.json
+uv run rechnung preise        MM-2026-0001     # bei Bedarf: Auslagen, eigene Preise, Referenz – dann resolve
 uv run rechnung bauen         MM-2026-0001 --pro-forma   # optional: Pro forma an den Kunden, dann
 uv run rechnung pro-forma     MM-2026-0001 --gesendet-am 2026-06-12   # festhalten, was raus ist
 uv run rechnung bauen         MM-2026-0001     # erzeugt die PDF
@@ -242,12 +242,14 @@ als zusätzliche Seite ans PDF gehängt und mit „Anlage 1 zu Rechnung Nr. …�
 uv run rechnung resolve MM-2026-0001
 ```
 
-Ohne bestätigte Preise zeigt es Leistungsort, Ergebnis und Positionen und sagt „Preise fehlen“; es
-schreibt noch nichts. Mit bestätigten Preisen zeigt es dazu Sätze, Summen, Fälligkeit und den
+Fehlende Preise übernimmt es aus der Preisliste (je Position, die neu oder geändert ist; Quelle
+`liste` in `rechnung.privat.yaml`). Fehlt ein Preis, den die Liste nicht hat – eine Auslage oder eine
+Rechnung in Fremdwährung –, zeigt es nur Leistungsort, Ergebnis und Positionen und sagt „Preise
+fehlen“; es schreibt noch nichts. Mit vollständigen Preisen zeigt es dazu Sätze, Summen, Fälligkeit und den
 Hinweistext und schreibt `rechnung.resolved.json`. **Hier schaust du genau hin**, besonders auf
 Leistungsort und Ergebnis: Sie folgen aus Kundendatei und Einordnung, nicht aus deiner Absicht.
 
-### 5a. Preise bestätigen
+### 5a. Preise eintragen oder ändern
 
 ```sh
 uv run rechnung preise MM-2026-0001
@@ -259,10 +261,13 @@ jede Position mit dem Preis aus der Liste als Vorschlag; Enter übernimmt ihn, e
 Kleinunternehmer), fragt es je Position danach. Dann die Referenz des Kunden für diese Rechnung (ohne
 Angabe die der Kundendatei), die Summen zur Kontrolle und „Bestätigen?“.
 
-Festgehalten wird in `rechnung.privat.yaml`: die Preise als Schnappschuss (eine spätere Änderung der
-Preisliste wirkt nicht zurück), der 7-%-Schalter, die Referenz und ein Hash der Positionen. Änderst
-du danach eine Position in `rechnung.yaml` – Kürzel, Menge, Einheit oder Beschreibung – oder die
-Währung, sind die Preise **veraltet**: `bauen` baut nichts, bis du neu bestätigst. Die Einleitung
+Nötig ist das für Auslagen, für Rechnungen in Fremdwährung und wenn ein Preis von der Liste abweichen
+soll; sonst übernimmt `resolve` die Liste selbst. Festgehalten wird in `rechnung.privat.yaml`: die
+Preise als Schnappschuss (eine spätere Änderung der Preisliste wirkt nicht zurück), der 7-%-Schalter,
+die Referenz, ein Hash der Positionen und je Position die Quelle (`mensch` oder `liste`). Änderst du
+danach eine Position in `rechnung.yaml` – Kürzel, Menge, Einheit oder Beschreibung – oder die
+Währung, sind die Preise **veraltet**: `resolve` füllt geänderte Positionen aus der Liste, deine
+Preise für unveränderte bleiben; eine geänderte Auslage trägst du neu ein, sonst baut `bauen` nichts. Die Einleitung
 oder das Datum zu ändern, lässt die Preise gültig. `--aus-liste` übernimmt die Liste ohne Rückfrage
 (für Skripte; verweigert bei Auslagen), `--referenz "PO 4711"` setzt die Referenz.
 
@@ -344,7 +349,7 @@ Werkzeug noch nicht gebaut (geplant).
 | `kuerzel fehlt` / `kuerzel „…“ steht nicht in der Preisliste` | Position ohne oder mit unbekanntem Kürzel | Kürzel aus `rechnung preisliste` eintragen oder die Liste ergänzen |
 | `einheit „stunde“, die Preisliste führt … in „pauschal“` | Einheit passt nicht zur Liste | Einheit der Liste nehmen, Menge darin angeben |
 | `positionen.0.menge: … (Wert: {2})` | Platzhalter-Klammern stehen gelassen | Klammern entfernen: `menge: 2` |
-| `Abbruch (preise): Preise … sind noch nicht bestätigt` / `… veraltet` | keine oder eine alte Bestätigung | `rechnung preise <nr>` im eigenen Terminal |
+| `Abbruch (preise): Preise … sind noch nicht bestätigt` / `… veraltet` | ein Preis, den die Liste nicht hat (Auslage, Fremdwährung) | `rechnung preise <nr>` im eigenen Terminal |
 | `referenz: steht nicht in rechnung.yaml` | Referenz aus einer alten Rechnungsdatei | mit `rechnung preise` eintragen |
 | `einleitung: enthält den Platzhalter {Event} …` | `{…}` aus einer Vorlage nicht ersetzt | echten Text einsetzen |
 | `leistungdatum: Extra inputs are not permitted` | Feldname vertippt | Tippfehler korrigieren |

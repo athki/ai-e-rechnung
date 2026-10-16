@@ -5,10 +5,12 @@
 #
 #   bezeichnung  wie die Position auf der Rechnung heißt; ein Text für beide Sprachen oder de/en
 #   einheit      pauschal | stunde | tag | stueck | kilometer – rechnung.yaml muss dieselbe nehmen
-#   preis        Einzelpreis in EUR; bei anderen Währungen schlägt `rechnung preise` nichts vor
+#   preis        Einzelpreis in EUR; `resolve` übernimmt ihn, wo noch kein Preis bestätigt ist. Bei
+#                anderen Währungen gilt er nicht, dann trägt der Mensch ein (`rechnung preise`)
 #   art          leistung (Default), auslage oder lieferung – eine Auslage hat keinen festen Preis, ihr
-#                Betrag kommt je Rechnung vom Beleg; eine Lieferung (Ware) kann das Werkzeug noch nicht,
-#                `resolve` bricht ab (RULES.md R39)
+#                Betrag kommt je Rechnung vom Beleg; ein `preis` an einer Auslage ist nur ein
+#                Beispielbetrag für den Demo-Betrieb (RECHNUNG_DEMO), sonst bleibt er unbeachtet. Eine
+#                Lieferung (Ware) kann das Werkzeug noch nicht, `resolve` bricht ab (RULES.md R39)
 #   steuersatz   nur 7, als Vorschlag (§ 12 Abs. 2 UStG); ob er gilt, entscheidet das Werkzeug je Rechnung
 
 beratung:
@@ -60,12 +62,15 @@ buch:
   preis: 24.00
   art: lieferung
 
+# Auslagen: der Betrag kommt vom Beleg. Der Preis hier gilt nur im Demo-Betrieb, als Beispiel.
 flug:
   bezeichnung: { de: Reisekosten Flug, en: "Travel: flight" }
   einheit: pauschal
   art: auslage
+  preis: 280.00
 
 bahnticket:
   bezeichnung: { de: Bahnticket, en: Train ticket }
   einheit: pauschal
   art: auslage
+  preis: 89.90

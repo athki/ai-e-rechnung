@@ -212,7 +212,7 @@ def pruefe_nummer(cfg: config.Config | None) -> Pruefung:
         return Pruefung("Nächste Nummer", WARNUNG, "keine Config")
     jahr = date.today().year
     try:
-        if cfg.demo:
+        if cfg.ohne_gewerbe:
             nummer = rules.nummer(cfg.nummer_format, jahr, 1)
             return Pruefung("Nächste Nummer", OK, f"{nummer} (Demo-Modus, Jahr leer)")
         return Pruefung("Nächste Nummer", OK, resolve.neue_nummer(cfg, jahr))

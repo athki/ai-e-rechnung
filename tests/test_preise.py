@@ -22,7 +22,7 @@ from test_resolve import EINE_POSITION, gewerbe, lege_an  # noqa: F401 – Fixtu
 def test_beispiel_preisliste_ist_gueltig(gewerbe):
     liste = r.lade_preisliste(config.laden())
     assert liste["vortrag"].preis == Decimal("450.00") and liste["vortrag"].einheit == "stunde"
-    assert liste["bahnticket"].art == "auslage" and liste["bahnticket"].preis is None
+    assert liste["bahnticket"].art == "auslage" and liste["bahnticket"].preis == Decimal("89.90")   # nur Demo
     assert liste["nutzungsrecht"].steuersatz == Decimal(7)
     assert liste["buch"].art == "lieferung"
     assert liste["flug"].bezeichnung == {"de": "Reisekosten Flug", "en": "Travel: flight"}
@@ -30,7 +30,6 @@ def test_beispiel_preisliste_ist_gueltig(gewerbe):
 
 @pytest.mark.parametrize(("eintrag", "meldung_"), [
     ({"bezeichnung": "Vortrag", "einheit": "pauschal"}, "preis fehlt"),
-    ({"bezeichnung": "Ticket", "einheit": "pauschal", "art": "auslage", "preis": 10}, "art: auslage"),
     ({"bezeichnung": "Buch", "einheit": "stueck", "preis": 10, "steuersatz": 19}, "nur 7"),
     ({"bezeichnung": "", "einheit": "stueck", "preis": 10}, "bezeichnung fehlt"),
     ({"bezeichnung": "Kiste", "einheit": "kiste", "preis": 10}, "einheit"),
@@ -114,8 +113,11 @@ def test_sieben_prozent_nur_wo_erlaubt(gewerbe):
 # ---------------------------------------------------------------- Stand der Bestätigung
 
 
+AUSLAGE = "  - kuerzel: bahnticket\n    menge: 1\n    einheit: pauschal\n"
+
+
 def test_ohne_bestaetigung_fehlen_die_preise(gewerbe):
-    nummer = lege_an(gewerbe, preise_=None)
+    nummer = lege_an(gewerbe, positionen=EINE_POSITION + AUSLAGE, preise_=None)
     assert r.entwurf(config.laden(), nummer).preise == preise.FEHLEN
     with pytest.raises(r.ResolveFehler) as info:
         r.resolve(config.laden(), nummer)
@@ -123,18 +125,29 @@ def test_ohne_bestaetigung_fehlen_die_preise(gewerbe):
     assert f"`rechnung preise {nummer}`" in info.value.geschwaerzt
 
 
-@pytest.mark.parametrize(("alt", "neu"), [
-    ("menge: 1", "menge: 2"),
-    ("beschreibung: Teilnahme als Panelist", "beschreibung: Teilnahme als Moderator"),   # streng
+@pytest.mark.parametrize(("alt", "neu", "listenpreis"), [
+    ("menge: 1\n    einheit: stunde", "menge: 2\n    einheit: stunde", "450.00"),
+    ("beschreibung: Teilnahme als Panelist", "beschreibung: Teilnahme als Moderator", "450.00"),   # streng
     ("kuerzel: vortrag\n    menge: 1\n    einheit: stunde",
-     "kuerzel: briefing\n    menge: 1\n    einheit: pauschal"),
+     "kuerzel: briefing\n    menge: 1\n    einheit: pauschal", "2400.00"),
 ])
-def test_geaenderte_position_macht_die_preise_veraltet(gewerbe, alt, neu):
-    nummer = lege_an(gewerbe)
+def test_geaenderte_position_macht_die_preise_veraltet(gewerbe, alt, neu, listenpreis):
+    """Veraltet ist die ganze Bestätigung; resolve füllt die geänderte Position aus der Liste, die
+    unveränderte Auslage behält ihren bestätigten Preis (entscheidungen 2026-10-16)."""
+    nummer = lege_an(gewerbe, positionen=EINE_POSITION + AUSLAGE, preise_=("1000.00", "50.00"))
     assert r.entwurf(config.laden(), nummer).preise == preise.BESTAETIGT
     datei = r.finde_ordner(config.laden(), nummer) / r.INPUT_DATEI
     datei.write_text(datei.read_text(encoding="utf-8").replace(alt, neu), encoding="utf-8")
     assert r.entwurf(config.laden(), nummer).preise == preise.VERALTET
+    ergebnis, _ = r.resolve(config.laden(), nummer)
+    assert [p.einzelpreis for p in ergebnis.positionen] == [Decimal(listenpreis), Decimal("50.00")]
+
+
+def test_geaenderte_auslage_bleibt_veraltet(gewerbe):
+    nummer = lege_an(gewerbe, positionen=EINE_POSITION + AUSLAGE, preise_=("1000.00", "50.00"))
+    datei = r.finde_ordner(config.laden(), nummer) / r.INPUT_DATEI
+    datei.write_text(datei.read_text(encoding="utf-8").replace("kuerzel: bahnticket\n    menge: 1",
+                                                               "kuerzel: bahnticket\n    menge: 2"), encoding="utf-8")
     with pytest.raises(r.ResolveFehler, match="veraltet") as info:
         r.resolve(config.laden(), nummer)
     assert info.value.art == meldung.PREISE
@@ -257,7 +270,7 @@ def test_preise_aus_liste_verweigert_bei_auslagen(gewerbe):
 
 
 def test_resolve_ohne_preise_zeigt_den_entwurf(gewerbe):
-    nummer = lege_an(gewerbe, preise_=None)
+    nummer = lege_an(gewerbe, positionen=EINE_POSITION + AUSLAGE, preise_=None)
     aus = CliRunner().invoke(app, ["resolve", nummer])
     assert aus.exit_code == 0, aus.output
     assert "Sample Ltd" in aus.output and f"rechnung preise {nummer}" in aus.output

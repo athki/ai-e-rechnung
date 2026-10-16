@@ -33,7 +33,13 @@ DEFAULTS: dict[str, object] = {
     "sprache": "de",
     "waehrung": "EUR",
     "vorlage": None,
+    # Demo-Betrieb für Ausprobierer (Web-Demo, Demo-Connector): nur die erfundenen Stammdaten aus
+    # stammdaten.example/, Testkunden auch für die AI (Werkzeug `kunden`), Beispielpreise für Auslagen.
+    "demo": False,
 }
+
+JA = ("1", "true", "ja", "yes", "on")
+NEIN = ("0", "false", "nein", "no", "off")
 
 # Die Unterordner, die dem Werkzeug gehören. Nur diese legt `init` an.
 UNTERORDNER = ("stammdaten", "kunden", "ausgang", "steuerberater")
@@ -79,10 +85,17 @@ class Config:
     vorlage: Path | None = None  # eigener Vorlagen-Ordner; None = nur die Standardvorlage
     quelle: Path | None = None  # geladene config.toml, falls vorhanden
     aus_env: frozenset[str] = field(default_factory=frozenset)
+    demo: bool = False          # RECHNUNG_DEMO: Demo-Betrieb, siehe DEFAULTS
 
     @property
-    def demo(self) -> bool:
+    def ohne_gewerbe(self) -> bool:
+        """Keine Gewerbe-Wurzel: alles läuft gegen stammdaten.example/ im Repo (Demo-Modus)."""
         return self.gewerbe is None
+
+    @property
+    def beispieldaten(self) -> bool:
+        """Stammdaten aus stammdaten.example/: ohne Gewerbe-Wurzel oder im Demo-Betrieb."""
+        return self.gewerbe is None or self.demo
 
     def ordner(self, name: str) -> Path:
         """Absoluter Pfad eines Werkzeug-Unterordners unter der Gewerbe-Wurzel."""
@@ -133,6 +146,14 @@ def laden(env: dict[str, str] | None = None, pfad: Path | None = None) -> Config
             f"nummer_format braucht die Platzhalter {{jahr}} und {{lfd}}, ist {format_!r}"
         )
 
+    demo = werte["demo"]
+    if isinstance(demo, str):
+        if demo.strip().lower() not in JA + NEIN:
+            raise ConfigFehler(f"demo muss ja oder nein sein (1/0, true/false), ist {demo!r}")
+        demo = demo.strip().lower() in JA
+    elif not isinstance(demo, bool):
+        raise ConfigFehler(f"demo muss true oder false sein, ist {demo!r}")
+
     gewerbe = Path(str(werte["gewerbe"])).expanduser() if werte["gewerbe"] else None
     vorlage = Path(str(werte["vorlage"])).expanduser() if werte["vorlage"] else None
     return Config(
@@ -149,6 +170,7 @@ def laden(env: dict[str, str] | None = None, pfad: Path | None = None) -> Config
         vorlage=vorlage,
         quelle=quelle,
         aus_env=frozenset(aus_env),
+        demo=demo,
     )
 
 

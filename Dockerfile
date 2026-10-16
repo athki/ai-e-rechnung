@@ -36,8 +36,10 @@ RUN uv sync --frozen --no-dev --extra mcp --no-install-project
 COPY . .
 RUN uv sync --frozen --no-dev --extra mcp
 
+# RECHNUNG_IM_CONTAINER: Befehle für den Menschen nennt das Werkzeug dann als `docker run …` (schritt.py).
 ENV PATH=/opt/venv/bin:$PATH \
-    RECHNUNG_GEWERBE=/gewerbe
+    RECHNUNG_GEWERBE=/gewerbe \
+    RECHNUNG_IM_CONTAINER=1
 # Kennzeichnung, damit `make schatten` alte, unbenannte Images dieses Projekts aufräumen kann – nur diese.
 # Der Beweis-Container erbt sie.
 LABEL ai-e-rechnung=schatten

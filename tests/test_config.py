@@ -12,7 +12,7 @@ def schreibe(pfad: Path, text: str) -> Path:
 
 def test_ohne_config_ist_demo(tmp_path):
     cfg = config.laden(env={}, pfad=tmp_path / "fehlt.toml")
-    assert cfg.demo
+    assert cfg.ohne_gewerbe
     assert cfg.quelle is None
     assert cfg.engine == "pdflatex"
     assert cfg.zahlungsziel_tage == 14
@@ -52,6 +52,7 @@ def test_jede_option_hat_eine_env_variable(tmp_path):
         "RECHNUNG_SPRACHE": "en",
         "RECHNUNG_WAEHRUNG": "GBP",
         "RECHNUNG_VORLAGE": "/v",
+        "RECHNUNG_DEMO": "1",
     }
     assert {k.removeprefix("RECHNUNG_").lower() for k in env} == set(config.DEFAULTS)
     cfg = config.laden(env=env, pfad=tmp_path / "fehlt.toml")
@@ -60,6 +61,7 @@ def test_jede_option_hat_eine_env_variable(tmp_path):
     assert cfg.waehrung == "GBP"
     assert cfg.nummer_format == "X-{jahr}-{lfd:04d}"
     assert cfg.vorlage == Path("/v")
+    assert cfg.demo and cfg.beispieldaten
 
 
 def test_config_pfad_aus_env(tmp_path):
@@ -69,7 +71,7 @@ def test_config_pfad_aus_env(tmp_path):
 
 @pytest.mark.parametrize(
     "inhalt",
-    ['engine = "pdftex"\n', 'waehrung = "CHF"\n', 'nummer_format = "{jahr}"\n', 'sprache = "fr"\n', 'sprache = "de+en"\n', 'zahlungsziel_tage = "bald"\n', 'unbekannt = 1\n', "kaputt ="],
+    ['engine = "pdftex"\n', 'waehrung = "CHF"\n', 'nummer_format = "{jahr}"\n', 'sprache = "fr"\n', 'sprache = "de+en"\n', 'zahlungsziel_tage = "bald"\n', 'demo = "vielleicht"\n', 'unbekannt = 1\n', "kaputt ="],
 )
 def test_ungueltige_config(tmp_path, inhalt):
     with pytest.raises(config.ConfigFehler):

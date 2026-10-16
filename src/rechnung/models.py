@@ -171,7 +171,8 @@ class PreisEintrag(Basis):
     """Ein Eintrag der Preisliste stammdaten/preise.yaml, Schlüssel ist das Kürzel.
 
     Eine Leistung hat einen Preis, eine Auslage (Bahnticket, Hotel) keinen: deren Betrag trägt der
-    Mensch bei `rechnung preise` ein. Eine Lieferung (Ware, § 3 Abs. 1 UStG) darf in der Liste
+    Mensch bei `rechnung preise` ein. Ein `preis` an einer Auslage ist ein Beispielbetrag, den nur der
+    Demo-Betrieb (RECHNUNG_DEMO) verwendet. Eine Lieferung (Ware, § 3 Abs. 1 UStG) darf in der Liste
     stehen, aber keine Rechnung trägt sie: `resolve` bricht ab (RULES.md R39). Preise gelten in EUR.
     `steuersatz: 7` ist nur ein Vorschlag; ob er gilt, entscheidet `rules.satz_position()` je Rechnung.
     """
@@ -196,8 +197,6 @@ class PreisEintrag(Basis):
             raise ValueError("bezeichnung fehlt: wie die Leistung auf der Rechnung heißt (de, en)")
         if self.art == "leistung" and self.preis is None:
             raise ValueError("preis fehlt: eine Leistung hat einen Preis; ohne festen Preis art: auslage")
-        if self.art == "auslage" and self.preis is not None:
-            raise ValueError("preis bei art: auslage – der Betrag einer Auslage kommt je Rechnung vom Beleg")
         if self.preis is not None and self.preis < 0:
             raise ValueError("preis ist negativ")
         return self
@@ -350,6 +349,9 @@ class PrivatPosition(Basis):
     kuerzel: str
     einzelpreis: Decimal
     steuersatz: Decimal | None = None   # nur 7, nur wo rules.satz_position() es erlaubt
+    # mensch: einzeln bestätigt (`rechnung preise`, Formular); liste: aus der Preisliste übernommen
+    quelle: Literal["mensch", "liste"] = "mensch"
+    position: str | None = None         # Hash der Position, für die der Preis gilt (preise.position_hash)
 
     _zahlen = field_validator("einzelpreis", "steuersatz", mode="before")(_dezimal)
     _sieben = field_validator("steuersatz")(_nur_sieben)

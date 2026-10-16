@@ -71,9 +71,13 @@ rechnung.yaml + rechnung.privat.yaml ──resolve()──▶ rechnung.resolved.
 - Preise (`preise.py`): `rechnung preise <nr>` zeigt jede Position mit dem Listenpreis als Vorschlag
   (nur in EUR), Auslagen (`art: auslage`) leer; 7 % nur, wo `rules.satz_position()` es erlaubt. Die
   Bestätigung landet als Schnappschuss in `rechnung.privat.yaml` mit Hash der Positionen (Reihenfolge,
-  Kürzel, Menge, Einheit, Beschreibung) und Währung. Ohne gültige Bestätigung zeigt `resolve` nur den
-  Entwurf (Leistungsort, Ergebnis, „Preise fehlen/veraltet“) und schreibt nichts; `bauen` bricht ab
-  (Art `preise`). `--aus-liste` übernimmt die Liste ohne Rückfrage. Unter dem Schalter verweigert `preise`.
+  Kürzel, Menge, Einheit, Beschreibung) und Währung, je Position `quelle` (`mensch`/`liste`) und
+  Hash der Position. Listenpreise ohne den Menschen (`preise.aus_liste`, `resolve.mit_listenpreisen`):
+  `resolve` und `bauen` füllen fehlende oder veraltete Preise aus der Liste, nur neue oder geänderte
+  Positionen; Bestätigtes unveränderter Positionen bleibt. Auslagen und Fremdwährung nicht (im
+  Demo-Betrieb Auslagen mit dem Beispiel-`preis:` der Liste). Geht das nicht ganz, zeigt `resolve` nur
+  den Entwurf und schreibt nichts; `bauen` bricht ab (Art `preise`). `festschreiben` weist auf
+  Listenpreise hin. `--aus-liste` übernimmt die Liste ohne Rückfrage. Unter dem Schalter verweigert `preise`.
 - `referenz` (Bestellnummer) steht in `rechnung.privat.yaml`, sonst gilt die der Kundendatei. Anrede aus
   `anrede:` der Kundendatei, sonst „Sehr geehrte Damen und Herren“ / „Dear Madam or Sir“; sie steht über
   der Einleitung. `rechnung anschreiben <nr>` setzt Platzhalter aus fester Liste (`anschreiben.FELDER`)
@@ -172,7 +176,8 @@ Darf: `rechnung.yaml` und `anschreiben.md` anlegen und ändern; `stammdaten/kund
 Vorlage im Repo ändern.
 
 Darf nicht: `resolved.json`, PDFs, `status.yaml`, `pro-forma/`, `rechnung.privat.yaml`, `stammdaten/ich.yaml`
-oder `stammdaten/preise.yaml` schreiben; Preise bestätigen (`rechnung preise`); Rechnungsnummern vergeben;
+oder `stammdaten/preise.yaml` schreiben; Preise bestätigen (`rechnung preise`; Listenpreise setzt das
+Werkzeug selbst ein); Rechnungsnummern vergeben;
 Beträge ausrechnen; festgeschriebene Rechnungen anfassen; echte Daten in Tests, Fixtures oder Commits.
 
 Diese Regeln werden zusätzlich technisch erzwungen (PreToolUse-Hook und Deny-Regeln in
@@ -195,8 +200,16 @@ MCP-Server (`mcp_server.py`, `rechnung mcp`, stdio, Extra `mcp`, nie vom Kern im
 bekommt nur seine Werkzeuge (`neu`, `preisliste`, `lesen`, `schreiben`, `resolve`, `begruendung`,
 `offen`, `bauen`, `pruefen`, `anschreiben_schreiben`, `anschreiben_pruefen`; Liste fest im Test) und
 nur geschwärzte Antworten, immer, ohne Schalter; auch das Kürzel des Kunden nicht. Jeder Fehler geht
-als `Abbruch (<art>)` hinaus, ein unerwarteter zurückgehalten. Den Kunden wählt der Mensch:
-`--kunde` beim Start, sonst Elicitation im Client, sonst nennt er der AI das Kürzel. `schreiben` nimmt
+als `Abbruch (<art>)` hinaus, ein unerwarteter zurückgehalten. Jede Antwort zu einer Rechnung trägt
+`naechster_schritt` (`schritt.naechster()`, aus dem Stand der Rechnung); Befehle für den Menschen baut
+`schritt.befehl()` je Startart (Container: `docker run …`, Kennung `RECHNUNG_IM_CONTAINER` im
+Dockerfile; Host mit Platzhaltern für die Variablen, ohne `rechnung` im PATH über `uv`), nie mit
+echtem Pfad. Den Kunden wählt der Mensch:
+`--kunde` beim Start, sonst Elicitation im Client, sonst nennt er der AI das Kürzel.
+Demo-Betrieb (`RECHNUNG_DEMO` / Option `demo` / `rechnung mcp --demo`): Stammdaten immer aus
+`stammdaten.example/`, ein Gewerbe-Ordner mit eigener `ich.yaml` wird verweigert; nur dann gibt es das
+Werkzeug `kunden` (Testkunden mit Fall, an die AI – sie sind erfunden), und jede Antwort trägt den
+Prototyp-Hinweis. `schreiben` nimmt
 nur strukturierte Felder (leistungsdatum, leistung, positionen, einleitung, belege); Preis, Referenz,
 Leistungsort und die Felder des Menschen gehen nicht. Preise, `festschreiben`, `pro-forma` sind keine
 Werkzeuge; `--preise-im-client` bietet `preise_bestaetigen` per Formular an (je Client zu prüfen, ob
@@ -206,7 +219,7 @@ Ausprobieren in den Gewerbe-Ordner.
 
 ## Technik
 
-- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,preise,resolve,render,vorlage,pruefen,festschreiben,begruendung,anschreiben,sicht,doctor,cli,mcp_server}.py`; `mcp` (SDK 2.x) als optionales Extra, `make test` und das Image nehmen es mit
+- Python ≥ 3.12, `uv`, src-Layout: `src/rechnung/{config,models,meldung,rules,preise,resolve,render,vorlage,pruefen,festschreiben,begruendung,anschreiben,sicht,schritt,doctor,cli,mcp_server}.py`; `mcp` (SDK 2.x) als optionales Extra, `make test` und das Image nehmen es mit
 - `pydantic` v2 mit `extra="forbid"` auf allen Modellen; `typer` für die CLI; `pyyaml`
 - `jinja2` mit LaTeX-Delimitern (`\VAR{ }`, `\BLOCK{ }`, `\#{ }`) und `StrictUndefined`
 - LaTeX: `latexmk -interaction=nonstopmode -no-shell-escape -outdir=<tmp>`; Engine `pdflatex`,

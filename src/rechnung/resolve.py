@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 from pydantic import TypeAdapter, ValidationError
 
-from rechnung import config, meldung, preise, rules, sicht, vorlage
+from rechnung import config, festschreiben, meldung, preise, rules, sicht, vorlage
 from rechnung.models import (
     Input,
     Kunde,
@@ -190,15 +190,38 @@ def _fehler(pfad: Path, e: ValidationError) -> ResolveFehler:
     return ResolveFehler("\n".join(zeilen), art=art, geschwaerzt="\n".join(geschwaerzt))
 
 
+def demo_pruefen(cfg: config.Config) -> None:
+    """Im Demo-Betrieb (RECHNUNG_DEMO) nie ein Gewerbe-Ordner mit eigenen Stammdaten.
+
+    Die Stammdaten kämen dann zwar aus stammdaten.example/, aber erfundene Rechnungen landeten im
+    echten Ausgang und zählten seine Nummern hoch. Eine Kopie der Beispieldaten (`init --beispiel`)
+    ist erlaubt.
+    """
+    if not cfg.demo or cfg.gewerbe is None:
+        return
+    eigene = cfg.ordner("stammdaten") / "ich.yaml"
+    beispiel = config.BEISPIEL_STAMMDATEN / "ich.yaml"
+    if eigene.is_file() and eigene.read_bytes() != beispiel.read_bytes():
+        raise ResolveFehler(
+            f"RECHNUNG_DEMO ist gesetzt, aber {eigene} enthält eigene Stammdaten. Der Demo-Betrieb läuft "
+            f"nur in einem leeren Gewerbe-Ordner oder einem mit den Beispieldaten (`rechnung init --beispiel`).",
+            art=meldung.STAMMDATEN,
+            geschwaerzt="Demo-Betrieb in einem Gewerbe-Ordner mit eigenen Stammdaten verweigert. Der Mensch "
+                        "nimmt RECHNUNG_DEMO weg oder wählt einen leeren Gewerbe-Ordner.",
+        )
+
+
 def stammdaten_ordner(cfg: config.Config, beispiel: bool = False) -> Path:
-    """stammdaten/ im Gewerbe-Ordner, oder stammdaten.example/ im Demo-Modus."""
-    if beispiel or cfg.demo:
+    """stammdaten/ im Gewerbe-Ordner, oder stammdaten.example/ ohne Wurzel und im Demo-Betrieb."""
+    if beispiel or cfg.beispieldaten:
+        demo_pruefen(cfg)
         return config.BEISPIEL_STAMMDATEN
     return cfg.ordner("stammdaten")
 
 
 def kunden_ordner(cfg: config.Config, beispiel: bool = False) -> Path:
-    if beispiel or cfg.demo:
+    if beispiel or cfg.beispieldaten:
+        demo_pruefen(cfg)
         return config.BEISPIEL_STAMMDATEN / "kunden"
     return cfg.ordner("kunden")
 
@@ -486,7 +509,7 @@ class EntwurfPosition:
     menge: Decimal
     einheit: str
     art: str                     # leistung | auslage (lieferung bricht vorher ab, R39)
-    vorschlag: Decimal | None    # Preis aus der Liste; None bei Auslagen und in Fremdwährung
+    vorschlag: Decimal | None    # Preis aus der Liste; None in Fremdwährung und bei Auslagen (außer Demo)
     vorschlag_sieben: bool       # die Liste schlägt 7 % vor, und hier geht es
     sieben_erlaubt: bool         # rules.satz_position() erlaubt 7 % für diese Rechnung (R10, R12, R14)
 
@@ -515,8 +538,15 @@ class Entwurf:
         return self.ordner.name
 
 
+def _vorschlag(eintrag: PreisEintrag, waehrung: str, demo: bool) -> Decimal | None:
+    """Preis der Liste als Vorschlag: nur in EUR; bei einer Auslage nur im Demo-Betrieb (Beispielbetrag)."""
+    if waehrung != preise.LISTENWAEHRUNG or (eintrag.art == "auslage" and not demo):
+        return None
+    return eintrag.preis
+
+
 def _positionen(eingabe: Input, liste: dict[str, PreisEintrag], sprache: str, waehrung: str,
-                sieben_erlaubt: bool) -> list[EntwurfPosition]:
+                sieben_erlaubt: bool, demo: bool = False) -> list[EntwurfPosition]:
     """Positionen aus rechnung.yaml gegen die Preisliste: Kürzel bekannt, Einheit passt."""
     ergebnis = []
     for i, p in enumerate(eingabe.positionen, start=1):
@@ -537,7 +567,7 @@ def _positionen(eingabe: Input, liste: dict[str, PreisEintrag], sprache: str, wa
             menge=p.menge,
             einheit=p.einheit,
             art=eintrag.art,
-            vorschlag=eintrag.preis if waehrung == preise.LISTENWAEHRUNG else None,
+            vorschlag=_vorschlag(eintrag, waehrung, demo),
             vorschlag_sieben=eintrag.steuersatz is not None and sieben_erlaubt,
             sieben_erlaubt=sieben_erlaubt,
         ))
@@ -564,7 +594,7 @@ def entwurf_aus(cfg: config.Config, ordner: Path) -> Entwurf:
     rules.waehrung_erlaubt(waehrung, [entscheidung.satz])
     sieben = not isinstance(rules.satz_position(int(entscheidung.satz), stammdaten.kleinunternehmer, True),
                             rules.Abbruch)
-    positionen = _positionen(eingabe, liste, sprache, waehrung, sieben)
+    positionen = _positionen(eingabe, liste, sprache, waehrung, sieben, cfg.demo)
     hash_ = preise.positionen_hash(eingabe.positionen)
 
     warnungen: list[str] = []
@@ -599,6 +629,20 @@ def entwurf_aus(cfg: config.Config, ordner: Path) -> Entwurf:
 
 def entwurf(cfg: config.Config, nummer: str) -> Entwurf:
     return entwurf_aus(cfg, finde_ordner(cfg, nummer))
+
+
+def mit_listenpreisen(cfg: config.Config, nummer: str) -> Entwurf:
+    """Wie `entwurf()`, füllt aber fehlende oder veraltete Preise aus der Preisliste (`preise.aus_liste`).
+
+    Für `resolve` und `bauen`. Geht das nicht ganz (Auslage, Fremdwährung), bleibt alles, wie es ist,
+    und der Mensch bestätigt; eine festgeschriebene Rechnung wird nie angefasst.
+    """
+    e = entwurf(cfg, nummer)
+    if e.preise == preise.BESTAETIGT or festschreiben.ist_festgeschrieben(e.ordner):
+        return e
+    if preise.aus_liste(e) is None:
+        return e
+    return entwurf_aus(cfg, e.ordner)
 
 
 def preise_fehlen(e: Entwurf) -> ResolveFehler:
@@ -710,9 +754,10 @@ def schreibe_resolved(ergebnis: Resolved, ordner: Path) -> Path:
 def resolve(cfg: config.Config, nummer: str, schreiben: bool = True) -> tuple[Resolved, Path]:
     """Löst eine Rechnung mit bestätigten Preisen auf und schreibt das Ergebnis neben die Eingabe.
 
-    Ohne gültige Bestätigung Abbruch der Art `preise`; `entwurf()` zeigt, was ohne Preise feststeht.
+    Fehlende Preise füllt erst die Preisliste (`mit_listenpreisen`); bleibt eine Position offen, Abbruch
+    der Art `preise`. `entwurf()` zeigt, was ohne Preise feststeht.
     """
-    e = entwurf(cfg, nummer)
+    e = mit_listenpreisen(cfg, nummer)
     ergebnis = rechne(
         e,
         version=vorlage_version(),

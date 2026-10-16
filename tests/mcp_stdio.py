@@ -31,6 +31,9 @@ async def lauf(befehl: list[str]) -> None:
             assert not ergebnis.is_error, f"{name}: {text}"
             return text
 
+        if "kunden" in werkzeuge:   # Demo-Betrieb: die erfundenen Testkunden
+            kunden = {k["kuerzel"] for k in json.loads(await ruf("kunden"))["kunden"]}
+            assert "muster-gmbh" in kunden, kunden
         liste = json.loads(await ruf("preisliste"))["preisliste"]
         kuerzel = next(e for e in liste if e["art"] == "leistung")
         nummer = json.loads(await ruf("neu", kunde="muster-gmbh", leistungsdatum="2026-10-01",
@@ -38,9 +41,12 @@ async def lauf(befehl: list[str]) -> None:
         await ruf("schreiben", nummer=nummer,
                   positionen=[{"kuerzel": kuerzel["kuerzel"], "menge": 1, "einheit": kuerzel["einheit"]}])
         s = json.loads(await ruf("resolve", nummer=nummer))
-        assert s["ergebnis"] == "inland" and s["preise"] == "fehlen", s
-        assert "kunde" not in s
-        print(f"mcp über stdio: {len(werkzeuge)} Werkzeuge, Rechnung {nummer} angelegt und aufgelöst (inland)")
+        # Die Preise übernimmt resolve aus der Preisliste; die Antwort nennt keinen Betrag.
+        assert s["ergebnis"] == "inland" and s["preise"].startswith("aus der Preisliste übernommen"), s
+        assert "kunde" not in s and "naechster_schritt" in s
+        assert "bauen" in s["naechster_schritt"], s
+        demo = " im Demo-Betrieb" if "kunden" in werkzeuge else ""
+        print(f"mcp über stdio{demo}: {len(werkzeuge)} Werkzeuge, Rechnung {nummer} angelegt und aufgelöst (inland)")
 
 
 if __name__ == "__main__":

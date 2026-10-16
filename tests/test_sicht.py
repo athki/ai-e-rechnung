@@ -308,17 +308,27 @@ def test_ohne_schalter_bleibt_alles_wie_es_war(gewerbe_geschwaerzt, monkeypatch)
 
 
 def test_resolve_ohne_preise_zeigt_den_entwurf_und_den_weg(gewerbe_geschwaerzt):
-    nummer = neu(gewerbe_geschwaerzt, "muster-gmbh", preise=False)
+    # In GBP gilt die Liste nicht: Die Preise trägt der Mensch ein.
+    nummer = neu(gewerbe_geschwaerzt, "sample-ltd", waehrung="GBP", preise=False)
     aus = CliRunner().invoke(app, ["resolve", nummer])
     assert aus.exit_code == 0, aus.output
-    assert "Ergebnis        inland" in aus.output
+    assert "Ergebnis        nicht_steuerbar" in aus.output
     assert f"fehlen – der Mensch bestätigt sie im eigenen Terminal: rechnung preise {nummer}" in aus.output
     assert not (r.finde_ordner(config.laden(), nummer) / r.RESOLVED_DATEI).exists()
     pruefe_ohne_private_werte([aus.output])
 
 
-def test_bauen_ohne_preise_ist_ein_abbruch_der_art_preise(gewerbe_geschwaerzt):
+def test_resolve_mit_listenpreisen_nennt_keinen_betrag(gewerbe_geschwaerzt):
     nummer = neu(gewerbe_geschwaerzt, "muster-gmbh", preise=False)
+    aus = CliRunner().invoke(app, ["resolve", nummer])
+    assert aus.exit_code == 0, aus.output
+    assert "aus der Preisliste übernommen" in aus.output
+    assert "2400" not in aus.output and "2.400" not in aus.output
+    pruefe_ohne_private_werte([aus.output])
+
+
+def test_bauen_ohne_preise_ist_ein_abbruch_der_art_preise(gewerbe_geschwaerzt):
+    nummer = neu(gewerbe_geschwaerzt, "sample-ltd", waehrung="GBP", preise=False)
     aus = lauf("bauen", nummer)
     assert aus.startswith("Abbruch (preise): Preise für"), aus
     assert f"rechnung preise {nummer}" in aus

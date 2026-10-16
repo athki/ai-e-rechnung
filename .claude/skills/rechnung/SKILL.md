@@ -1,6 +1,6 @@
 ---
 name: rechnung
-description: Eine Rechnung mit dem Werkzeug `rechnung` erstellen – von `rechnung neu` über rechnung.yaml bis `bauen` und `pruefen`, mit geschwärzter Sicht (die AI sieht keine Kundendaten, Preise oder Beträge; die Preise bestätigt der Mensch selbst). Greift, wenn jemand eine Rechnung schreiben, auflösen, bauen oder prüfen lassen will, oder bei /rechnung. Nicht für Arbeit am Code, an Tests oder an der Vorlage.
+description: Eine Rechnung mit dem Werkzeug `rechnung` erstellen – von `rechnung neu` über rechnung.yaml bis `bauen` und `pruefen`, mit geschwärzter Sicht (die AI sieht keine Kundendaten, Preise oder Beträge; die Preise kommen aus der Preisliste oder vom Menschen selbst). Greift, wenn jemand eine Rechnung schreiben, auflösen, bauen oder prüfen lassen will, oder bei /rechnung. Nicht für Arbeit am Code, an Tests oder an der Vorlage.
 ---
 
 # Rechnung erstellen
@@ -24,7 +24,10 @@ er für den Kunden bezahlt hat, gibt steuerfreien Unterricht), sag es, bevor du 
 
 Jeder Abschnitt unten entspricht einem Werkzeug des MCP-Servers (`rechnung mcp`, README). Stehen
 dir dessen Werkzeuge zur Verfügung (`neu`, `schreiben`, `resolve` …), nimm sie statt der Befehle
-hier: Sie schwärzen immer, und `neu` fragt den Kunden selbst beim Menschen ab.
+hier: Sie schwärzen immer, und `neu` fragt den Kunden selbst beim Menschen ab. Jede ihrer Antworten
+nennt in `naechster_schritt`, was als Nächstes kommt; halte dich daran. Im Demo-Betrieb
+(`RECHNUNG_DEMO`, nur erfundene Daten) zeigt das Werkzeug `kunden` die Testkunden – zeig sie dem
+Menschen und lass ihn wählen. Sonst gibt es `kunden` nicht, und du fragst nach dem Kürzel.
 
 ## 1. Wurzel feststellen
 
@@ -73,7 +76,7 @@ und wie viel davon, nie einen Preis.
   ohne Preise. Passt kein Kürzel, frag den Menschen; erfinde keins, und schreib nie einen Preis, einen
   Steuersatz oder eine Referenz in die Datei. Du rechnest nie einen Betrag aus.
 - Auslagen (`art: auslage`, z. B. Bahnticket) bekommen eine eigene Position; den Betrag trägt der
-  Mensch bei `rechnung preise` vom Beleg ein.
+  Mensch bei `rechnung preise` vom Beleg ein (im Demo-Betrieb nimmt das Werkzeug einen Beispielbetrag).
 - Lieferungen (`art: lieferung`, eine Ware wie `buch`) kann das Werkzeug noch nicht; `resolve` bricht
   ab (RULES.md R39). Nimm so ein Kürzel nicht, sag es dem Menschen. Beschreib eine Ware auch nicht als
   Leistung um, damit sie durchgeht.
@@ -86,9 +89,10 @@ und wie viel davon, nie einen Preis.
 ## 4. Auflösen – `rechnung resolve <nr>`
 
 Zeig dem Menschen die geschwärzte Ausgabe: Leistung, Positionen, Leistungsort, Ergebnis, Regeln,
-Warnungen und den Stand der Preise. Erklär das Ergebnis mit `rechnung begruendung <nr>`, wenn er fragt
-(erst, wenn die Preise bestätigt sind und `resolve` das Ergebnis geschrieben hat). Weiter erst, wenn er
-bestätigt.
+Warnungen und den Stand der Preise. Hat jede Position einen Preis in der Liste, übernimmt `resolve`
+ihn selbst („aus der Preisliste übernommen“) und schreibt das Ergebnis. Erklär das Ergebnis mit
+`rechnung begruendung <nr>`, wenn er fragt (erst, wenn `resolve` das Ergebnis geschrieben hat). Weiter
+erst, wenn er bestätigt.
 
 ### Wenn `resolve` abbricht
 
@@ -100,23 +104,28 @@ Die Meldung beginnt mit `Abbruch (<art>):`.
 | `frage` | eine Tatsache, die nur der Mensch kennt (Datum, Ort, Tätigkeit), oder eine zurückgehaltene Meldung | fragen, nie raten; bei „Meldung zurückgehalten“ den Menschen bitten, dasselbe Kommando im eigenen Terminal auszuführen |
 | `stammdaten` | Kunden- oder Ausstellerdatei bzw. Config unvollständig | dem Menschen sagen, welches Feld in welcher Datei fehlt; **er trägt es selbst ein, nicht über den Chat** |
 | `ausserhalb` | bewusst außerhalb des Geltungsbereichs (z. B. Privatperson im EU-Ausland, 7 % wo nicht erlaubt, Lieferung einer Ware) | erklären und anhalten |
-| `preise` | Preise fehlen oder sind veraltet, oder `rechnung.privat.yaml` passt nicht | dem Menschen sagen: `rechnung preise <nr>` im eigenen Terminal; nie nach Beträgen fragen |
+| `preise` | Preise fehlen, die die Liste nicht hat (Auslage, Fremdwährung), oder `rechnung.privat.yaml` passt nicht | dem Menschen sagen: `rechnung preise <nr>` im eigenen Terminal; nie nach Beträgen fragen |
 
 Ändere nie `einordnung`, `ort` oder `leistungsort`, um an einem Abbruch vorbeizukommen. Das ist nur
 erlaubt, wenn der Mensch sagt, dass die Fakten falsch beschrieben waren.
 
-## 5. Preise – beim Menschen
+## 5. Preise – aus der Liste oder beim Menschen
 
-Steht bei „Preise“ `fehlen` oder `veraltet`, sag dem Menschen, dass er sie **im eigenen Terminal**
-bestätigt: `rechnung preise <nr>`. Nicht über `!` in Claude Code, sonst stehen die Beträge im Chat.
+Preise der Liste übernimmt `resolve` (und `bauen`) selbst, je Position, die neu oder geändert ist;
+was der Mensch für eine unveränderte Position bestätigt hat, bleibt. Du tust dafür nichts und nennst
+keinen Betrag. Steht bei „Preise“ trotzdem `fehlen` oder `veraltet`, fehlt ein Preis, den die Liste
+nicht hat (Auslage, Fremdwährung). Dann sag dem Menschen, dass er ihn **im eigenen Terminal** einträgt:
+`rechnung preise <nr>`. Will er einen Listenpreis ändern, geht das auf demselben Weg. Nicht über `!` in Claude Code, sonst stehen die Beträge im Chat.
 Setzt die Session `RECHNUNG_GEWERBE` (z. B. auf einen Test-Ordner), arbeitet sein Terminal sonst im
 Ordner aus der Config: Gib ihm den Aufruf mit derselben Wurzel, `RECHNUNG_GEWERBE=<wurzel> rechnung
 preise <nr>`. Der Befehl fragt jeden Einzelpreis ab (Enter übernimmt den Vorschlag), dann die
 Referenz, zeigt die Summen und fragt „Bestätigen? [j/N]“.
 Ruf `rechnung preise` nie selbst auf; unter dem Schalter verweigert es ohnehin. Frag nie nach Preisen
 und bestätige keine Beträge, die er dir in den Chat tippt. Danach `rechnung resolve <nr>` erneut:
-„Preise bestätigt“. Änderst du danach eine Position (Kürzel, Menge, Einheit, Beschreibung), sind die
-Preise veraltet, und er bestätigt neu. `rechnung offen` zeigt, welchen Rechnungen noch etwas fehlt.
+„Preise bestätigt“. Änderst du danach eine Position (Kürzel, Menge, Einheit, Beschreibung), füllt
+`resolve` sie aus der Liste neu; eine geänderte Auslage trägt er neu ein. `rechnung offen` zeigt,
+welchen Rechnungen noch etwas fehlt. Beim Festschreiben weist das Werkzeug ihn auf Preise hin, die nur
+aus der Liste kommen.
 
 ## 6. Bauen und prüfen – `rechnung bauen <nr>`, `rechnung pruefen <nr>`
 
@@ -125,7 +134,7 @@ dem Menschen, welche Angabe fehlt. Den gesuchten Text siehst du geschwärzt nich
 Mensch selbst.
 
 `rechnung bauen <nr> --pro-forma` baut eine Pro forma zur Prüfung durch den Kunden, wenn der Mensch
-das will. Ohne bestätigte Preise baut `bauen` nichts (`Abbruch (preise)`).
+das will. Fehlt ein Preis, den die Liste nicht hat, baut `bauen` nichts (`Abbruch (preise)`).
 
 ## 7. Anschreiben – `anschreiben.md`, `rechnung anschreiben <nr>`
 
@@ -138,7 +147,8 @@ eingesetzt wird im eigenen Terminal des Menschen. Das Werkzeug verschickt nichts
 
 ## 8. Was beim Menschen bleibt
 
-- `rechnung preise`: Preise, 7 % und die Referenz des Kunden für diese Rechnung.
+- `rechnung preise`: Auslagen, eigene Preise statt der Liste, 7 % und die Referenz des Kunden für
+  diese Rechnung.
 - `rechnung festschreiben` und `rechnung pro-forma`: Sie halten fest, was er verschickt hat. Du
   rufst sie nicht auf.
 - Kundendateien, `ich.yaml` und die Preisliste: Er legt sie an und ändert sie. Eine fehlende Anrede
@@ -148,7 +158,8 @@ eingesetzt wird im eigenen Terminal des Menschen. Das Werkzeug verschickt nichts
 ## Was du darfst und was nicht
 
 Wie in CLAUDE.md, „Was die AI darf und was nicht“; dieser Skill erweitert keine Rechte. Insbesondere:
-keine Rechnungsnummern vergeben, keine Beträge ausrechnen, keine Preise bestätigen, nicht in
+keine Rechnungsnummern vergeben, keine Beträge ausrechnen, keine Preise bestätigen (die Liste setzt
+das Werkzeug selbst ein), nicht in
 `rechnung.privat.yaml` oder die Preisliste schreiben, keine festgeschriebene Rechnung anfassen,
 `RECHNUNG_GESCHWAERZT`, `RECHNUNG_GEWERBE` und `RECHNUNG_CONFIG` nicht überschreiben.
 

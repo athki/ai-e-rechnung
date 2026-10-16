@@ -10,6 +10,12 @@ Darüber hinaus sieht die AI hier auch das Kürzel des Kunden nicht: Den Kunden 
 kann, nennt er der AI das Kürzel selbst. Preise bestätigt der Mensch im eigenen Terminal
 (`rechnung preise`) oder, mit `--preise-im-client`, in einem Formular des Clients.
 
+Im Demo-Betrieb (RECHNUNG_DEMO, `rechnung mcp --demo`) gibt es nur die erfundenen Stammdaten aus
+stammdaten.example/; dann nennt das Werkzeug `kunden` der AI die Testkunden, damit der Mensch ohne
+Terminal auswählen kann, und jede Antwort trägt den Prototyp-Hinweis.
+
+Jede Antwort zu einer Rechnung trägt `naechster_schritt` (schritt.py), aus dem Stand der Rechnung.
+
 Die Werkzeuge entsprechen den Abschnitten des Skills `.claude/skills/rechnung/SKILL.md`.
 Optional importierbar: braucht das Extra `mcp` (`pip install 'ai-e-rechnung[mcp]'`); der Kern
 importiert dieses Modul nie.
@@ -20,7 +26,6 @@ importiert dieses Modul nie.
 
 import inspect
 import json
-import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -48,6 +53,7 @@ from rechnung import (
     render as render_mod,
     resolve as resolve_mod,
     rules,
+    schritt as schritt_mod,
     sicht,
 )
 from rechnung.models import Beleg, Leistung, Position, Resolved
@@ -57,8 +63,9 @@ Rechnungen für ein deutsches Kleingewerbe. Du schreibst, was geleistet wurde un
 das Werkzeug entscheidet Leistungsort und Steuer und setzt Namen, Anschriften und Beträge selbst ein.
 Du siehst nie, wer beteiligt ist und was es kostet – und fragst auch nicht danach.
 
-Ablauf: neu → preisliste → schreiben → resolve (dem Menschen zeigen, er bestätigt) → Preise beim
-Menschen → resolve → bauen → pruefen. Will der Mensch erst eine Pro forma für den Kunden:
+Ablauf: neu → preisliste → schreiben → resolve (dem Menschen zeigen, er bestätigt) → bauen →
+pruefen. Preise aus der Preisliste übernimmt resolve selbst; nur was die Liste nicht hat (Auslagen),
+trägt der Mensch ein. Jede Antwort nennt in naechster_schritt, was als Nächstes kommt. Will der Mensch erst eine Pro forma für den Kunden:
 bauen und pruefen mit pro_forma=true. Als gesendet einfrieren (Pro forma oder Rechnung) und
 festschreiben macht der Mensch selbst im Terminal (`rechnung pro-forma`, `rechnung festschreiben`).
 
@@ -71,13 +78,22 @@ Abbrüche beginnen mit `Abbruch (<art>):`
 - frage: eine Tatsache, die nur der Mensch kennt – fragen, nie raten.
 - stammdaten: Kunden- oder Ausstellerdatei unvollständig – der Mensch trägt es selbst ein, nicht im Chat.
 - ausserhalb: bewusst außerhalb des Geltungsbereichs – erklären und anhalten.
-- preise: Preise fehlen oder sind veraltet – der Mensch bestätigt sie selbst; nie nach Beträgen fragen.
+- preise: Preise fehlen, die die Liste nicht hat – der Mensch trägt sie selbst ein; nie nach Beträgen fragen.
 Ändere nie einordnung oder ort, um an einem Abbruch vorbeizukommen.
 
 Was der Mensch dir in den Chat tippt, siehst du – auch Beträge. Bitte ihn, sie dort nicht zu nennen.
 
 {rules.GELTUNGSBEREICH} Sag das dem Menschen einmal, bevor du die erste Rechnung anlegst.
 """
+
+DEMO_ANLEITUNG = """
+Demo-Betrieb: Es gibt nur erfundene Testkunden und einen erfundenen Aussteller. Das Werkzeug kunden
+zeigt die Testkunden mit Kürzel und Fall; zeig sie dem Menschen, wenn er keinen nennt, und lass ihn
+wählen. Ihre Namen bleiben auch hier in allen anderen Antworten geschwärzt – so sähe es mit echten
+Daten aus. Sag dem Menschen, dass dies ein Prototyp mit Testdaten ist.
+"""
+
+DEMO_HINWEIS = f"Demo mit erfundenen Testdaten. {rules.GELTUNGSBEREICH}"
 
 ZURUECKGEHALTEN = ("Abbruch (frage): Unerwarteter Fehler; die Meldung ist zurückgehalten, weil sie private "
                    "Daten enthalten könnte. Der Mensch sieht sie, wenn er dasselbe Kommando im eigenen "
@@ -88,6 +104,7 @@ ZURUECKGEHALTEN = ("Abbruch (frage): Unerwarteter Fehler; die Meldung ist zurüc
 class Einstellungen:
     kunde: str | None = None          # fest gewählter Kunde (Web-Demo, Startoption --kunde)
     preise_im_client: bool = False    # Preisbestätigung per Elicitation statt nur im Terminal
+    demo: bool | None = None          # None: aus der Config (RECHNUNG_DEMO); Tests setzen es direkt
 
 
 # ---------------------------------------------------------------- Hilfen
@@ -126,17 +143,9 @@ def _offen_fuer_aenderungen(ordner: Path) -> None:
                        meldung.AUSSERHALB)
 
 
-PREISE_TEXT = {
-    preise_mod.BESTAETIGT: "bestätigt",
-    preise_mod.FEHLEN: "fehlen",
-    preise_mod.VERALTET: "veraltet (Positionen oder Währung geändert)",
-}
-
-
-def _preise_weg(nummer: str, cfg: config.Config, einstellungen: Einstellungen) -> str:
-    """Wie der Mensch die Preise bestätigt – ohne dass ein Betrag durch die AI geht."""
-    wurzel = "RECHNUNG_GEWERBE=<wurzel> " if os.environ.get("RECHNUNG_GEWERBE") else ""
-    terminal = f"im eigenen Terminal: {wurzel}rechnung preise {nummer}"
+def _preise_weg(nummer: str, einstellungen: Einstellungen) -> str:
+    """Wie der Mensch Preise einträgt, die die Liste nicht hat – ohne dass ein Betrag durch die AI geht."""
+    terminal = f"im eigenen Terminal: {schritt_mod.befehl(f'preise {nummer}')}"
     if einstellungen.preise_im_client:
         return f"Werkzeug preise_bestaetigen (Formular für den Menschen) oder {terminal}"
     return terminal
@@ -189,6 +198,26 @@ def _kunden(cfg: config.Config) -> list[str]:
     return sorted(p.stem for p in ordner.glob("*.yaml")) if ordner.is_dir() else []
 
 
+def _fall(pfad: Path) -> str:
+    """Die Kommentarzeilen am Anfang einer Beispiel-Kundendatei: welchen Fall sie zeigt."""
+    zeilen = []
+    for zeile in pfad.read_text(encoding="utf-8").splitlines():
+        if not zeile.startswith("#"):
+            break
+        zeilen.append(zeile.lstrip("# ").strip())
+    return " ".join(zeilen).removesuffix("Erfunden.").strip()
+
+
+def _demo(einstellungen: Einstellungen) -> bool:
+    """Demo-Betrieb: aus der Config (RECHNUNG_DEMO); ist sie kaputt, nicht."""
+    if einstellungen.demo is not None:
+        return einstellungen.demo
+    try:
+        return config.laden().demo
+    except config.ConfigFehler:
+        return False
+
+
 class Kundenwahl(BaseModel):
     kunde: str
 
@@ -204,9 +233,15 @@ def _hat_elicitation(ctx: Context) -> bool:
 def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
     """Der Server mit seinen Werkzeugen. `rechnung mcp` startet ihn über stdio; Tests rufen ihn direkt."""
     einstellungen = einstellungen or Einstellungen()
+    demo = _demo(einstellungen)
     # Den Schalter RECHNUNG_GESCHWAERZT braucht es hier nicht: Kein Werkzeug gibt etwas anderes aus als
     # sicht.* und geschwärzte Abbrüche (_sperre); die Bibliothek selbst liest den Schalter nicht.
-    server = MCPServer("rechnung", version=__version__, instructions=ANLEITUNG)
+    server = MCPServer("rechnung", version=__version__, instructions=ANLEITUNG + (DEMO_ANLEITUNG if demo else ""))
+
+    def mit_schritt(daten: dict, cfg: config.Config, ordner: Path, naechster: str | None = None) -> dict:
+        """Jede Antwort zu einer Rechnung: dazu der nächste Schritt, im Demo-Betrieb der Hinweis."""
+        schritt = naechster or schritt_mod.naechster(cfg, ordner, _preise_weg(ordner.name, einstellungen))
+        return daten | {"naechster_schritt": schritt} | ({"hinweis": DEMO_HINWEIS} if demo else {})
 
     # ------------------------------------------------ neu
 
@@ -216,10 +251,15 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
         if kunde:
             return Kundenwahl(kunde=kunde)
         if not _hat_elicitation(ctx):
+            if demo:
+                raise _abbruch("Dieser Client kann den Kunden nicht abfragen. Zeig dem Menschen die Testkunden "
+                               "(Werkzeug kunden) und lass ihn einen wählen; dann rufst du neu mit kunde auf.\n\n"
+                               + DEMO_HINWEIS)
             raise _abbruch(
-                "Dieser Client kann den Kunden nicht abfragen. Bitte den Menschen, die Rechnung im eigenen "
-                "Terminal anzulegen (rechnung neu --kunde <kürzel>) und dir nur die Nummer zu nennen – oder "
-                "dir das Kürzel zu nennen; dann rufst du neu mit kunde auf.")
+                "Dieser Client kann den Kunden nicht abfragen. Bitte den Menschen, dir das Kürzel seines Kunden "
+                "zu nennen (der Dateiname in stammdaten/kunden/ ohne .yaml); dann rufst du neu mit kunde auf. "
+                f"Oder er legt die Rechnung im eigenen Terminal an ({schritt_mod.befehl('neu --kunde <kürzel>')}) "
+                "und nennt dir nur die Nummer.\n\n" + rules.GELTUNGSBEREICH)
         with _sperre():
             kuerzel = _kunden(config.laden())
         if not kuerzel:
@@ -237,8 +277,9 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
         taetigkeit: Annotated[str, Field(description="Was geleistet wurde, in den Worten des Menschen")] = "",
         einordnung: Annotated[str, Field(description=f"Begriff aus § 3a UStG: {', '.join(rules.EINORDNUNGEN)}")] = "",
         ort: Annotated[str, Field(description="Nur bei kulturell … unterhaltend: Land (ISO, z. B. FR) oder online")] = "",
-        kunde: Annotated[str, Field(description="Nur, wenn der Mensch dir das Kürzel ausdrücklich genannt hat. "
-                                                "Sonst leer lassen: der Server fragt ihn selbst.")] = "",
+        kunde: Annotated[str, Field(description="Nur, wenn der Mensch dir das Kürzel ausdrücklich genannt oder "
+                                                "aus den Testkunden (Werkzeug kunden) gewählt hat. Sonst leer "
+                                                "lassen: der Server fragt ihn selbst.")] = "",
     ) -> dict:
         """Legt eine neue Rechnung an und gibt ihre Nummer zurück. Den Kunden wählt der Mensch; du
         erfährst nicht, wer es ist. Die Nummer vergibt das Werkzeug. Fülle die Felder nur mit dem, was
@@ -256,8 +297,9 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
             ordner, nummer = resolve_mod.neu(cfg, wahl.data.kunde, tag, None, None, None,
                                             taetigkeit or None, einordnung or None, ort or None)
             k = resolve_mod.lade_kunde(cfg, wahl.data.kunde)
-            return {"nummer": nummer, "sprache": k.sprache or cfg.sprache,
-                    "weiter": f"preisliste ansehen, dann schreiben({nummer}, …)"}
+            return mit_schritt({"nummer": nummer, "sprache": k.sprache or cfg.sprache, "hinweis": rules.GELTUNGSBEREICH},
+                           cfg, ordner, f"Preisliste ansehen, mit dem Menschen klären, was geleistet wurde, "
+                                        f"dann schreiben({nummer}, …).")
 
     # ------------------------------------------------ preisliste, lesen, schreiben
 
@@ -276,9 +318,11 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
     def lesen(nummer: str) -> dict:
         """Der aktuelle Inhalt von rechnung.yaml, so weit du ihn sehen darfst (ohne den Kunden)."""
         with _sperre():
-            ordner = resolve_mod.finde_ordner(config.laden(), nummer)
+            cfg = config.laden()
+            ordner = resolve_mod.finde_ordner(cfg, nummer)
             daten = resolve_mod._yaml(ordner / resolve_mod.INPUT_DATEI)
-            return {"nummer": ordner.name} | {f: _gefiltert(f, daten[f]) for f in LESBAR if f in daten}
+            return mit_schritt({"nummer": ordner.name} | {f: _gefiltert(f, daten[f]) for f in LESBAR if f in daten},
+                           cfg, ordner)
 
     @server.tool()
     @_mit_geltungsbereich
@@ -301,7 +345,8 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
         Einen Preis, einen Steuersatz, eine Referenz oder einen Leistungsort kannst du nicht schreiben –
         das ist Sache des Menschen. Danach: resolve."""
         with _sperre():
-            ordner = resolve_mod.finde_ordner(config.laden(), nummer)
+            cfg = config.laden()
+            ordner = resolve_mod.finde_ordner(cfg, nummer)
             _offen_fuer_aenderungen(ordner)
             pfad = ordner / resolve_mod.INPUT_DATEI
             daten = resolve_mod._yaml(pfad)
@@ -318,25 +363,27 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
             geaendert = [k for k, v in neu_.items() if v is not None]
             daten |= {k: v for k, v in neu_.items() if v is not None}
             pfad.write_text(_yaml_text(ordner.name, daten), encoding="utf-8")
-            return {"nummer": ordner.name, "geschrieben": geaendert, "weiter": f"resolve({ordner.name})"}
+            return mit_schritt({"nummer": ordner.name, "geschrieben": geaendert}, cfg, ordner,
+                           f"resolve({ordner.name})")
 
     # ------------------------------------------------ resolve, begruendung, offen
 
     @server.tool()
     def resolve(nummer: str) -> dict:
         """Löst die Rechnung auf: Leistungsort, Ergebnis, angewandte Regeln (RULES.md), Warnungen und
-        Stand der Preise – ohne Kunde, Preise und Beträge. Zeig es dem Menschen; weiter erst, wenn er
-        bestätigt."""
+        Stand der Preise – ohne Kunde, Preise und Beträge. Fehlende Preise übernimmt es aus der
+        Preisliste. Zeig es dem Menschen; weiter erst, wenn er bestätigt."""
         with _sperre():
             cfg = config.laden()
-            entwurf = resolve_mod.entwurf(cfg, nummer)
+            entwurf = resolve_mod.mit_listenpreisen(cfg, nummer)
             if entwurf.preise != preise_mod.BESTAETIGT:
                 s = _ohne_kunde(sicht.entwurf(entwurf))
-                s["preise"] = PREISE_TEXT[entwurf.preise]
-                s["preise_bestaetigen"] = _preise_weg(entwurf.nummer, cfg, einstellungen)
-                return s
-            ergebnis, _ = resolve_mod.resolve(cfg, nummer)
-            return _ohne_kunde(sicht.ergebnis(ergebnis)) | {"preise": PREISE_TEXT[preise_mod.BESTAETIGT]}
+                s["preise"] = preise_mod.stand_text(entwurf.preise, entwurf.privat)
+                return mit_schritt(s, cfg, entwurf.ordner)
+            ergebnis, ziel = resolve_mod.resolve(cfg, nummer)
+            privat = resolve_mod.lade_privat(ziel.parent)
+            return mit_schritt(_ohne_kunde(sicht.ergebnis(ergebnis))
+                           | {"preise": preise_mod.stand_text(preise_mod.BESTAETIGT, privat)}, cfg, ziel.parent)
 
     @server.tool()
     def begruendung(nummer: str) -> str:
@@ -362,18 +409,21 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
                 try:
                     e = resolve_mod.entwurf_aus(cfg, ordner)
                 except meldung.Fehler as f:
-                    liste.append({"nummer": ordner.name, "stand": sicht.abbruch(f)})
-                    continue
-                stand = "bereit: bauen" if e.preise == preise_mod.BESTAETIGT else f"Preise {PREISE_TEXT[e.preise]}"
-                liste.append({"nummer": ordner.name, "stand": stand})
-            return {"offen": liste}
+                    stand = sicht.abbruch(f)
+                else:
+                    stand = f"Preise {preise_mod.stand_text(e.preise, e.privat)}"
+                liste.append({"nummer": ordner.name, "stand": stand,
+                              "naechster_schritt": schritt_mod.naechster(cfg, ordner,
+                                                                         _preise_weg(ordner.name, einstellungen))})
+            return {"offen": liste} | ({"hinweis": DEMO_HINWEIS} if demo else {})
 
     # ------------------------------------------------ bauen, pruefen
 
     @server.tool()
     def bauen(nummer: str, pro_forma: bool = False) -> dict:
         """Baut die PDF (mit pro_forma eine Pro forma zur Prüfung durch den Kunden). Die PDF selbst
-        bekommst du nicht; der Mensch öffnet sie. Ohne bestätigte Preise baut es nichts."""
+        bekommst du nicht; der Mensch öffnet sie. Fehlende Preise übernimmt es aus der Preisliste;
+        fehlt einer, den die Liste nicht hat, baut es nichts."""
         with _sperre():
             cfg = config.laden()
             ordner = resolve_mod.finde_ordner(cfg, nummer)
@@ -382,25 +432,32 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
             pdf = render_mod.baue_pdf(ergebnis, json_ziel.parent, cfg.engine,
                                       belege_quelle=json_ziel.parent / "belege", eigene=cfg.vorlage,
                                       pro_forma=pro_forma)
-            return {"nummer": ergebnis.nummer, "pdf": pdf.name, "ergebnis": ergebnis.ergebnis,
-                    "warnungen": list(ergebnis.warnungen), "weiter": f"pruefen({ergebnis.nummer})"}
+            privat = resolve_mod.lade_privat(ordner)
+            pro_forma_schritt = (f"pruefen({ergebnis.nummer}, pro_forma=true); danach schickt der Mensch die Pro "
+                                 f"forma und hält sie fest: "
+                                 + schritt_mod.befehl(f"pro-forma {ergebnis.nummer} --gesendet-am JJJJ-MM-TT"))
+            return mit_schritt({"nummer": ergebnis.nummer, "pdf": pdf.name, "ergebnis": ergebnis.ergebnis,
+                            "preise": preise_mod.stand_text(preise_mod.BESTAETIGT, privat),
+                            "warnungen": list(ergebnis.warnungen)}, cfg, ordner,
+                           pro_forma_schritt if pro_forma else None)
 
     @server.tool()
     def pruefen(nummer: str, pro_forma: bool = False) -> dict:
         """Weist im Text der PDF die Pflichtangaben nach (§ 14 Abs. 4 UStG). Den gesuchten Text siehst
         du nicht; bei einem Mangel sag dem Menschen, welche Angabe fehlt."""
         with _sperre():
-            ordner = resolve_mod.finde_ordner(config.laden(), nummer)
+            cfg = config.laden()
+            ordner = resolve_mod.finde_ordner(cfg, nummer)
             r = Resolved.model_validate(json.loads((ordner / resolve_mod.RESOLVED_DATEI).read_text(encoding="utf-8")))
             liste = pruefen_mod.pruefe(r, pruefen_mod.pdf_pfad(ordner, r, pro_forma), pro_forma)
             abweichungen = festschreiben_mod.pruefe_unveraendert(ordner)
             maengel = sum(not b.gefunden for b in liste) + len(abweichungen)
-            return {
+            return mit_schritt({
                 "nummer": ordner.name,
                 "gruen": maengel == 0,
                 "angaben": [{"angabe": b.angabe, "gefunden": b.gefunden, "paragraf": b.paragraf} for b in liste],
                 "abweichungen": abweichungen,
-            }
+            }, cfg, ordner)
 
     # ------------------------------------------------ anschreiben
 
@@ -415,30 +472,56 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
         """Schreibt den Entwurf des Anschreibens (anschreiben.md). Eingesetzt wird beim Menschen
         (rechnung anschreiben <nr> im eigenen Terminal); das Werkzeug verschickt nichts."""
         with _sperre():
-            ordner = resolve_mod.finde_ordner(config.laden(), nummer)
+            cfg = config.laden()
+            ordner = resolve_mod.finde_ordner(cfg, nummer)
             _offen_fuer_aenderungen(ordner)
             namen = anschreiben_mod.platzhalter(text)
             (ordner / anschreiben_mod.DATEI).write_text(text, encoding="utf-8")
-            return {"nummer": ordner.name, "platzhalter": namen}
+            return mit_schritt({"nummer": ordner.name, "platzhalter": namen}, cfg, ordner)
 
     @server.tool()
     def anschreiben_pruefen(nummer: str) -> dict:
         """Prüft die Platzhalter in anschreiben.md, ohne etwas einzusetzen."""
         with _sperre():
-            ordner = resolve_mod.finde_ordner(config.laden(), nummer)
+            cfg = config.laden()
+            ordner = resolve_mod.finde_ordner(cfg, nummer)
             namen = anschreiben_mod.platzhalter(anschreiben_mod.lesen(ordner))
-            return {"nummer": ordner.name, "gueltig": True, "platzhalter": namen,
-                    "einsetzen": f"im eigenen Terminal des Menschen: rechnung anschreiben {ordner.name}"}
+            return mit_schritt({"nummer": ordner.name, "gueltig": True, "platzhalter": namen,
+                            "einsetzen": "im eigenen Terminal des Menschen: "
+                                         + schritt_mod.befehl(f"anschreiben {ordner.name}")}, cfg, ordner)
 
     # ------------------------------------------------ Preise im Client (optional)
 
+    if demo:
+        _kunden_werkzeug(server)
     if einstellungen.preise_im_client:
-        _preise_werkzeug(server)
+        _preise_werkzeug(server, mit_schritt)
 
     return server
 
 
-def _preise_werkzeug(server: MCPServer) -> None:
+def _kunden_werkzeug(server: MCPServer) -> None:
+    """Nur im Demo-Betrieb: Die Testkunden sind erfunden (stammdaten.example/, erzwungen), deshalb darf
+    die AI sie dem Menschen zeigen – damit er ohne Terminal und ohne Formular wählen kann."""
+
+    @server.tool()
+    def kunden() -> dict:
+        """Die erfundenen Testkunden des Demo-Betriebs: Kürzel, Name, Land und welchen Fall sie zeigen.
+        Zeig sie dem Menschen und lass ihn wählen; dann neu mit kunde."""
+        with _sperre():
+            cfg = config.laden()
+            if not cfg.demo:
+                raise _abbruch("kunden gibt es nur im Demo-Betrieb.", meldung.AUSSERHALB)
+            ordner = resolve_mod.kunden_ordner(cfg)
+            liste = []
+            for kuerzel in _kunden(cfg):
+                k = resolve_mod.lade_kunde(cfg, kuerzel)
+                liste.append({"kuerzel": kuerzel, "name": k.firma, "land": k.land,
+                              "fall": _fall(ordner / f"{kuerzel}.yaml")})
+            return {"kunden": liste, "hinweis": DEMO_HINWEIS}
+
+
+def _preise_werkzeug(server: MCPServer, mit_schritt: Callable[..., dict]) -> None:
     """Preisbestätigung per Elicitation: Formular im Client, Werte gehen an den Server, nicht an die AI.
 
     Nur mit `--preise-im-client`: Ob ein Client Formular und Antwort wirklich am Modell vorbeiführt,
@@ -448,7 +531,7 @@ def _preise_werkzeug(server: MCPServer) -> None:
     def formular(ctx: Context, nummer: str) -> Any:
         if not _hat_elicitation(ctx):
             raise _abbruch(f"Dieser Client kann kein Formular zeigen. Der Mensch bestätigt die Preise im "
-                           f"eigenen Terminal: rechnung preise {nummer}", meldung.PREISE)
+                           f"eigenen Terminal: {schritt_mod.befehl(f'preise {nummer}')}", meldung.PREISE)
         with _sperre():
             e = resolve_mod.entwurf(config.laden(), nummer)
             _offen_fuer_aenderungen(e.ordner)
@@ -485,15 +568,16 @@ def _preise_werkzeug(server: MCPServer) -> None:
                 preis = preise_mod.betrag(str(werte.get(f"preis_{p.pos}", "")))
                 if preis is None:
                     raise _abbruch(f"Position {p.pos}: kein gültiger Betrag. Der Mensch ruft das Formular erneut "
-                                   f"auf oder bestätigt im eigenen Terminal: rechnung preise {nummer}",
-                                   meldung.PREISE)
+                                   f"auf oder bestätigt im eigenen Terminal: "
+                                   f"{schritt_mod.befehl(f'preise {nummer}')}", meldung.PREISE)
                 einzelpreise.append(preis)
                 ermaessigt.append(bool(werte.get(f"sieben_{p.pos}", False)))
             referenz_eingabe = str(werte.get("referenz", "")).strip()
             referenz: Any = (preise_mod.UNVERAENDERT if not referenz_eingabe
                              else None if referenz_eingabe == "-" else referenz_eingabe)
             preise_mod.bestaetigen(e, einzelpreise, ermaessigt, referenz=referenz)
-            return {"nummer": e.nummer, "preise": "bestätigt", "weiter": f"resolve({e.nummer})"}
+            return mit_schritt({"nummer": e.nummer, "preise": "bestätigt"}, config.laden(), e.ordner,
+                           f"resolve({e.nummer})")
 
 
 def starten(einstellungen: Einstellungen) -> None:

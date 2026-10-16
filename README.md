@@ -9,7 +9,7 @@ und Rechnungsnummer rechnet das Werkzeug, nicht der Mensch und nicht die AI. Der
 
 ```
 rechnung.yaml          (was und wie viel: Kürzel aus der Preisliste, Menge)  ─┐
-rechnung.privat.yaml   (Preise und Referenz, bestätigt mit `rechnung preise`) ─┴─resolve──▶
+rechnung.privat.yaml   (Preise aus der Liste oder vom Menschen, Referenz)    ─┴─resolve──▶
     rechnung.resolved.json ──render──▶ rechnung_<nummer>.pdf
 ```
 
@@ -60,9 +60,10 @@ rechnung neu --kunde sample-ltd
 #   legt <ausgang>/2026/2026-0001/ mit vorbefülltem rechnung.yaml an;
 #   leistungsdatum, leistung: (was, Einordnung nach § 3a UStG) und je Position Kürzel und Menge
 #   dort eintragen – Pflicht
-rechnung resolve 2026-0001            # Leistungsort, Ergebnis, Regeln, Stand der Preise
-rechnung preise  2026-0001            # Preise bestätigen: Vorschlag aus der Liste, änderbar; Referenz
-rechnung resolve 2026-0001            # jetzt mit Summen – schreibt das Ergebnis daneben
+rechnung resolve 2026-0001            # Leistungsort, Ergebnis, Regeln; übernimmt die Preise der Liste
+#   und schreibt mit Summen das Ergebnis daneben. Fehlt ein Preis, den die Liste nicht hat (Auslage,
+#   Fremdwährung), zeigt es nur den Entwurf.
+rechnung preise  2026-0001            # nur bei Bedarf: Auslagen eintragen, Preise ändern, Referenz
 rechnung bauen   2026-0001 --pro-forma   # optional: Pro forma zur Prüfung durch den Kunden
 rechnung pro-forma 2026-0001 --gesendet-am 2026-06-12
 #   hält die gesendete Pro forma als Revision fest (pro-forma/1/), schreibgeschützt
@@ -76,10 +77,13 @@ rechnung offen                        # alle Rechnungen, die noch nicht festgesc
 ```
 
 `rechnung.yaml` ist die einzige Datei, die von Hand (oder von einer AI) geschrieben wird. Sie sagt, was
-geleistet wurde und wie viel davon, nie, was es kostet. Die Preise bestätigt der Mensch mit
-`rechnung preise`; sie stehen als Schnappschuss in `rechnung.privat.yaml`, zusammen mit einem Hash der
-Positionen, für die sie gelten. Ändert sich danach eine Position, sind die Preise veraltet, und `bauen`
-baut nichts. Leistungsort, Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer
+geleistet wurde und wie viel davon, nie, was es kostet. Die Preise kommen aus der Preisliste: `resolve`
+und `bauen` übernehmen sie selbst, je Position mit der Quelle `liste`. Was die Liste nicht hat (Auslagen,
+Fremdwährung) und was anders sein soll, trägt der Mensch mit `rechnung preise` ein (Quelle `mensch`).
+Alles steht als Schnappschuss in `rechnung.privat.yaml`, zusammen mit einem Hash der Positionen, für die
+es gilt. Ändert sich eine Position, füllt `resolve` sie neu aus der Liste; die bestätigten Preise der
+unveränderten Positionen bleiben. Die Kontrolle bleibt beim Festschreiben: `festschreiben` weist auf
+Preise hin, die nur aus der Liste kommen. Leistungsort, Ergebnis, Steuersatz, Hinweistext, Fälligkeit, Summen und Rechnungsnummer
 leitet das Werkzeug ab und friert sie in `rechnung.resolved.json` ein. Die ausführliche Anleitung steht in
 `docs/anleitung-neue-rechnung.md`.
 
@@ -87,7 +91,8 @@ leitet das Werkzeug ab und friert sie in `rechnung.resolved.json` ein. Die ausf�
 
 Die AI soll wissen, was geleistet wurde und wie viel davon, nie, wer beteiligt ist und was es kostet.
 Deshalb stehen in `rechnung.yaml` keine Preise: Die AI schreibt Kürzel aus der Preisliste und Mengen,
-die Beträge bestätigt der Mensch im eigenen Terminal (`rechnung preise`, später im Web ein Formular).
+die Beträge setzt das Werkzeug lokal aus der Liste ein; Auslagen trägt der Mensch im eigenen Terminal
+ein (`rechnung preise`, später im Web ein Formular).
 Mit `RECHNUNG_GESCHWAERZT=1` geben `neu`, `resolve`, `bauen`, `pruefen`, `begruendung`, `preisliste`,
 `offen` und `anschreiben` keine Namen, Anschriften, Werte aus Kunden- oder Ausstellerdatei, Beträge oder
 absoluten Pfade aus; `rechnung preise` verweigert unter dem Schalter, und `anschreiben` prüft dort nur
@@ -101,31 +106,38 @@ Ehrlich: Über Bash ist Lesen in Claude Code damit nicht ganz gesperrt.
 
 Mit dem MCP-Server ist die Grenze echt. Die AI kommt nur über seine Werkzeuge an das Werkzeug heran
 und bekommt nur deren geschwärzte Antworten, unabhängig vom Schalter. Das Kürzel des Kunden sieht sie
-dort auch nicht.
+dort auch nicht. Jede Antwort zu einer Rechnung nennt in `naechster_schritt`, was als Nächstes kommt –
+auch, was der Mensch selbst tun muss, mit dem passenden Befehl.
 
 | Werkzeug | Was es tut | Was die AI zurückbekommt |
 | --- | --- | --- |
-| `neu` | legt eine Rechnung an; den Kunden wählt der Mensch | Nummer, Sprache |
+| `neu` | legt eine Rechnung an; den Kunden wählt der Mensch | Nummer, Sprache, Prototyp-Hinweis |
 | `preisliste` | Kürzel, Einheit, Art, Bezeichnung | ohne Preise |
 | `lesen` / `schreiben` | `rechnung.yaml`: Daten, `leistung:`, Positionen, Einleitung, Belege | was sie selbst schreiben darf |
-| `resolve`, `begruendung`, `offen` | Leistungsort, Ergebnis, Regeln, Stand der Preise | ohne Kunde und Beträge |
+| `resolve`, `begruendung`, `offen` | Leistungsort, Ergebnis, Regeln, Stand der Preise; `resolve` übernimmt die Listenpreise | ohne Kunde und Beträge |
 | `bauen`, `pruefen` | PDF bauen, Pflichtangaben nachweisen | Dateiname, ✓/✗ je Angabe |
 | `anschreiben_schreiben`, `anschreiben_pruefen` | Begleittext mit Platzhaltern | Liste der Platzhalter |
+| `kunden` | nur im Demo-Betrieb: die erfundenen Testkunden | Kürzel, Name, Land, Fall |
 
-Preise, `festschreiben` und `pro-forma` sind keine Werkzeuge; sie bleiben beim Menschen. Den Kunden
-fragt `neu` per Auswahl im Client ab (MCP-Elicitation, z. B. Claude Code). Kann der Client das nicht,
-legt der Mensch die Rechnung mit `rechnung neu --kunde …` an oder nennt der AI das Kürzel.
-`rechnung mcp --kunde <kürzel>` legt den Kunden beim Start fest. `--preise-im-client` bietet zusätzlich
-`preise_bestaetigen` an: ein Formular im Client, dessen Werte an den Server gehen, nicht an die AI. Ob
-ein Client das wirklich so hält, ist je Client zu prüfen; im Zweifel bleibt `rechnung preise` im
-Terminal.
+Preise eintragen, `festschreiben` und `pro-forma` sind keine Werkzeuge; sie bleiben beim Menschen. Den
+Kunden fragt `neu` per Auswahl im Client ab (MCP-Elicitation, z. B. Claude Code). Kann der Client das
+nicht (Claude Desktop), nennt der Mensch der AI das Kürzel. `rechnung mcp --kunde <kürzel>` legt den
+Kunden beim Start fest. `--preise-im-client` bietet zusätzlich `preise_bestaetigen` an: ein Formular im
+Client, dessen Werte an den Server gehen, nicht an die AI. Ob ein Client das wirklich so hält, ist je
+Client zu prüfen; im Zweifel bleibt `rechnung preise` im Terminal. Was ein Werkzeug zurückgibt, geht an
+den Modellanbieter; was der Mensch in den Chat tippt, auch.
 
-Zum Ausprobieren mit Docker, einem Ordner mit den erfundenen Beispiel-Stammdaten und Claude Desktop:
+### Ausprobieren: Demo-Betrieb mit Claude Desktop
+
+Mit `RECHNUNG_DEMO=1` gibt es nur den erfundenen Aussteller und die sechs erfundenen Testkunden aus
+`stammdaten.example/`, auch wenn im Ordner etwas anderes liegt; ein Ordner mit eigener `ich.yaml` wird
+verweigert. Weil die Daten erfunden sind, nennt das Werkzeug `kunden` sie der AI, damit man ohne
+Terminal wählen kann. Auslagen bekommen einen Beispielpreis aus der Liste, so kommt man von der ersten
+Nachricht bis zur PDF, ohne ein Terminal zu öffnen. Jede Antwort trägt den Prototyp-Hinweis.
 
 ```sh
 docker build -t rechnung .
-mkdir -p ~/rechnung-probe
-docker run --rm -v ~/rechnung-probe:/gewerbe rechnung init --beispiel
+mkdir -p ~/rechnung-probe          # leer; dort landen die Testrechnungen
 ```
 
 In `claude_desktop_config.json` (Pfad absolut):
@@ -133,23 +145,60 @@ In `claude_desktop_config.json` (Pfad absolut):
 ```json
 {
   "mcpServers": {
-    "rechnung": {
+    "rechnung-demo": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-v", "/Users/<du>/rechnung-probe:/gewerbe", "rechnung", "mcp"]
+      "args": ["run", "-i", "--rm", "-e", "RECHNUNG_DEMO=1",
+               "-v", "/Users/<du>/rechnung-probe:/gewerbe", "rechnung", "mcp"]
     }
   }
 }
 ```
 
-Ohne Docker, mit installiertem TeX, in Claude Code:
+Dann im Chat zum Beispiel: „Schreib eine Rechnung: zwei Stunden Beratung am 1. Oktober.“ Die
+Testkunden:
+
+| Kürzel | Fall |
+| --- | --- |
+| `muster-gmbh` | Unternehmen im Inland: `inland`, 19 % |
+| `privat-de` | Privatperson im Inland: `inland`, 19 % |
+| `exemple-sarl` | Unternehmen in Frankreich mit USt-IdNr.: `reverse_charge`, 0 % |
+| `sample-ltd` | Unternehmen im Vereinigten Königreich: `nicht_steuerbar`, 0 % |
+| `sample-inc` | Unternehmen in den USA, Rechnung in USD: `nicht_steuerbar`; Preise in USD trägt der Mensch ein |
+| `privat-ch` | Privatperson in der Schweiz: Leistungsort hängt von der Einordnung ab |
+
+Die PDFs liegen danach in `~/rechnung-probe/rechnung-ausgang/`. Ohne Docker, in Claude Code:
+`claude mcp add rechnung-demo -e RECHNUNG_DEMO=1 -e RECHNUNG_GEWERBE=<leerer Ordner> -- uv --directory <repo> run --extra mcp rechnung mcp`.
+
+### Eigene Rechnungen: lokal, mit eigenem Gewerbe-Ordner
+
+Eigene Daten bleiben bei dir; online läuft nichts. Einmal einrichten:
 
 ```sh
-claude mcp add rechnung -e RECHNUNG_GEWERBE=<gewerbe> -- uv --directory <repo> run --extra mcp rechnung mcp
+docker run --rm -v ~/Gewerbe:/gewerbe rechnung init --stammdaten
+# dann in ~/Gewerbe/stammdaten/ ausfüllen: ich.yaml, preise.yaml, kunden/<kürzel>.yaml
 ```
 
-Die Preise bestätigt der Mensch dann im Terminal:
-`docker run -it --rm -v ~/rechnung-probe:/gewerbe rechnung preise <nr>` bzw. `rechnung preise <nr>`.
-Was ein Werkzeug zurückgibt, geht an den Modellanbieter; was der Mensch in den Chat tippt, auch.
+Im Client wie oben, aber **ohne** `RECHNUNG_DEMO` und mit deinem Ordner
+(`"-v", "/Users/<du>/Gewerbe:/gewerbe"`). Die AI kennt deine Kunden dann nicht; du nennst ihr das
+Kürzel (den Dateinamen ohne `.yaml`). Was du selbst im Terminal machst, nennt dir die Antwort in
+`naechster_schritt` mit dem passenden Befehl, im Container etwa:
+
+```sh
+docker run -it --rm -v ~/Gewerbe:/gewerbe rechnung preise <nr>        # Auslagen eintragen, Preise ändern
+docker run -it --rm -v ~/Gewerbe:/gewerbe rechnung festschreiben <nr> --gesendet-am JJJJ-MM-TT
+```
+
+Ohne Docker, mit installiertem TeX: `RECHNUNG_GEWERBE=~/Gewerbe uv run rechnung …` bzw. in Claude Code
+`claude mcp add rechnung -e RECHNUNG_GEWERBE=<gewerbe> -- uv --directory <repo> run --extra mcp rechnung mcp`.
+
+| Variable | Wofür |
+| --- | --- |
+| `RECHNUNG_GEWERBE` | dein Gewerbe-Ordner (im Container fest `/gewerbe`) |
+| `RECHNUNG_CONFIG` | Pfad einer `config.toml`, sonst `~/.config/rechnung/config.toml` |
+| `RECHNUNG_DEMO` | `1`: Demo-Betrieb mit den Testdaten; für eigene Rechnungen nicht setzen |
+| `RECHNUNG_MCP_KUNDE` | Kunde für den MCP-Server fest wählen |
+| `RECHNUNG_MCP_PREISE_IM_CLIENT` | `1`: Preisformular im Client anbieten |
+| `RECHNUNG_GESCHWAERZT` | `1`: geschwärzte Ausgabe des CLI (für eine AI in Claude Code) |
 
 ## Zwei Orte, strikt getrennt
 
@@ -174,7 +223,7 @@ falls sie fehlen.
 `~/.config/rechnung/config.toml` (Vorlage: `config.toml.example`). Jede Option gibt es auch als
 Umgebungsvariable `RECHNUNG_<OPTION>`, z. B. `RECHNUNG_GEWERBE`; die Umgebung gewinnt. Den Pfad der
 Config selbst setzt `RECHNUNG_CONFIG`. Ohne Gewerbe-Wurzel läuft alles im Demo-Modus gegen
-`stammdaten.example/`.
+`stammdaten.example/`; `RECHNUNG_DEMO=1` (Option `demo`) erzwingt die Beispieldaten auch mit Wurzel.
 
 ## Eigenes Aussehen: der Vorlagen-Ordner
 

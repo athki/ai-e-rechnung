@@ -79,6 +79,9 @@ schatten: hooks schatten-image
 	rm -rf "$(SCHATTEN_MCP)" && mkdir -p "$(SCHATTEN_MCP)"
 	docker run --rm -v "$(SCHATTEN_MCP)":/gewerbe $(IMAGE) init --beispiel > /dev/null
 	uv run --extra mcp python tests/mcp_stdio.py docker run -i --rm -v "$(SCHATTEN_MCP)":/gewerbe $(IMAGE) mcp
+	@# Demo-Betrieb (RECHNUNG_DEMO) in einem leeren Ordner: Beispieldaten aus dem Image, Werkzeug kunden.
+	rm -rf "$(SCHATTEN_MCP)-demo" && mkdir -p "$(SCHATTEN_MCP)-demo"
+	uv run --extra mcp python tests/mcp_stdio.py docker run -i --rm -e RECHNUNG_DEMO=1 -v "$(SCHATTEN_MCP)-demo":/gewerbe $(IMAGE) mcp
 	$(MAKE) beweise
 	@# Alte, unbenannte Images dieses Projekts wegräumen (Kennzeichnung im Dockerfile); fremde bleiben, der Build-Cache auch.
 	docker image prune -f --filter label=ai-e-rechnung=schatten

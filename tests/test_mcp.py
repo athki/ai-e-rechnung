@@ -80,6 +80,9 @@ def nummer_aus(text: str) -> str:
     return json.loads(text)["nummer"]
 
 
+AUSLAGE = {"kuerzel": "bahnticket", "menge": 1, "einheit": "pauschal"}
+
+
 def anlegen(s: Sitzung, kuerzel: str) -> str:
     einordnung, ort = LEISTUNG[kuerzel]
     s.antworten.append({"kunde": kuerzel})
@@ -113,8 +116,10 @@ def test_durchlauf_ohne_private_werte_und_ohne_kuerzel(gewerbe):
     s.ok("preisliste")
     for kuerzel in LEISTUNG:
         nummer = anlegen(s, kuerzel)
-        assert "fehlen" in s.ok("resolve", nummer=nummer)
-        bestaetige(nummer, PREIS)                     # der Mensch, im eigenen Terminal
+        # In USD (sample-inc) gilt die Liste nicht; sonst übernimmt resolve ihre Preise.
+        erwartet = "fehlen" if kuerzel == "sample-inc" else "aus der Preisliste übernommen"
+        assert erwartet in s.ok("resolve", nummer=nummer)
+        bestaetige(nummer, PREIS)                     # der Mensch ändert den Preis, im eigenen Terminal
         assert "bestätigt" in s.ok("resolve", nummer=nummer)
         s.ok("lesen", nummer=nummer)
         s.ok("bauen", nummer=nummer)
@@ -135,6 +140,7 @@ def test_durchlauf_ohne_private_werte_und_ohne_kuerzel(gewerbe):
 def test_resolve_ohne_preise_nennt_den_weg_und_keinen_betrag(gewerbe):
     s = Sitzung()
     nummer = anlegen(s, "muster-gmbh")
+    s.ok("schreiben", nummer=nummer, positionen=[AUSLAGE])   # die Auslage füllt die Liste nicht
     text = s.ok("resolve", nummer=nummer)
     assert f"rechnung preise {nummer}" in text and "muster-gmbh" not in text
     gut, text = s("bauen", nummer=nummer)
@@ -162,8 +168,11 @@ def test_kunde_abgelehnt_legt_nichts_an(gewerbe):
 
 
 def test_ohne_elicitation_und_ohne_kuerzel_fragt_den_menschen(gewerbe):
-    gut, text = Sitzung(elicitation=False)("neu")
+    from rechnung import rules
+    s = Sitzung(elicitation=False)
+    gut, text = s("neu")
     assert not gut and f"Abbruch ({meldung.FRAGE}):" in text and "rechnung neu --kunde" in text
+    assert rules.GELTUNGSBEREICH in text and "kunden" not in s.werkzeuge()
 
 
 def test_ohne_elicitation_mit_genanntem_kuerzel(gewerbe):
@@ -268,6 +277,7 @@ def test_preise_im_client_ohne_betrag_an_die_ai(gewerbe):
 def test_preise_im_client_abgelehnt(gewerbe):
     s = Sitzung(mcp_server.Einstellungen(preise_im_client=True))
     nummer = anlegen(s, "muster-gmbh")
+    s.ok("schreiben", nummer=nummer, positionen=[AUSLAGE])
     s.antworten.append("decline")
     assert "nicht bestätigt" in s.ok("preise_bestaetigen", nummer=nummer)
     assert "fehlen" in s.ok("resolve", nummer=nummer)
@@ -328,3 +338,92 @@ def test_preisliste_markiert_lieferung_und_resolve_bricht_ab(gewerbe):
     gut, text = s("resolve", nummer=nummer)
     assert not gut and f"Abbruch ({meldung.AUSSERHALB}):" in text and "R39" in text, text
     pruefe_ohne_private_werte(s.gesehen)
+
+
+# ---------------------------------------------------------------- nächster Schritt, Hinweis
+
+
+def test_jede_antwort_zu_einer_rechnung_nennt_den_naechsten_schritt(gewerbe):
+    import json
+    from rechnung import rules
+    s = Sitzung()
+    s.antworten.append({"kunde": "muster-gmbh"})
+    antwort = json.loads(s.ok("neu"))
+    assert rules.GELTUNGSBEREICH in antwort["hinweis"] and "schreiben" in antwort["naechster_schritt"]
+    nummer = antwort["nummer"]
+    for werkzeug, args in [("schreiben", {"leistungsdatum": "2026-10-01",
+                                          "leistung": {"taetigkeit": "Beratung", "einordnung": "beratung"},
+                                          "positionen": [{"kuerzel": "beratung", "menge": 2, "einheit": "stunde"}]}),
+                           ("lesen", {}), ("resolve", {}),
+                           ("anschreiben_schreiben", {"text": "[anrede],\nanbei [nummer].\n"}),
+                           ("anschreiben_pruefen", {})]:
+        assert json.loads(s.ok(werkzeug, nummer=nummer, **args))["naechster_schritt"], werkzeug
+    assert all(e["naechster_schritt"] for e in json.loads(s.ok("offen"))["offen"])
+    assert "bauen" in json.loads(s.ok("lesen", nummer=nummer))["naechster_schritt"]
+    pruefe_ohne_private_werte(s.gesehen)
+
+
+def test_naechster_schritt_bei_auslage_nennt_den_weg_des_menschen(gewerbe):
+    import json
+    s = Sitzung()
+    nummer = anlegen(s, "muster-gmbh")
+    s.ok("schreiben", nummer=nummer, positionen=[AUSLAGE])
+    schritt = json.loads(s.ok("resolve", nummer=nummer))["naechster_schritt"]
+    assert "Auslage" in schritt and f"rechnung preise {nummer}" in schritt
+
+
+def test_befehl_im_container_ohne_die_variable(gewerbe, monkeypatch):
+    s = Sitzung()
+    nummer = anlegen(s, "muster-gmbh")
+    s.ok("schreiben", nummer=nummer, positionen=[AUSLAGE])
+    monkeypatch.setenv("RECHNUNG_IM_CONTAINER", "1")
+    text = s.ok("resolve", nummer=nummer)
+    assert f"docker run -it --rm -v <dein Gewerbe-Ordner>:/gewerbe rechnung preise {nummer}" in text
+    assert "RECHNUNG_GEWERBE=" not in text
+
+
+# ---------------------------------------------------------------- Demo-Betrieb
+
+
+@pytest.fixture
+def demo(gewerbe, monkeypatch):
+    monkeypatch.setenv("RECHNUNG_DEMO", "1")
+    return gewerbe
+
+
+def test_demo_hat_das_werkzeug_kunden(demo):
+    assert Sitzung().werkzeuge() == WERKZEUGE | {"kunden"}
+    assert mcp_server.DEMO_ANLEITUNG.strip() in mcp_server.erstelle().instructions
+
+
+def test_kunden_zeigt_die_testkunden_mit_fall(demo):
+    import json
+    kunden = {k["kuerzel"]: k for k in json.loads(Sitzung().ok("kunden"))["kunden"]}
+    assert set(kunden) == set(LEISTUNG)
+    assert kunden["exemple-sarl"]["name"] == "Exemple SARL" and kunden["exemple-sarl"]["land"] == "FR"
+    assert "reverse_charge" in kunden["exemple-sarl"]["fall"] and "Erfunden" not in kunden["exemple-sarl"]["fall"]
+
+
+def test_demo_ohne_elicitation_verweist_auf_kunden(demo):
+    gut, text = Sitzung(elicitation=False)("neu")
+    assert not gut and "Werkzeug kunden" in text and mcp_server.DEMO_HINWEIS in text
+
+
+def test_demo_hinweis_in_jeder_antwort_und_auslage_mit_beispielpreis(demo):
+    import json
+    s = Sitzung(elicitation=False)
+    nummer = nummer_aus(s.ok("neu", kunde="muster-gmbh", leistungsdatum="2026-10-01",
+                             taetigkeit="Beratung", einordnung="beratung"))
+    s.ok("schreiben", nummer=nummer, positionen=[{"kuerzel": "beratung", "menge": 2, "einheit": "stunde"}, AUSLAGE])
+    antwort = json.loads(s.ok("resolve", nummer=nummer))
+    assert antwort["preise"].startswith("aus der Preisliste übernommen") and antwort["hinweis"] == mcp_server.DEMO_HINWEIS
+    assert "89" not in s.gesehen[-1]
+    for text in s.gesehen:
+        assert mcp_server.DEMO_HINWEIS in text
+
+
+def test_demo_verweigert_echte_stammdaten(demo):
+    ich = demo / "stammdaten" / "ich.yaml"
+    ich.write_text(ich.read_text(encoding="utf-8") + "# echt\n", encoding="utf-8")
+    gut, text = Sitzung(elicitation=False)("neu", kunde="muster-gmbh")
+    assert not gut and f"Abbruch ({meldung.STAMMDATEN}):" in text and str(demo) not in text

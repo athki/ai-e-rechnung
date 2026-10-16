@@ -23,7 +23,7 @@ from rechnung import (
     rules,
     sicht,
 )
-from rechnung.models import Resolved
+from rechnung.models import Privat, Resolved
 
 app = typer.Typer(help="Rechnungen aus YAML, gesetzt mit LaTeX.", no_args_is_help=True, add_completion=False)
 
@@ -70,8 +70,16 @@ def mcp(
     preise_im_client: Annotated[bool, typer.Option(
         "--preise-im-client", envvar="RECHNUNG_MCP_PREISE_IM_CLIENT",
         help="Preise per Formular im Client bestätigen (Elicitation), nicht nur im Terminal.")] = False,
+    demo: Annotated[bool, typer.Option(
+        "--demo", help="Demo-Betrieb (wie RECHNUNG_DEMO=1): nur die erfundenen Stammdaten, Testkunden "
+                       "über das Werkzeug `kunden`, Beispielpreise für Auslagen.")] = False,
 ) -> None:
     """MCP-Server über stdio: das Werkzeug für eine AI, immer geschwärzt. Braucht das Extra `mcp`."""
+    import os
+
+    if demo:
+        # Die Bibliothek liest den Demo-Betrieb aus der Config; --demo setzt ihn für diesen Prozess.
+        os.environ["RECHNUNG_DEMO"] = "1"
     try:
         from rechnung import mcp_server
     except ImportError as e:
@@ -182,7 +190,7 @@ PREISE_TEXT = {
 }
 
 
-def _zeige_geschwaerzt(s: dict, ziel: Path | None, cfg: config.Config) -> None:
+def _zeige_geschwaerzt(s: dict, ziel: Path | None, cfg: config.Config, privat: Privat) -> None:
     """Was die AI vom Ergebnis sieht (sicht.ergebnis, sicht.entwurf): kein Name, kein Land des Kunden,
     kein Betrag."""
     typer.secho(f"Rechnung {s['nummer']}  (geschwärzt)", bold=True)
@@ -202,7 +210,7 @@ def _zeige_geschwaerzt(s: dict, ziel: Path | None, cfg: config.Config) -> None:
         typer.echo(f"     {p['menge']} {p['einheit']}   ({p['steuersatz']} %)")
     for beleg in s["belege"]:
         typer.echo(f"  Beleg: {beleg}")
-    _zeige_preise(s["preise"], s["nummer"])
+    _zeige_preise(s["preise"], s["nummer"], privat)
     typer.echo("  Preise und Beträge sind geschwärzt.")
     for warnung in s["warnungen"]:
         typer.secho(f"\n  Achtung: {warnung}", fg=typer.colors.YELLOW)
@@ -210,15 +218,19 @@ def _zeige_geschwaerzt(s: dict, ziel: Path | None, cfg: config.Config) -> None:
         typer.echo(f"\n  geschrieben: {sicht.pfad(ziel, cfg)}")
 
 
-def _zeige_preise(stand: str, nummer: str) -> None:
-    farbe = typer.colors.GREEN if stand == preise_mod.BESTAETIGT else typer.colors.YELLOW
-    typer.secho(f"\n  Preise          {PREISE_TEXT[stand].format(nr=nummer)}", fg=farbe)
+def _zeige_preise(stand: str, nummer: str, privat: Privat) -> None:
+    if stand == preise_mod.BESTAETIGT:
+        liste = preise_mod.aus_der_liste(privat)
+        farbe = typer.colors.YELLOW if liste else typer.colors.GREEN
+        typer.secho(f"\n  Preise          {preise_mod.stand_text(stand, privat)}", fg=farbe)
+        return
+    typer.secho(f"\n  Preise          {PREISE_TEXT[stand].format(nr=nummer)}", fg=typer.colors.YELLOW)
 
 
 def _zeige_entwurf(e: resolve_mod.Entwurf, cfg: config.Config) -> None:
     """Vor der Bestätigung der Preise: was feststeht, ohne Beträge; resolved.json wird nicht geschrieben."""
     if sicht.aktiv():
-        _zeige_geschwaerzt(sicht.entwurf(e), None, cfg)
+        _zeige_geschwaerzt(sicht.entwurf(e), None, cfg, e.privat)
         return
     typer.secho(f"Rechnung {e.nummer}", bold=True)
     typer.echo(f"  Kunde           {e.kunde.firma} ({e.kunde.land})")
@@ -231,14 +243,15 @@ def _zeige_entwurf(e: resolve_mod.Entwurf, cfg: config.Config) -> None:
     for p in e.positionen:
         typer.echo(f"  {p.pos}  {p.beschreibung}  [{p.kuerzel}]")
         typer.echo(f"     {p.menge} {p.einheit}")
-    _zeige_preise(e.preise, e.nummer)
+    _zeige_preise(e.preise, e.nummer, e.privat)
     for warnung in e.warnungen:
         typer.secho(f"\n  Achtung: {warnung}", fg=typer.colors.YELLOW)
 
 
 def _zeige(r: Resolved, ziel: Path, cfg: config.Config) -> None:
+    privat = resolve_mod.lade_privat(ziel.parent)
     if sicht.aktiv():
-        _zeige_geschwaerzt(sicht.ergebnis(r), ziel, cfg)
+        _zeige_geschwaerzt(sicht.ergebnis(r), ziel, cfg, privat)
         return
     typer.secho(f"Rechnung {r.nummer}", bold=True)
     typer.echo(f"  Kunde           {r.kunde.firma} ({r.kunde.land})")
@@ -263,6 +276,8 @@ def _zeige(r: Resolved, ziel: Path, cfg: config.Config) -> None:
     for g in r.steuergruppen:
         typer.echo(f"  USt {g.satz} %{'':<9}{_geld(g.betrag, r.waehrung)}")
     typer.secho(f"  Brutto          {_geld(r.brutto, r.waehrung)}", bold=True)
+    if preise_mod.aus_der_liste(privat):
+        _zeige_preise(preise_mod.BESTAETIGT, r.nummer, privat)
     if r.hinweis:
         typer.echo()
         for text in r.hinweis.values():
@@ -278,7 +293,7 @@ def resolve(nummer: Annotated[str, typer.Argument(help="Rechnungsnummer, z. B. 2
     Summen und Fälligkeit, dann schreibt es rechnung.resolved.json."""
     cfg = _config()
     try:
-        entwurf = resolve_mod.entwurf(cfg, nummer)
+        entwurf = resolve_mod.mit_listenpreisen(cfg, nummer)
         if entwurf.preise != preise_mod.BESTAETIGT:
             _zeige_entwurf(entwurf, cfg)
             return
@@ -522,7 +537,9 @@ def preise(
         typer.echo("  Nichts geändert.")
         raise typer.Exit(1)
     try:
-        preise_mod.bestaetigen(entwurf, einzelpreise, ermaessigt, referenz=neue_referenz)
+        quelle = preise_mod.LISTE if aus_liste else preise_mod.MENSCH
+        preise_mod.bestaetigen(entwurf, einzelpreise, ermaessigt, referenz=neue_referenz,
+                               quellen=[quelle] * len(einzelpreise))
     except preise_mod.PreisFehler as e:
         raise _abbruch(e) from e
     typer.secho(f"\n  Preise bestätigt: {preise_mod.PRIVAT_DATEI}", fg=typer.colors.GREEN, bold=True)
@@ -571,7 +588,10 @@ def offen() -> None:
             for zeile in text.splitlines():
                 typer.echo(f"     {zeile}")
             continue
-        if e.preise != preise_mod.BESTAETIGT:
+        if e.preise != preise_mod.BESTAETIGT and preise_mod.liste_reicht(e):
+            typer.echo(f" {SYMBOL[doctor_mod.WARNUNG]} {ordner.name}  Preise {e.preise}, die Liste füllt sie: "
+                       f"rechnung resolve {ordner.name}")
+        elif e.preise != preise_mod.BESTAETIGT:
             typer.echo(f" {SYMBOL[doctor_mod.WARNUNG]} {ordner.name}  Preise {e.preise}: rechnung preise {ordner.name}")
         else:
             typer.echo(f" {SYMBOL[doctor_mod.OK]} {ordner.name}  bereit: rechnung bauen {ordner.name}")
@@ -640,6 +660,11 @@ def festschreiben(
     typer.echo(f"  festgeschrieben am {daten['festgeschrieben_am']}")
     typer.echo("  PDF und resolved.json sind jetzt schreibgeschützt, die Hashes stehen in status.yaml.")
     typer.echo("  `rechnung bauen` verweigert ab jetzt den Neubau dieser Rechnung.")
+    privat = resolve_mod.lade_privat(ordner)
+    if n := preise_mod.aus_der_liste(privat):
+        typer.secho(f"  Hinweis: {n} von {len(privat.positionen)} Position(en) mit Preis aus der Preisliste, "
+                    f"nicht einzeln bestätigt (quelle: liste in {preise_mod.PRIVAT_DATEI}).",
+                    fg=typer.colors.YELLOW)
 
 
 @app.command("pro-forma")
