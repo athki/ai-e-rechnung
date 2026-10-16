@@ -18,6 +18,10 @@ PDF/A-tauglich gebaut. Sonstige Leistungen an Unternehmer und Privatpersonen im 
 und im Drittland, mit Regelbesteuerung oder als Kleinunternehmer (§ 19 UStG). Welche Regeln das
 Werkzeug anwendet, woher sie kommen und was es bewusst nicht kann, steht in [`RULES.md`](RULES.md).
 
+> Prototyp, noch nicht rechtlich oder steuerlich geprüft. Das Werkzeug kann noch nicht: Lieferungen
+> von Waren, Steuerbefreiungen außer § 19 UStG, durchlaufende Posten, nicht steuerbare Zahlungen
+> (z. B. Schadenersatz, Zuschüsse). Vollständige Liste: RULES.md, Teil 1.
+
 ## Ausprobieren ohne Installation (Docker)
 
 Das Image bringt Python, TeX und alle Schriften mit. Es sieht nur den Ordner, den man ihm mitgibt.

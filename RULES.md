@@ -49,7 +49,7 @@ Entscheidung im Nachhinein prüfbar.
 | --- | --- |
 | bestätigt | Ein Steuerberater hat eine Rechnung gesehen, die genau diese Regel anwendet, und sie für richtig befunden. Datum und Umfang stehen dabei. |
 | Annahme – ungeprüft | Begründete Auslegung, kein Steuerberater hat sie gesehen. Die Begründung steht dabei. |
-| Werkzeug-Entscheidung | Kein Steuerrecht, sondern eine Festlegung des Werkzeugs (R35, R37). |
+| Werkzeug-Entscheidung | Kein Steuerrecht, sondern eine Festlegung des Werkzeugs (R35, R37, R39). |
 
 Derzeit hat keine Regel den Status „bestätigt“: Kein Steuerberater hat dieses Dokument oder eine Regel
 daraus geprüft.
@@ -74,7 +74,8 @@ frei. Die Lean-Theoreme tragen dieselben IDs.
 (`kleinunternehmer`) und den Kundendateien (`kunde.land` …).
 
 **Gesetzesstand:** Wortlaut von gesetze-im-internet.de (UStG, UStDV) und EUR-Lex (MwStSystRL,
-konsolidierte Fassung), abgerufen am 2026-10-08.
+konsolidierte Fassung), abgerufen am 2026-10-08; § 3, § 4, § 10 und § 12 Abs. 2 Nr. 7 UStG
+(Q16, Teil 1) am 2026-10-15.
 
 ---
 
@@ -85,7 +86,7 @@ konsolidierte Fassung), abgerufen am 2026-10-08.
 - **Aussteller:** ein Unternehmer, der sein Unternehmen vom Inland aus betreibt, ohne Betriebsstätte
   im Ausland. Regelbesteuerung oder Kleinunternehmer nach § 19 UStG.
 - **Umsatz:** sonstige Leistungen (Dienstleistungen) gegen Entgelt, einschließlich Auslagen, die als
-  Nebenleistung dazugehören (z. B. Reisekosten).
+  Nebenleistung dazugehören (z. B. Reisekosten). Keine Lieferungen von Waren (R39).
 - **Leistungsarten:** die Grundregel (§ 3a Abs. 1 und 2), Katalogleistungen (§ 3a Abs. 4) und
   kulturelle, künstlerische, wissenschaftliche, unterrichtende und ähnliche Leistungen
   (§ 3a Abs. 3 Nr. 3).
@@ -102,9 +103,17 @@ Für jede dieser Situationen gilt: Das Werkzeug kann sie nicht richtig abbilden.
 kann, bricht es ab. Wo es sie nicht erkennen kann (weil sie von Tatsachen abhängt, die nicht in den
 Rechnungsdaten stehen), liegt die Verantwortung beim Menschen, der die Rechnung anlegt.
 
+Kurzfassung, wie sie jede Oberfläche zeigt (MCP-Server, `rechnung neu`, `rechnung doctor`, README;
+`rules.GELTUNGSBEREICH`): „Prototyp, noch nicht rechtlich oder steuerlich geprüft. Das Werkzeug kann
+noch nicht: Lieferungen von Waren, Steuerbefreiungen außer § 19 UStG, durchlaufende Posten, nicht
+steuerbare Zahlungen (z. B. Schadenersatz, Zuschüsse). Vollständige Liste: RULES.md, Teil 1.“
+
 | Situation | Vorschrift | Was das Werkzeug tut |
 | --- | --- | --- |
-| Lieferung von Waren (auch innergemeinschaftliche Lieferung, Fernverkauf) | §§ 3, 3c, 6a UStG | nicht vorgesehen; Positionen sind immer sonstige Leistungen |
+| Lieferung von Waren (§ 3 Abs. 1 UStG), auch im Inland, auch als innergemeinschaftliche Lieferung, Ausfuhr oder Fernverkauf | §§ 3, 3c, 4 Nr. 1, 6, 6a UStG | **bricht ab** (R39), wenn die Position in der Preisliste `art: lieferung` trägt; eine Ware unter einem anderen Kürzel oder nur im Freitext (`beschreibung`) erkennt es nicht |
+| Durchlaufende Posten: Beträge, die der Unternehmer im Namen und für Rechnung des Kunden vereinnahmt und verausgabt (z. B. Gebühren, die er für den Kunden an eine Behörde zahlt) | § 10 Abs. 1 Satz 4 UStG | nicht vorgesehen; erkennt es nicht. Eine Auslage (`art: auslage`) ist immer Teil des Entgelts und wird besteuert wie die Hauptleistung (R9) – richtig für Reisekosten, die der Unternehmer im eigenen Namen bezahlt, falsch für einen durchlaufenden Posten |
+| Steuerbefreiungen nach § 4 UStG, z. B. Heilbehandlungen (Nr. 14), Leistungen kultureller Einrichtungen (Nr. 20), Schul- und Bildungsleistungen, auch selbständiger Lehrer (Nr. 21) | § 4 UStG | keine Einordnung dafür; erkennt es nicht. Eine Leistung mit `einordnung: unterrichtend` behandelt es als steuerpflichtig; ob sie nach Nr. 21 steuerfrei ist, verantwortet der Mensch |
+| Zahlungen ohne Leistungsaustausch: echter Schadenersatz, echte Zuschüsse | § 1 Abs. 1 Nr. 1 („gegen Entgelt“), § 10 Abs. 1 Satz 2 UStG; Verwaltungsauffassung UStAE Abschn. 1.3, 10.2 | nicht vorgesehen; erkennt es nicht. Jede Position gilt als Entgelt für eine Leistung |
 | Leistungen im Zusammenhang mit einem Grundstück | § 3a Abs. 3 Nr. 1 | erkennt es nicht; Verantwortung beim Menschen |
 | Vermietung von Beförderungsmitteln | § 3a Abs. 3 Nr. 2 | erkennt es nicht |
 | Restaurationsleistungen, Arbeiten an beweglichen Gegenständen | § 3a Abs. 3 Nr. 3a | erkennt es nicht |
@@ -335,6 +344,16 @@ Nicht im Wortlaut zitiert, weil keine Rechtsnorm, aber Grundlage einzelner Annah
 > gleichgültig, wie dieses Dokument im Geschäftsverkehr bezeichnet wird.
 
 Daraus folgt: **R38**.
+
+### Q16 – § 3 Abs. 1 und Abs. 9 Satz 1 UStG: Lieferung und sonstige Leistung
+
+> (1) Lieferungen eines Unternehmers sind Leistungen, durch die er oder in seinem Auftrag ein Dritter
+> den Abnehmer oder in dessen Auftrag einen Dritten befähigt, im eigenen Namen über einen Gegenstand
+> zu verfügen (Verschaffung der Verfügungsmacht). […]
+>
+> (9) Sonstige Leistungen sind Leistungen, die keine Lieferungen sind. […]
+
+Daraus folgt: **R39**.
 
 ---
 
@@ -601,6 +620,23 @@ vollständige Tabelle steht in Teil 4.
   Unternehmern das Ergebnis nicht ändert, aber im Ergebnis festgehalten werden soll.
 - **Status:** Annahme – ungeprüft.
 - **Nachweis:** bewiesen – `Aussage.R19_abbruch_genau_wenn_unternehmer_fehlt`.
+
+#### R39 – Lieferungen: Abbruch
+
+- **Quelle:** Q16, Grundsatz.
+- **Regel:** Das Werkzeug rechnet nur sonstige Leistungen ab. Ist eine Position eine Lieferung, bricht
+  es ab – vor jeder Entscheidung über Leistungsort und Steuer und gleich, wer der Kunde ist, auch im
+  Inland.
+- **Annahmen:** Für Lieferungen gelten eigene Regeln zum Ort (§ 3 Abs. 6–8, § 3c UStG) und eigene
+  Befreiungen (§ 4 Nr. 1, § 6, § 6a UStG); die Entscheidungstabelle (Teil 4) gilt für sie nicht.
+  Selbst im Inland, wo das Ergebnis oft dasselbe wäre, ist das nicht geprüft – strenger als das
+  Gesetz, mit Absicht. Erkannt wird eine Lieferung nur an `art: lieferung` in der Preisliste; ob eine
+  Leistung eine Lieferung ist, ordnet der Mensch beim Pflegen der Liste ein.
+- **Werkzeug:** `art` in `stammdaten/preise.yaml`; `rules.nur_sonstige_leistungen()`, aufgerufen in
+  `resolve.entwurf_aus()` vor `rules.entscheide()`. Nicht Teil von `kern()` und nicht im Lean-Modell:
+  Die Prüfung hängt an keinem Merkmal der Entscheidung. Abbruch der Art `ausserhalb`.
+- **Status:** Werkzeug-Entscheidung, kein Steuerrecht.
+- **Nachweis:** getestet – `test_lieferung_bricht_*`.
 
 ### Pflichtangaben (§ 14 Abs. 4 UStG)
 
@@ -945,6 +981,7 @@ welche Regeln angewandt wurden (`regeln`, R35).
 | R32 | `resolve.rechne()` | `tests/test_resolve.py` |
 | R30 | `rules.frist_reverse_charge()`, Warnung in `resolve.rechne()` | `test_frist_reverse_charge`, `test_reverse_charge_fristwarnung` |
 | R34 | `rules.waehrung_erlaubt()` | `test_fremdwaehrung_*` |
+| R39 | `rules.nur_sonstige_leistungen()`, aufgerufen vor `rules.entscheide()` | `test_nur_sonstige_leistungen_*`, `test_lieferung_bricht_*` |
 | R20–R29 im PDF | `pruefen.befunde()` | `tests/test_pruefen.py`, `rechnung pruefen` |
 | R23 | `rules.naechste_lfd()` | `test_naechste_lfd_*` |
 | R35 (Begründung je Rechnung) | `begruendung.py`, `rechnung begruendung` | `tests/test_begruendung.py`: jede mögliche Regel der Spur hat einen vollständigen Eintrag hier, `Nachweis: bewiesen` genau bei den Lean-Aussagen, Annahmen zu jedem Feld von `Passt`, Spur gegen `entscheide()` |

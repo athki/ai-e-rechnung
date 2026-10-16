@@ -295,3 +295,36 @@ def test_stdio_wie_ein_client(gewerbe, monkeypatch):
                          capture_output=True, text=True, timeout=120)
     assert aus.returncode == 0, aus.stderr[-2000:]
     assert "aufgelöst (inland)" in aus.stdout
+
+
+# ---------------------------------------------------------------- Geltungsbereich (R39)
+
+
+def test_geltungsbereich_in_anleitung_beschreibungen_und_formular(gewerbe):
+    from rechnung import rules
+    assert rules.GELTUNGSBEREICH in mcp_server.ANLEITUNG
+
+    async def lauf():
+        async with Client(mcp_server.erstelle()) as c:
+            return {w.name: w.description or "" for w in (await c.list_tools()).tools}
+    beschreibungen = asyncio.run(lauf())
+    for werkzeug in ("neu", "schreiben"):
+        assert rules.GELTUNGSBEREICH in beschreibungen[werkzeug], werkzeug
+    s = Sitzung(antworten=[{"kunde": "muster-gmbh"}])
+    s.ok("neu")
+    assert rules.GELTUNGSBEREICH in s.formulare[0].message
+
+
+def test_preisliste_markiert_lieferung_und_resolve_bricht_ab(gewerbe):
+    import json
+    from rechnung import rules
+    s = Sitzung(antworten=[{"kunde": "muster-gmbh"}])
+    liste = {e["kuerzel"]: e for e in json.loads(s.ok("preisliste"))["preisliste"]}
+    assert liste["buch"]["art"] == "lieferung" and liste["buch"]["hinweis"] == rules.VERMERK_LIEFERUNG
+    assert "hinweis" not in liste["vortrag"]
+    nummer = nummer_aus(s.ok("neu", leistungsdatum="2026-10-01", taetigkeit="Bücher verkauft",
+                             einordnung="sonstige"))
+    s.ok("schreiben", nummer=nummer, positionen=[{"kuerzel": "buch", "menge": 2, "einheit": "stueck"}])
+    gut, text = s("resolve", nummer=nummer)
+    assert not gut and f"Abbruch ({meldung.AUSSERHALB}):" in text and "R39" in text, text
+    pruefe_ohne_private_werte(s.gesehen)

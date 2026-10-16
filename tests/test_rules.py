@@ -464,3 +464,20 @@ def test_jede_regel_id_im_code_steht_in_rules_md():
         ids = set(re.findall(r"\bR(\d+)\b", (quelle / datei).read_text(encoding="utf-8")))
         fehlend = {f"R{i}" for i in ids} - AKTIVE_REGELN
         assert not fehlend, (datei, fehlend)
+
+
+# ---------------------------------------------------------------- Geltungsbereich (R39)
+
+def test_nur_sonstige_leistungen_laesst_leistungen_und_auslagen_durch():
+    rules.nur_sonstige_leistungen([(1, "vortrag", "leistung"), (2, "flug", "auslage")])
+    rules.nur_sonstige_leistungen([])
+
+
+def test_lieferung_bricht_ab_und_nennt_jede_position():
+    with pytest.raises(rules.RegelFehler) as info:
+        rules.nur_sonstige_leistungen([(1, "vortrag", "leistung"), (2, "buch", "lieferung"),
+                                       (3, "kalender", "lieferung")])
+    assert info.value.art == "ausserhalb"
+    assert info.value.geschwaerzt == str(info.value)
+    assert "Position 2 (buch), Position 3 (kalender)" in str(info.value)
+    assert "R39" in str(info.value) and "kann das Werkzeug noch nicht" in str(info.value)

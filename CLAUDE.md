@@ -60,6 +60,14 @@ rechnung.yaml + rechnung.privat.yaml ──resolve()──▶ rechnung.resolved.
   Bezeichnung der Liste in der Sprache der Rechnung). Nie ein Preis. Mengeneinheit ist Pflicht (`pauschal`,
   `stunde`, `tag`, `stueck`, `kilometer`, gemappt auf UN/ECE Rec. 20) und muss zur Liste passen; kein
   Default im Modell, `rechnung neu` füllt `pauschal` sichtbar vor und lässt das Kürzel leer.
+- Nur sonstige Leistungen (RULES.md R39): Eine Position, deren Kürzel in der Preisliste `art: lieferung`
+  trägt (Ware), lässt `resolve` als Erstes abbrechen (`Abbruch (ausserhalb)`), vor Leistungsort und
+  Steuer, auch im Inland; außerhalb von `kern()`, nicht in Lean. `preisliste` zeigt solche Einträge mit
+  Vermerk. Freitext erkennt das Werkzeug nicht.
+- Geltungsbereich: `rules.GELTUNGSBEREICH` ist die Kurzfassung von RULES.md Teil 1 („Prototyp, noch
+  nicht rechtlich oder steuerlich geprüft …“); wörtlich in MCP-Anleitung, Beschreibung von `neu` und
+  `schreiben`, Kundenformular, `rechnung neu`, `rechnung doctor`, README, Skill und RULES.md
+  (`tests/test_geltungsbereich.py`).
 - Preise (`preise.py`): `rechnung preise <nr>` zeigt jede Position mit dem Listenpreis als Vorschlag
   (nur in EUR), Auslagen (`art: auslage`) leer; 7 % nur, wo `rules.satz_position()` es erlaubt. Die
   Bestätigung landet als Schnappschuss in `rechnung.privat.yaml` mit Hash der Positionen (Reihenfolge,

@@ -91,7 +91,7 @@ def doctor() -> None:
         typer.echo(f" {SYMBOL[p.status]} {p.name.ljust(breite)}  {detail}")
     fehler = sum(p.status == doctor_mod.FEHLER for p in pruefungen)
     warnungen = sum(p.status == doctor_mod.WARNUNG for p in pruefungen)
-    typer.echo()
+    typer.echo(f"\n{rules.GELTUNGSBEREICH}\n")
     if fehler:
         typer.secho(f"rot: {fehler} Fehler, {warnungen} Warnung(en)", fg=typer.colors.RED, bold=True)
         raise typer.Exit(1)
@@ -171,6 +171,7 @@ def neu(
         typer.secho("  leistung: ist noch unvollständig – Pflicht, in rechnung.yaml eintragen.",
                     fg=typer.colors.YELLOW)
     typer.echo(f"\nAusfüllen, dann: rechnung resolve {nummer}")
+    typer.echo(f"\n{rules.GELTUNGSBEREICH}")
 
 
 PREISE_TEXT = {
@@ -542,7 +543,8 @@ def preisliste() -> None:
         bezeichnung = " / ".join(dict.fromkeys(e.bezeichnung.values()))
         preis = "" if geschwaerzt or e.preis is None else f"  {_geld(e.preis, preise_mod.LISTENWAEHRUNG)}"
         sieben = "  7 % vorgeschlagen" if e.steuersatz is not None else ""
-        typer.echo(f"  {kuerzel.ljust(breite)}  {e.einheit:<9}  {e.art:<8}  {bezeichnung}{preis}{sieben}")
+        vermerk = f"  {rules.VERMERK_LIEFERUNG}" if e.art == rules.LIEFERUNG else ""
+        typer.echo(f"  {kuerzel.ljust(breite)}  {e.einheit:<9}  {e.art:<9}  {bezeichnung}{preis}{sieben}{vermerk}")
     if geschwaerzt:
         typer.echo("\n  Preise sind geschwärzt.")
 

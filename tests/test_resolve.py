@@ -179,9 +179,9 @@ def test_inland_neunzehn_prozent(gewerbe):
 
 def test_gemischte_saetze_werden_getrennt(gewerbe):
     positionen = EINE_POSITION + """\
-  - kuerzel: buch
+  - kuerzel: nutzungsrecht
     menge: 2
-    einheit: stueck
+    einheit: pauschal
 """
     nummer = lege_an(gewerbe, "muster-gmbh", positionen, preise_=("1000.00", "10.00"), sieben=[False, True])
     ergebnis, _ = r.resolve(config.laden(), nummer)
@@ -526,3 +526,30 @@ def test_cli_neu_ohne_leistungsdatum_sagt_es(gewerbe):
     aus = CliRunner().invoke(app, ["neu", "--kunde", "sample-ltd"])
     assert aus.exit_code == 0, aus.output
     assert "leistungsdatum ist noch leer" in aus.output
+
+
+# ---------------------------------------------------------------- Lieferungen (R39)
+
+BUCH = "  - kuerzel: buch\n    menge: 2\n    einheit: stueck\n"
+
+
+@pytest.mark.parametrize("kunde", ["muster-gmbh", "privat-de", "exemple-sarl", "sample-ltd", "sample-inc",
+                                   "privat-ch"])
+def test_lieferung_bricht_bei_jedem_kunden_ab(gewerbe, kunde):
+    from rechnung import meldung, rules
+    nummer = lege_an(gewerbe, kunde, EINE_POSITION + BUCH, preise_=None)
+    for schritt in (r.entwurf, r.resolve):
+        with pytest.raises(rules.RegelFehler, match="Position 2 \\(buch\\)") as info:
+            schritt(config.laden(), nummer)
+        assert info.value.art == meldung.AUSSERHALB
+    assert not list(gewerbe.glob(f"**/{nummer}/{r.RESOLVED_DATEI}"))
+
+
+def test_lieferung_bricht_vor_der_steuerentscheidung_ab(gewerbe):
+    # Ohne `unternehmer` bräche die Entscheidung nach R19 ab; R39 kommt vorher.
+    from rechnung import rules
+    datei = gewerbe / "stammdaten" / "kunden" / "sample-ltd.yaml"
+    datei.write_text(datei.read_text(encoding="utf-8").replace("unternehmer: true\n", ""), encoding="utf-8")
+    nummer = lege_an(gewerbe, "sample-ltd", BUCH, preise_=None)
+    with pytest.raises(rules.RegelFehler, match="R39"):
+        r.entwurf(config.laden(), nummer)

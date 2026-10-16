@@ -510,3 +510,32 @@ def waehrung_erlaubt(waehrung: str, saetze: list[Decimal]) -> None:
             geschwaerzt="Fremdwährung mit Umsatzsteuerausweis: Dann muss der Steuerbetrag zusätzlich in Euro "
                         "angegeben werden (§ 16 Abs. 6 UStG). Das kann das Werkzeug noch nicht.",
         )
+
+
+# ---------------------------------------------------------------- Geltungsbereich (RULES.md Teil 1, R39)
+
+# Kurzfassung von „Außen vor“ für jede Oberfläche (MCP-Anleitung, Werkzeugbeschreibungen, Formular,
+# CLI, README). tests/test_geltungsbereich.py hält die Stellen beim selben Wortlaut.
+GELTUNGSBEREICH = (
+    "Prototyp, noch nicht rechtlich oder steuerlich geprüft. Das Werkzeug kann noch nicht: "
+    "Lieferungen von Waren, Steuerbefreiungen außer § 19 UStG, durchlaufende Posten, nicht steuerbare "
+    "Zahlungen (z. B. Schadenersatz, Zuschüsse). Vollständige Liste: RULES.md, Teil 1."
+)
+
+LIEFERUNG = "lieferung"
+# Vermerk in `preisliste` (CLI und MCP), damit die AI es vor dem Schreiben weiß, nicht erst beim Abbruch.
+VERMERK_LIEFERUNG = "Ware – kann das Werkzeug noch nicht (RULES.md R39)"
+
+
+def nur_sonstige_leistungen(positionen: list[tuple[int, str, str]]) -> None:
+    """R39: Das Werkzeug rechnet nur sonstige Leistungen ab (§ 3 Abs. 9 UStG), keine Lieferungen
+    (§ 3 Abs. 1). Erkannt wird eine Lieferung nur an `art: lieferung` in der Preisliste; geprüft wird
+    vor jeder Steuerentscheidung, außerhalb von kern(). `positionen`: (Pos, Kürzel, Art)."""
+    lieferungen = [(pos, kuerzel) for pos, kuerzel, art in positionen if art == LIEFERUNG]
+    if not lieferungen:
+        return
+    welche = ", ".join(f"Position {pos} ({kuerzel})" for pos, kuerzel in lieferungen)
+    text = (f"{welche}: Lieferung von Waren (art: lieferung in der Preisliste, § 3 Abs. 1 UStG). Das "
+            f"kann das Werkzeug noch nicht – es rechnet nur sonstige Leistungen ab (§ 3 Abs. 9 UStG, "
+            f"RULES.md R39). Die Rechnung für die Ware außerhalb des Werkzeugs schreiben.")
+    raise RegelFehler(text, art=meldung.AUSSERHALB, geschwaerzt=text)

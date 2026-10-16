@@ -23,7 +23,8 @@ def test_beispiel_preisliste_ist_gueltig(gewerbe):
     liste = r.lade_preisliste(config.laden())
     assert liste["vortrag"].preis == Decimal("450.00") and liste["vortrag"].einheit == "stunde"
     assert liste["bahnticket"].art == "auslage" and liste["bahnticket"].preis is None
-    assert liste["buch"].steuersatz == Decimal(7)
+    assert liste["nutzungsrecht"].steuersatz == Decimal(7)
+    assert liste["buch"].art == "lieferung"
     assert liste["flug"].bezeichnung == {"de": "Reisekosten Flug", "en": "Travel: flight"}
 
 
@@ -103,10 +104,10 @@ def test_preis_nur_in_der_waehrung_der_liste_vorgeschlagen(gewerbe):
 
 
 def test_sieben_prozent_nur_wo_erlaubt(gewerbe):
-    buch = "  - kuerzel: buch\n    menge: 1\n    einheit: stueck\n"
-    inland = r.entwurf(config.laden(), lege_an(gewerbe, "muster-gmbh", buch))
+    recht = "  - kuerzel: nutzungsrecht\n    menge: 1\n    einheit: pauschal\n"
+    inland = r.entwurf(config.laden(), lege_an(gewerbe, "muster-gmbh", recht))
     assert inland.positionen[0].sieben_erlaubt and inland.positionen[0].vorschlag_sieben
-    ausland = r.entwurf(config.laden(), lege_an(gewerbe, "sample-ltd", buch))
+    ausland = r.entwurf(config.laden(), lege_an(gewerbe, "sample-ltd", recht))
     assert not ausland.positionen[0].sieben_erlaubt and not ausland.positionen[0].vorschlag_sieben
 
 
@@ -235,12 +236,12 @@ def test_preise_ohne_bestaetigung_aendert_nichts(gewerbe):
 
 
 def test_preise_fragt_sieben_prozent_nur_wo_erlaubt(gewerbe):
-    buch = "  - kuerzel: buch\n    menge: 2\n    einheit: stueck\n"
-    inland = lege_an(gewerbe, "muster-gmbh", buch, preise_=None)
+    recht = "  - kuerzel: nutzungsrecht\n    menge: 2\n    einheit: pauschal\n"
+    inland = lege_an(gewerbe, "muster-gmbh", recht, preise_=None)
     aus = CliRunner().invoke(app, ["preise", inland], input="\n\n\nj\n")   # Preis, 7 % (Vorschlag ja), Referenz
     assert "7 % (ermäßigt" in aus.output, aus.output
     assert r.resolve(config.laden(), inland)[0].positionen[0].steuersatz == Decimal(7)
-    ausland = lege_an(gewerbe, "sample-ltd", buch, preise_=None)
+    ausland = lege_an(gewerbe, "sample-ltd", recht, preise_=None)
     aus = CliRunner().invoke(app, ["preise", ausland], input="\n\nj\n")
     assert "7 %" not in aus.output and aus.exit_code == 0, aus.output
 

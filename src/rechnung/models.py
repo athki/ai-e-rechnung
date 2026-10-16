@@ -171,13 +171,14 @@ class PreisEintrag(Basis):
     """Ein Eintrag der Preisliste stammdaten/preise.yaml, Schlüssel ist das Kürzel.
 
     Eine Leistung hat einen Preis, eine Auslage (Bahnticket, Hotel) keinen: deren Betrag trägt der
-    Mensch bei `rechnung preise` ein. Preise gelten in EUR. `steuersatz: 7` ist nur ein Vorschlag;
-    ob er gilt, entscheidet `rules.satz_position()` je Rechnung.
+    Mensch bei `rechnung preise` ein. Eine Lieferung (Ware, § 3 Abs. 1 UStG) darf in der Liste
+    stehen, aber keine Rechnung trägt sie: `resolve` bricht ab (RULES.md R39). Preise gelten in EUR.
+    `steuersatz: 7` ist nur ein Vorschlag; ob er gilt, entscheidet `rules.satz_position()` je Rechnung.
     """
 
     bezeichnung: dict[Sprache, str]   # im YAML auch ein bloßer Text, dann für beide Sprachen
     einheit: Einheit
-    art: Literal["leistung", "auslage"] = "leistung"
+    art: Literal["leistung", "auslage", "lieferung"] = "leistung"
     preis: Decimal | None = None
     steuersatz: Decimal | None = None
 

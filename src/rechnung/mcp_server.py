@@ -18,9 +18,10 @@ importiert dieses Modul nie.
 # Ohne `from __future__ import annotations`: das SDK wertet die Annotationen der Werkzeuge aus, und
 # die Resolver (waehle_kunde, formular) sind lokale Namen.
 
+import inspect
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
@@ -51,7 +52,7 @@ from rechnung import (
 )
 from rechnung.models import Beleg, Leistung, Position, Resolved
 
-ANLEITUNG = """\
+ANLEITUNG = f"""\
 Rechnungen für ein deutsches Kleingewerbe. Du schreibst, was geleistet wurde und wie viel davon;
 das Werkzeug entscheidet Leistungsort und Steuer und setzt Namen, Anschriften und Beträge selbst ein.
 Du siehst nie, wer beteiligt ist und was es kostet – und fragst auch nicht danach.
@@ -74,6 +75,8 @@ Abbrüche beginnen mit `Abbruch (<art>):`
 Ändere nie einordnung oder ort, um an einem Abbruch vorbeizukommen.
 
 Was der Mensch dir in den Chat tippt, siehst du – auch Beträge. Bitte ihn, sie dort nicht zu nennen.
+
+{rules.GELTUNGSBEREICH} Sag das dem Menschen einmal, bevor du die erste Rechnung anlegst.
 """
 
 ZURUECKGEHALTEN = ("Abbruch (frage): Unerwarteter Fehler; die Meldung ist zurückgehalten, weil sie private "
@@ -88,6 +91,12 @@ class Einstellungen:
 
 
 # ---------------------------------------------------------------- Hilfen
+
+
+def _mit_geltungsbereich(f: Callable[..., Any]) -> Callable[..., Any]:
+    """Hängt die Kurzfassung des Geltungsbereichs an die Beschreibung eines Werkzeugs (unter @server.tool())."""
+    f.__doc__ = f"{inspect.cleandoc(f.__doc__ or '')}\n\n{rules.GELTUNGSBEREICH}"
+    return f
 
 
 @contextmanager
@@ -217,9 +226,11 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
             raise _abbruch("Im Gewerbe-Ordner gibt es keine Kundendatei (stammdaten/kunden/). Der Mensch legt "
                            "eine an.", meldung.STAMMDATEN)
         wahl = create_model("Kundenwahl", kunde=(Literal[tuple(kuerzel)], Field(title="Kunde")))  # type: ignore[valid-type]
-        return Elicit("Für welchen Kunden ist die Rechnung? (Die Auswahl geht nicht an die AI.)", wahl)
+        return Elicit("Für welchen Kunden ist die Rechnung? (Die Auswahl geht nicht an die AI.)\n\n"
+                      + rules.GELTUNGSBEREICH, wahl)
 
     @server.tool()
+    @_mit_geltungsbereich
     def neu(
         wahl: Annotated[ElicitationResult[Kundenwahl], Resolve(waehle_kunde)],
         leistungsdatum: Annotated[str, Field(description="JJJJ-MM-TT, nur was der Mensch gesagt hat")] = "",
@@ -252,11 +263,13 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
 
     @server.tool()
     def preisliste() -> dict:
-        """Die Preisliste ohne Preise: Kürzel, Einheit, Art (leistung oder auslage), Bezeichnung.
-        Positionen in rechnung.yaml nehmen ein Kürzel von hier, mit derselben Einheit."""
+        """Die Preisliste ohne Preise: Kürzel, Einheit, Art (leistung, auslage oder lieferung),
+        Bezeichnung. Positionen in rechnung.yaml nehmen ein Kürzel von hier, mit derselben Einheit.
+        Eine Lieferung (Ware) kann das Werkzeug noch nicht: nicht verwenden, dem Menschen sagen."""
         with _sperre():
             liste = resolve_mod.lade_preisliste(config.laden())
             return {"preisliste": [{"kuerzel": k, "einheit": e.einheit, "art": e.art, "bezeichnung": e.bezeichnung}
+                                   | ({"hinweis": rules.VERMERK_LIEFERUNG} if e.art == rules.LIEFERUNG else {})
                                    for k, e in liste.items()]}
 
     @server.tool()
@@ -268,6 +281,7 @@ def erstelle(einstellungen: Einstellungen | None = None) -> MCPServer:
             return {"nummer": ordner.name} | {f: _gefiltert(f, daten[f]) for f in LESBAR if f in daten}
 
     @server.tool()
+    @_mit_geltungsbereich
     def schreiben(
         nummer: str,
         leistungsdatum: Annotated[date | None, Field(description="Tag der Leistung; nur was der Mensch sagt")] = None,

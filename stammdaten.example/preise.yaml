@@ -6,8 +6,9 @@
 #   bezeichnung  wie die Position auf der Rechnung heißt; ein Text für beide Sprachen oder de/en
 #   einheit      pauschal | stunde | tag | stueck | kilometer – rechnung.yaml muss dieselbe nehmen
 #   preis        Einzelpreis in EUR; bei anderen Währungen schlägt `rechnung preise` nichts vor
-#   art          leistung (Default) oder auslage – eine Auslage hat keinen festen Preis, ihr Betrag
-#                kommt je Rechnung vom Beleg
+#   art          leistung (Default), auslage oder lieferung – eine Auslage hat keinen festen Preis, ihr
+#                Betrag kommt je Rechnung vom Beleg; eine Lieferung (Ware) kann das Werkzeug noch nicht,
+#                `resolve` bricht ab (RULES.md R39)
 #   steuersatz   nur 7, als Vorschlag (§ 12 Abs. 2 UStG); ob er gilt, entscheidet das Werkzeug je Rechnung
 
 beratung:
@@ -45,11 +46,19 @@ fahrt:
   einheit: kilometer
   preis: 0.30
 
+nutzungsrecht:
+  bezeichnung: { de: Einräumung von Nutzungsrechten an einem Text, en: Licence to use a text }
+  einheit: pauschal
+  preis: 300.00
+  steuersatz: 7   # Rechte aus dem Urheberrechtsgesetz, § 12 Abs. 2 Nr. 7 Buchst. c UStG
+
+# Beispiel für eine Ware: steht in der Liste, aber eine Rechnung damit bricht ab (RULES.md R39).
+# Lieferungen (§ 3 Abs. 1 UStG) kann das Werkzeug noch nicht, auch nicht im Inland.
 buch:
   bezeichnung: { de: Buch, en: Book }
   einheit: stueck
   preis: 24.00
-  steuersatz: 7
+  art: lieferung
 
 flug:
   bezeichnung: { de: Reisekosten Flug, en: "Travel: flight" }

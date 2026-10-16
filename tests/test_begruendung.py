@@ -139,7 +139,7 @@ def test_festlegung_wird_als_solche_gezeigt(gewerbe):
 
 def test_ermaessigter_satz_steht_bei_den_fakten(gewerbe):
     positionen = ("  - kuerzel: vortrag\n    menge: 1\n    einheit: stunde\n"
-                  "  - kuerzel: buch\n    menge: 2\n    einheit: stueck\n")
+                  "  - kuerzel: nutzungsrecht\n    menge: 2\n    einheit: pauschal\n")
     ordner = aufgeloest(lege_an(gewerbe, "muster-gmbh", positionen=positionen, preise_=("100", "25"),
                                 sieben=[False, True]))
     text, passt = b.begruende(ordner)

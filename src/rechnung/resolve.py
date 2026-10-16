@@ -485,7 +485,7 @@ class EntwurfPosition:
     beschreibung: str
     menge: Decimal
     einheit: str
-    art: str                     # leistung | auslage
+    art: str                     # leistung | auslage (lieferung bricht vorher ab, R39)
     vorschlag: Decimal | None    # Preis aus der Liste; None bei Auslagen und in Fremdwährung
     vorschlag_sieben: bool       # die Liste schlägt 7 % vor, und hier geht es
     sieben_erlaubt: bool         # rules.satz_position() erlaubt 7 % für diese Rechnung (R10, R12, R14)
@@ -547,9 +547,12 @@ def _positionen(eingabe: Input, liste: dict[str, PreisEintrag], sprache: str, wa
 def entwurf_aus(cfg: config.Config, ordner: Path) -> Entwurf:
     """Lädt alles zu einer Rechnung und entscheidet, was ohne Preise zu entscheiden ist."""
     eingabe = lade_input(ordner)
+    liste = lade_preisliste(cfg)
+    # R39 vor allem anderen: Waren kann das Werkzeug nicht, gleich wer der Kunde ist.
+    rules.nur_sonstige_leistungen([(i, p.kuerzel, liste[p.kuerzel].art)
+                                   for i, p in enumerate(eingabe.positionen, start=1) if p.kuerzel in liste])
     stammdaten = lade_stammdaten(cfg)
     kunde = lade_kunde(cfg, eingabe.kunde)
-    liste = lade_preisliste(cfg)
     privat = lade_privat(ordner)
 
     datum = eingabe.datum or date.today()

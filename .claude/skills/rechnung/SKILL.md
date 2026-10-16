@@ -13,6 +13,15 @@ kostet. Du liest keine Kundendaten, keine Ausstellerdaten, keine Preisliste, kei
 keine `rechnung.resolved.json`, keine PDFs, keine `status.yaml`, nichts unter `pro-forma/` oder
 `belege/`. Was du vom Werkzeug brauchst, gibt es dir geschwärzt aus.
 
+**Geltungsbereich**, sag es dem Menschen einmal vor der ersten Rechnung:
+
+> Prototyp, noch nicht rechtlich oder steuerlich geprüft. Das Werkzeug kann noch nicht: Lieferungen
+> von Waren, Steuerbefreiungen außer § 19 UStG, durchlaufende Posten, nicht steuerbare Zahlungen
+> (z. B. Schadenersatz, Zuschüsse). Vollständige Liste: RULES.md, Teil 1.
+
+Klingt das, was er geleistet hat, nach einem dieser Fälle (er verkauft Bücher, rechnet Gebühren ab, die
+er für den Kunden bezahlt hat, gibt steuerfreien Unterricht), sag es, bevor du etwas anlegst.
+
 Jeder Abschnitt unten entspricht einem Werkzeug des MCP-Servers (`rechnung mcp`, README). Stehen
 dir dessen Werkzeuge zur Verfügung (`neu`, `schreiben`, `resolve` …), nimm sie statt der Befehle
 hier: Sie schwärzen immer, und `neu` fragt den Kunden selbst beim Menschen ab.
@@ -65,6 +74,9 @@ und wie viel davon, nie einen Preis.
   Steuersatz oder eine Referenz in die Datei. Du rechnest nie einen Betrag aus.
 - Auslagen (`art: auslage`, z. B. Bahnticket) bekommen eine eigene Position; den Betrag trägt der
   Mensch bei `rechnung preise` vom Beleg ein.
+- Lieferungen (`art: lieferung`, eine Ware wie `buch`) kann das Werkzeug noch nicht; `resolve` bricht
+  ab (RULES.md R39). Nimm so ein Kürzel nicht, sag es dem Menschen. Beschreib eine Ware auch nicht als
+  Leistung um, damit sie durchgeht.
 - `einleitung:` darfst du entwerfen: ein Satz in der Sprache der Rechnung, ohne Beträge und ohne
   Namen. Er steht nach der Anrede („Sehr geehrte Damen und Herren,“), auf Deutsch also klein weiter.
 - `belege:` Dateinamen wählt der Mensch. Rate zu neutralen Namen (`beleg-1.pdf`, nicht
@@ -87,7 +99,7 @@ Die Meldung beginnt mit `Abbruch (<art>):`.
 | `eingabe` | Fehler in rechnung.yaml (YAML, Feldname, Einheit) | selbst beheben, neu auflösen |
 | `frage` | eine Tatsache, die nur der Mensch kennt (Datum, Ort, Tätigkeit), oder eine zurückgehaltene Meldung | fragen, nie raten; bei „Meldung zurückgehalten“ den Menschen bitten, dasselbe Kommando im eigenen Terminal auszuführen |
 | `stammdaten` | Kunden- oder Ausstellerdatei bzw. Config unvollständig | dem Menschen sagen, welches Feld in welcher Datei fehlt; **er trägt es selbst ein, nicht über den Chat** |
-| `ausserhalb` | bewusst außerhalb des Geltungsbereichs (z. B. Privatperson im EU-Ausland, 7 % wo nicht erlaubt) | erklären und anhalten |
+| `ausserhalb` | bewusst außerhalb des Geltungsbereichs (z. B. Privatperson im EU-Ausland, 7 % wo nicht erlaubt, Lieferung einer Ware) | erklären und anhalten |
 | `preise` | Preise fehlen oder sind veraltet, oder `rechnung.privat.yaml` passt nicht | dem Menschen sagen: `rechnung preise <nr>` im eigenen Terminal; nie nach Beträgen fragen |
 
 Ändere nie `einordnung`, `ort` oder `leistungsort`, um an einem Abbruch vorbeizukommen. Das ist nur
