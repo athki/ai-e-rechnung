@@ -214,6 +214,25 @@ def test_grep_und_glob_ueber_die_wurzel(wurzeln):
     ("rechnung pruefen 0001", 0),
     ("printenv RECHNUNG_GEWERBE", 0),
     ("uv run pytest -q", 0),
+    # Überschreiben an einer Befehlsstelle bleibt gesperrt, in jeder Form …
+    ("RECHNUNG_GEWERBE=/anderswo rechnung resolve 0001", 2),
+    ("FOO=1 RECHNUNG_CONFIG=/x.toml rechnung resolve 0001", 2),
+    ("cd /tmp && RECHNUNG_GEWERBE=/x rechnung neu --kunde a", 2),
+    ("true; RECHNUNG_GEWERBE=/x rechnung offen", 2),
+    ("echo $(RECHNUNG_GEWERBE=/x rechnung offen)", 2),
+    ("env FOO=1 RECHNUNG_GEWERBE=/x rechnung offen", 2),
+    ("declare -x RECHNUNG_CONFIG=/x.toml", 2),
+    ('bash -c "RECHNUNG_GEWERBE=/x rechnung offen"', 2),
+    ("sh -c 'RECHNUNG_GESCHWAERZT=0 rechnung offen'", 2),
+    ("python3 - <<'EOF'\nprint(1)\nEOF\nRECHNUNG_GEWERBE=/x rechnung offen", 2),
+    # … dieselbe Zeichenkette in Text ist keine Zuweisung (Fehlalarme aus Schritt 3c).
+    ("grep -n 'RECHNUNG_GEWERBE=' src/rechnung/schritt.py", 0),
+    ("grep -c 'RECHNUNG_GEWERBE=' README.md", 0),
+    ("bash -e -c 'RECHNUNG_GEWERBE=/x rechnung offen'", 2),
+    ('grep -rn "RECHNUNG_CONFIG=" README.md', 0),
+    ("python3 - <<'EOF'\nwurzel = \"RECHNUNG_GEWERBE=<wurzel> \" if x else \"\"\nEOF", 0),
+    ("python3 - <<'EOF'\nassert \"RECHNUNG_GEWERBE=\" not in text\nEOF", 0),
+    ("echo 'RECHNUNG_GESCHWAERZT=0 schaltet die Schwärzung aus'", 0),
 ])
 def test_bash_lesesperre(wurzeln, befehl, code):
     aus = lesen(wurzeln, "Bash", echt=wurzeln / "Gewerbe", command=befehl)

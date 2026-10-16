@@ -77,7 +77,7 @@ def test_auslage_bleibt_beim_menschen(gewerbe):
 
 
 def test_fremdwaehrung_bleibt_beim_menschen(gewerbe):
-    nummer = lege_an(gewerbe, "sample-inc", preise_=None)      # USD
+    nummer = lege_an(gewerbe, "sample-inc", preise_=None, waehrung="USD")
     assert r.mit_listenpreisen(config.laden(), nummer).preise == preise.FEHLEN
 
 

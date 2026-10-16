@@ -99,7 +99,7 @@ def test_ohne_beschreibung_die_bezeichnung_in_der_sprache_der_rechnung(gewerbe):
 
 def test_preis_nur_in_der_waehrung_der_liste_vorgeschlagen(gewerbe):
     assert r.entwurf(config.laden(), lege_an(gewerbe, "sample-ltd")).positionen[0].vorschlag == Decimal("450.00")
-    assert r.entwurf(config.laden(), lege_an(gewerbe, "sample-inc")).positionen[0].vorschlag is None   # USD
+    assert r.entwurf(config.laden(), lege_an(gewerbe, "sample-inc", waehrung="USD")).positionen[0].vorschlag is None
 
 
 def test_sieben_prozent_nur_wo_erlaubt(gewerbe):

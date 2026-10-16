@@ -116,9 +116,7 @@ def test_durchlauf_ohne_private_werte_und_ohne_kuerzel(gewerbe):
     s.ok("preisliste")
     for kuerzel in LEISTUNG:
         nummer = anlegen(s, kuerzel)
-        # In USD (sample-inc) gilt die Liste nicht; sonst übernimmt resolve ihre Preise.
-        erwartet = "fehlen" if kuerzel == "sample-inc" else "aus der Preisliste übernommen"
-        assert erwartet in s.ok("resolve", nummer=nummer)
+        assert "aus der Preisliste übernommen" in s.ok("resolve", nummer=nummer)
         bestaetige(nummer, PREIS)                     # der Mensch ändert den Preis, im eigenen Terminal
         assert "bestätigt" in s.ok("resolve", nummer=nummer)
         s.ok("lesen", nummer=nummer)

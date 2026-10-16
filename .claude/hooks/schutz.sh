@@ -16,8 +16,10 @@
 #   *.resolved.json, rechnung.privat.yaml, PDFs, status.yaml, pro-forma/**, belege/**
 # Read/Grep/Glob über den Pfad; Bash, wenn der Befehl eine Wurzel nennt (außer einem bloßen
 # `rechnung …`-Aufruf und Pfaden in Rechnungsordnern) oder in einer Wurzel läuft. Dazu sperrt er
-# Befehle, die RECHNUNG_GESCHWAERZT, RECHNUNG_GEWERBE oder RECHNUNG_CONFIG überschreiben oder löschen.
-# Ehrlich löchrig: Variablen, Globs und Skripte, die Pfade selbst zusammensetzen, sieht er nicht.
+# Befehle, die RECHNUNG_GESCHWAERZT, RECHNUNG_GEWERBE oder RECHNUNG_CONFIG überschreiben oder löschen
+# (Zuweisung an einer Befehlsstelle; derselbe Text in einem String ist frei).
+# Ehrlich löchrig: Variablen, Globs und Skripte, die Pfade selbst zusammensetzen oder die Variablen in
+# einer Datei setzen, die der Befehl nur ausführt, sieht er nicht.
 # Repo, stammdaten.example/ und demo-output/ bleiben frei.
 #
 # Läuft auch unter /bin/bash 3.2 (macOS): leere Arrays nur über ${a[@]+"${a[@]}"}.
@@ -186,7 +188,12 @@ bash_lesen() {
     local suche='\b(find|rg|tree|du)\b|\bgrep\b[^;|&]*[[:space:]]-[a-zA-Z]*[rR]|\bls\b[^;|&]*[[:space:]]-[a-zA-Z]*R'
 
     # Den Schalter einschalten (=1) ist harmlos; gesperrt ist ausschalten (leer, 0) und jede neue Wurzel.
-    if grep -qE '(^|[^A-Za-z0-9_])(RECHNUNG_GEWERBE|RECHNUNG_CONFIG)=|(^|[^A-Za-z0-9_])RECHNUNG_GESCHWAERZT=["'"'"']?0?["'"'"']?([[:space:];|&)]|$)|\bunset\b[^;|&]*RECHNUNG_|\benv\b[^;|&]*[[:space:]](-i|-u|--unset|--ignore-environment)\b' <<<"$befehl"; then
+    # Nur Zuweisungen an einer Befehlsstelle: Zeilenanfang, nach ; & | ( ` $(, nach export/env/declare/
+    # local/readonly/typeset, nach `sh -c "` (auch bash, zsh, dash), auch hinter anderen Zuweisungen. Dieselbe
+    # Zeichenkette mitten in Text (grep 'RECHNUNG_GEWERBE=', ein String in Python) ist keine.
+    local q="[\"']"
+    local stelle="(^|[;&|(\`]|\\\$\\(|\\b(export|env|declare|local|readonly|typeset)\\b[^;|&]*[[:space:]]|\\b(ba|z|da)?sh[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-c[[:space:]]+${q}?)[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:];|&]*[[:space:]]+)*"
+    if grep -qE "${stelle}(RECHNUNG_GEWERBE|RECHNUNG_CONFIG)=|${stelle}RECHNUNG_GESCHWAERZT=${q}?0?${q}?([[:space:];|&)]|\$)|\\bunset\\b[^;|&]*RECHNUNG_|\\benv\\b[^;|&]*[[:space:]](-i|-u|--unset|--ignore-environment)\\b" <<<"$befehl"; then
         blockiere_lesen "Bash-Befehl überschreibt RECHNUNG_GESCHWAERZT, RECHNUNG_GEWERBE oder RECHNUNG_CONFIG"
     fi
     # Ein bloßer Aufruf des Werkzeugs: Es schwärzt seine Ausgabe selbst.

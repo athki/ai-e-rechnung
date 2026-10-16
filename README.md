@@ -163,7 +163,7 @@ Testkunden:
 | `privat-de` | Privatperson im Inland: `inland`, 19 % |
 | `exemple-sarl` | Unternehmen in Frankreich mit USt-IdNr.: `reverse_charge`, 0 % |
 | `sample-ltd` | Unternehmen im Vereinigten Königreich: `nicht_steuerbar`, 0 % |
-| `sample-inc` | Unternehmen in den USA, Rechnung in USD: `nicht_steuerbar`; Preise in USD trägt der Mensch ein |
+| `sample-inc` | Unternehmen in den USA, ohne USt-IdNr.: `nicht_steuerbar`, 0 % |
 | `privat-ch` | Privatperson in der Schweiz: Leistungsort hängt von der Einordnung ab |
 
 Die PDFs liegen danach in `~/rechnung-probe/rechnung-ausgang/`. Ohne Docker, in Claude Code:

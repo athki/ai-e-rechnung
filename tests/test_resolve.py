@@ -322,7 +322,10 @@ def test_fremdwaehrung_mit_ust_bricht_ab(gewerbe):
 
 
 def test_fremdwaehrung_ohne_ust_laeuft(gewerbe):
-    nummer = lege_an(gewerbe, "sample-inc")     # Delaware, Währung USD aus der Kundendatei
+    # Währung aus der Kundendatei (der Testkunde rechnet in EUR; hier nur in diesem Ordner auf USD)
+    datei = gewerbe / "stammdaten" / "kunden" / "sample-inc.yaml"
+    datei.write_text(datei.read_text(encoding="utf-8") + "waehrung: USD\n", encoding="utf-8")
+    nummer = lege_an(gewerbe, "sample-inc")
     ergebnis, _ = r.resolve(config.laden(), nummer)
     assert ergebnis.waehrung == "USD"
     assert ergebnis.ergebnis == "nicht_steuerbar"
