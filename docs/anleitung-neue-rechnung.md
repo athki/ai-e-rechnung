@@ -3,12 +3,21 @@
 Ablauf und Nachschlagewerk für `ai-e-rechnung`. Die Anleitung steht absichtlich für sich: Sie lässt
 sich auch außerhalb des Repos lesen, zum Beispiel in einer Notizsammlung.
 
-Alle Befehle laufen aus dem Repo-Verzeichnis, mit `uv run` davor:
+Ist `rechnung` nicht installiert, laufen alle Befehle mit `uv run` aus dem Repo-Verzeichnis – oder
+von überall mit `uv --directory`. Wo der Befehl gestartet wird, ist egal: Das Werkzeug schreibt nur
+in den Gewerbe-Ordner aus der Config.
 
 ```sh
 cd ~/Code/rechnung
 uv run rechnung <kommando>
+# oder von überall:
+uv --directory ~/Code/rechnung run rechnung <kommando>
 ```
+
+> Prototyp, noch nicht rechtlich oder steuerlich geprüft. Das Werkzeug kann noch nicht: Lieferungen von Waren, Steuerbefreiungen außer § 19 UStG, durchlaufende Posten, nicht steuerbare Zahlungen (z. B. Schadenersatz, Zuschüsse). Vollständige Liste: RULES.md, Teil 1.
+
+Es rechnet nur sonstige Leistungen ab (§ 3 Abs. 9 UStG). Ware erkennt es an `art: lieferung` in der
+Preisliste und bricht dann ab; eine Ware, die nur im Freitext steht, erkennt es nicht.
 
 ---
 
@@ -33,6 +42,16 @@ uv run rechnung festschreiben MM-2026-0001 --gesendet-am 2026-06-18
 Zwischen `neu` und `festschreiben` darf beliebig oft gebaut und geprüft werden. Eingefroren wird
 ausschließlich durch `festschreiben`.
 
+Jederzeit nützlich:
+
+```sh
+uv run rechnung offen                      # alle Rechnungen, die noch nicht festgeschrieben sind, und was fehlt
+uv run rechnung begruendung MM-2026-0001   # warum dieser Leistungsort und diese Steuer – für Prüfer
+uv run rechnung preisliste                 # Kürzel, Einheiten, Preise; Waren mit Vermerk
+uv run rechnung doctor                     # Config, Ordner, LaTeX, Commit-Wächter
+uv run rechnung demo --pruefen             # sechs Beispielrechnungen aus erfundenen Daten nach ./demo-output/
+```
+
 ---
 
 ## Vorbereitung, einmalig
@@ -42,7 +61,7 @@ ausschließlich durch `festschreiben`.
 | Config | `~/.config/rechnung/config.toml` | `rechnung doctor`, Zeile „Config“ |
 | Eigene Stammdaten | `<gewerbe>/stammdaten/ich.yaml` | `rechnung doctor`, dann `rechnung resolve` meldet Lücken |
 | Preisliste | `<gewerbe>/stammdaten/preise.yaml` | `rechnung preisliste` |
-| Ordnerstruktur | `<gewerbe>/` | `rechnung init` legt die vier Ordner an |
+| Ordnerstruktur | `<gewerbe>/` | `rechnung init` legt die vier Ordner an; `--stammdaten` dazu leere, kommentierte `ich.yaml` und `preise.yaml`; `--beispiel` stattdessen die erfundenen Beispiel-Stammdaten zum Ausprobieren. Überschreibt nie |
 | LaTeX, pdftotext | System | `rechnung doctor` muss grün sein |
 
 `<gewerbe>` ist die Wurzel aus `config.toml`. Darunter gehören dem Werkzeug genau vier Ordner:
@@ -93,26 +112,37 @@ waehrung: EUR                        # EUR | USD | GBP, Default aus der Config
 
 Die Preise stehen nicht in der Rechnung, sondern in `<gewerbe>/stammdaten/preise.yaml`. In
 `rechnung.yaml` steht je Position nur ein Kürzel und die Menge. So kann eine AI die Rechnung
-schreiben, ohne einen Preis zu sehen. `rechnung init --stammdaten` legt die Datei mit Erklärung an,
-ein vollständiges Beispiel liegt in `stammdaten.example/preise.yaml`:
+schreiben, ohne einen Preis zu sehen. `rechnung init --stammdaten` legt die Datei mit Erklärung an
+(zusammen mit einer leeren `ich.yaml`), ein vollständiges Beispiel liegt in
+`stammdaten.example/preise.yaml`:
 
 ```yaml
 vortrag:                              # das Kürzel
   bezeichnung: { de: Vortrag, en: Talk }   # oder ein Text für beide Sprachen
   einheit: stunde                     # pauschal | stunde | tag | stueck | kilometer
   preis: 450.00                       # in EUR, je Einheit
-buch:
-  bezeichnung: { de: Buch, en: Book }
-  einheit: stueck
-  preis: 24.00
-  steuersatz: 7                       # nur als Vorschlag; ob 7 % gilt, entscheidet das Werkzeug
+nutzungsrecht:
+  bezeichnung: { de: Einräumung von Nutzungsrechten an einem Text, en: Licence to use a text }
+  einheit: pauschal
+  preis: 300.00
+  steuersatz: 7                       # nur als Vorschlag (§ 12 Abs. 2 Nr. 7 c UStG); ob 7 % gilt, entscheidet das Werkzeug
 bahnticket:
   bezeichnung: { de: Bahnticket, en: Train ticket }
   einheit: pauschal
   art: auslage                        # kein fester Preis: Betrag je Rechnung vom Beleg
+buch:
+  bezeichnung: { de: Buch, en: Book }
+  einheit: stueck
+  preis: 24.00
+  art: lieferung                      # Ware: eine Rechnung damit bricht ab (RULES.md R39)
 ```
 
-`rechnung preisliste` zeigt die Liste (unter `RECHNUNG_GESCHWAERZT` ohne Preise).
+`art` ist `leistung` (Default), `auslage` oder `lieferung`. Eine Position mit `art: lieferung` lässt
+`resolve` als Erstes abbrechen (`Abbruch (ausserhalb)`), vor jeder Steuerentscheidung und auch im
+Inland – Lieferungen von Waren kann das Werkzeug noch nicht. Solche Einträge dürfen in der Liste
+stehen; die Rechnung dafür schreibst du außerhalb des Werkzeugs.
+
+`rechnung preisliste` zeigt die Liste, Waren mit Vermerk (unter `RECHNUNG_GESCHWAERZT` ohne Preise).
 
 ### 2. Rechnung anlegen
 
@@ -295,7 +325,7 @@ uv run rechnung pro-forma MM-2026-0001 --gesendet-am 2026-06-12
 ```
 
 Jede Seite trägt „PRO FORMA – KEINE RECHNUNG“, der Betreff „(keine Rechnung)“, Nummer, Datum und
-Fälligkeit heißen „vorläufig“, und statt der Zahlungsaufforderung steht die Bitte um Prüfung.
+Fälligkeit sind als vorläufig markiert („Re.-Nr. (vorl.)“, „Re.-Datum (vorl.)“, „Fällig (vorl.)“), und statt der Zahlungsaufforderung steht die Bitte um Prüfung.
 `rechnung pro-forma` hält fest, was du verschickt hast: `pro-forma/1/` mit der PDF und Kopien von
 `rechnung.yaml`, `rechnung.privat.yaml` und `rechnung.resolved.json`, schreibgeschützt, dazu ein
 Eintrag in `status.yaml`. Will der Kunde etwas geändert haben: `rechnung.yaml` anpassen oder mit
@@ -350,6 +380,8 @@ Werkzeug noch nicht gebaut (geplant).
 | `einheit „stunde“, die Preisliste führt … in „pauschal“` | Einheit passt nicht zur Liste | Einheit der Liste nehmen, Menge darin angeben |
 | `positionen.0.menge: … (Wert: {2})` | Platzhalter-Klammern stehen gelassen | Klammern entfernen: `menge: 2` |
 | `Abbruch (preise): Preise … sind noch nicht bestätigt` / `… veraltet` | ein Preis, den die Liste nicht hat (Auslage, Fremdwährung) | `rechnung preise <nr>` im eigenen Terminal |
+| `Position … hat keinen Preis in der Liste – Auslage oder Fremdwährung` | `rechnung preise --aus-liste` bei einer Auslage oder in Fremdwährung | ohne `--aus-liste` aufrufen und den Betrag eingeben |
+| `Position … (buch): Lieferung von Waren (art: lieferung …)` | Kürzel ist in der Preisliste als Ware markiert | kann das Werkzeug noch nicht (RULES.md R39); Rechnung außerhalb schreiben |
 | `referenz: steht nicht in rechnung.yaml` | Referenz aus einer alten Rechnungsdatei | mit `rechnung preise` eintragen |
 | `einleitung: enthält den Platzhalter {Event} …` | `{…}` aus einer Vorlage nicht ersetzt | echten Text einsetzen |
 | `leistungdatum: Extra inputs are not permitted` | Feldname vertippt | Tippfehler korrigieren |
@@ -423,6 +455,8 @@ Jede Option gibt es auch als Umgebungsvariable `RECHNUNG_<OPTION>`; die Umgebung
 | `zahlungsziel_tage` | `14` | Tage bis zur Fälligkeit |
 | `sprache` | `de` | `de` oder `en` |
 | `waehrung` | `EUR` | `EUR`, `USD` oder `GBP` |
+| `vorlage` | – | eigener Vorlagen-Ordner; seine Dateien ersetzen die gleichnamigen der Standardvorlage |
+| `demo` | `false` | Demo-Betrieb für Ausprobierer: nur die erfundenen Stammdaten aus `stammdaten.example/`, ein Gewerbe-Ordner mit eigener `ich.yaml` wird verweigert |
 
 ### Eigene Stammdaten — `<gewerbe>/stammdaten/ich.yaml`
 
@@ -433,11 +467,12 @@ Pflegt nur der Mensch. Weder das Werkzeug noch eine AI schreiben diese Datei.
 | `name` | ja | Briefkopf, Gruß, Rücksendeangabe, Kontoinhaber |
 | `geschaeftsbezeichnung` | nein | fette Zeile im Briefkopf statt des Namens |
 | `adresse.strasse`, `adresse.plz`, `adresse.ort` | ja | Briefkopf und Rücksendeangabe |
-| `land` | ja (`DE`) | Briefkopf bei englischen Rechnungen |
+| `land` | nein (Default `DE`) | Briefkopf bei englischen Rechnungen; ein anderes Land als `DE` lässt `resolve` abbrechen (RULES.md R4) |
 | `email`, `telefon`, `website` | E-Mail ja | Briefkopf oben rechts |
 | `steuernummer` **oder** `ustid` | eines von beiden | Metadatenblock und Fußzeile |
 | `kleinunternehmer` | nein (`false`) | `true`: § 19 UStG, keine Umsatzsteuer; die Umsatzgrenzen prüfst du selbst |
-| `bank.kontoinhaber`, `bank.iban`, `bank.bic`, `bank.name` | für die Zahlung | Zahlungssatz und Fußzeile |
+| `bank.kontoinhaber`, `bank.iban` | ja | Zahlungssatz und Fußzeile |
+| `bank.bic`, `bank.name` | nein | Zahlungssatz und Fußzeile |
 
 ### Aussehen — `vorlage/style/defaults.sty`
 
@@ -454,10 +489,26 @@ Welche Angaben `pruefen` im PDF-Text nachweist und mit welcher Fundstelle im USt
 
 ---
 
-## Für später: Automatisierung und MCP-Server
+## Mit einer AI: Skill und MCP-Server
 
-Wenn dieses Werkzeug einmal über einen MCP-Server oder direkt aus Claude bedient wird, gilt derselbe
-Vertrag wie für einen Menschen. Er steht ausführlich in `CLAUDE.md`, hier das Wesentliche:
+Eine AI kann die Rechnung schreiben, ohne zu sehen, wer beteiligt ist und was es kostet. Zwei Wege:
+
+- **MCP-Server** (`uv run rechnung mcp`, stdio; im Container `docker run -i --rm -v <gewerbe>:/gewerbe
+  rechnung mcp`). Die AI bekommt nur seine Werkzeuge – `neu`, `preisliste`, `lesen`, `schreiben`,
+  `resolve`, `begruendung`, `offen`, `bauen`, `pruefen`, `anschreiben_schreiben`, `anschreiben_pruefen` –
+  und nur geschwärzte Antworten: keine Namen, Anschriften, Beträge, nicht einmal das Kürzel des Kunden.
+  Jede Antwort zu einer Rechnung nennt in `naechster_schritt`, was als Nächstes kommt. Den Kunden
+  wählt der Mensch (`--kunde` beim Start, ein Formular im Client oder er nennt der AI das Kürzel).
+  `preise`, `pro-forma` und `festschreiben` sind keine Werkzeuge; `--preise-im-client` bietet die
+  Preisbestätigung als Formular an. `--demo` (oder `RECHNUNG_DEMO=1`) nimmt nur die erfundenen
+  Stammdaten und gibt der AI zusätzlich das Werkzeug `kunden` mit den Testkunden. Hier ist die Grenze
+  echt: Die AI hat nur diese Werkzeuge.
+- **Skill in Claude Code** (`.claude/skills/rechnung/SKILL.md`) mit `RECHNUNG_GESCHWAERZT=1`: die
+  Befehle geben dann nur geschwärzte Ausgaben, ein Hook sperrt das Lesen im Gewerbe-Ordner. Lesen
+  über Bash ist damit nicht ganz gesperrt – echte Durchsetzung bietet der MCP-Server.
+
+In beiden Fällen gilt derselbe Vertrag wie für einen Menschen. Er steht ausführlich in `CLAUDE.md`,
+hier das Wesentliche:
 
 **Eine AI darf:** `rechnung.yaml` und `anschreiben.md` anlegen und ändern, Kundendateien als Vorschlag anlegen (der Mensch
 bestätigt, weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen), Code und Vorlage ändern.
@@ -467,13 +518,16 @@ bestätigt, weil `land`, `ustid` und `unternehmer` den Leistungsort bestimmen), 
 zusätzlich technisch erzwungen, über einen PreToolUse-Hook und Deny-Regeln.
 
 **Gut automatisierbar**, weil deterministisch und mit klaren Exit-Codes: `neu`, `resolve`, `bauen`,
-`pruefen`, `doctor`. Jeder Fehler ist eine Meldung, die sagt, was zu tun ist.
+`pruefen`, `offen`, `begruendung`, `doctor`. Jeder Fehler ist eine Meldung, die sagt, was zu tun ist;
+unter dem Schalter beginnt sie mit `Abbruch (<art>):` – `eingabe`, `frage`, `stammdaten`,
+`ausserhalb` oder `preise`.
 
-**Nicht automatisieren:** `preise`, `festschreiben` und `pro-forma`. `preise`, weil die Beträge an der AI
-vorbei gehen sollen. Es verlangt zu wissen, wann die Rechnung tatsächlich beim
-Kunden war, und es ist unumkehrbar.
+**Nicht automatisieren:** `preise`, `festschreiben` und `pro-forma`. `preise`, weil die Beträge an der
+AI vorbeigehen sollen. `festschreiben` und `pro-forma`, weil sie wissen müssen, wann das Dokument
+tatsächlich beim Kunden war, und unumkehrbar sind.
 
-**Sinnvoller Ablauf für einen Assistenten:** `neu` → `rechnung.yaml` füllen → `resolve` ausführen und
-dem Menschen **zeigen**, was herauskommt (vor allem Einordnung, Leistungsort und Ergebnis) → Bestätigung
-abwarten → der Mensch bestätigt die Preise im eigenen Terminal → `bauen`
-→ `pruefen` → dem Menschen die PDF geben. Das Festschreiben macht der Mensch nach dem Versand.
+**Ablauf für einen Assistenten:** `neu` → `preisliste` → `rechnung.yaml` füllen → `resolve` ausführen
+und dem Menschen **zeigen**, was herauskommt (vor allem Einordnung, Leistungsort und Ergebnis) →
+Bestätigung abwarten → Listenpreise übernimmt `resolve` selbst; Auslagen trägt der Mensch im eigenen
+Terminal ein → `bauen` → `pruefen` → dem Menschen die PDF geben. Das Festschreiben macht der Mensch
+nach dem Versand.
