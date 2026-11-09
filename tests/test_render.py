@@ -207,10 +207,10 @@ def test_bauen_erzeugt_pdf_und_sonst_nichts(gewerbe):
     pdf = render.baue_pdf(ergebnis, ordner)
 
     assert pdf.is_file() and pdf.stat().st_size > 10_000
-    # Im Rechnungsordner liegen nur yaml, resolved.json, pdf und belege/ – kein .tex, .aux, .log.
+    # Im Rechnungsordner liegen nur yaml, resolved.json, pdf, belege/ und unterlagen/ – kein .tex, .aux, .log.
     inhalt = sorted(p.name for p in ordner.iterdir())
     assert inhalt == ["belege", f"invoice_{nummer}.pdf", "rechnung.privat.yaml", "rechnung.resolved.json",
-                      "rechnung.yaml"]
+                      "rechnung.yaml", "unterlagen"]
 
 
 @BRAUCHT_LATEX

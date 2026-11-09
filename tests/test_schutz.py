@@ -160,7 +160,8 @@ RE = "rechnung-ausgang/2026/2026-0001"
 @pytest.mark.parametrize("rel", [
     "stammdaten/ich.yaml", "stammdaten/kunden/muster.yaml", f"{RE}/rechnung.resolved.json",
     f"{RE}/rechnung_2026-0001.pdf", f"{RE}/status.yaml", f"{RE}/pro-forma/1/rechnung.yaml",
-    f"{RE}/belege/hotel.jpg", f"{RE}/../../../stammdaten/ich.yaml",
+    f"{RE}/belege/hotel.jpg", f"{RE}/unterlagen/mail.pdf", f"{RE}/unterlagen/notiz.txt",
+    f"{RE}/../../../stammdaten/ich.yaml",
     "stammdaten/preise.yaml", f"{RE}/rechnung.privat.yaml",
 ])
 @pytest.mark.parametrize("wurzel", ["Gewerbe-Test", "Gewerbe"])

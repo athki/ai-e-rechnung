@@ -10,8 +10,8 @@ entscheidet Leistungsort und Steuer (`rules.py`) und setzt Namen, Anschriften un
 
 **Die Grenze:** Du weißt, was geleistet wurde und wie viel davon – nie, wer beteiligt ist und was es
 kostet. Du liest keine Kundendaten, keine Ausstellerdaten, keine Preisliste, keine `rechnung.privat.yaml`,
-keine `rechnung.resolved.json`, keine PDFs, keine `status.yaml`, nichts unter `pro-forma/` oder
-`belege/`. Was du vom Werkzeug brauchst, gibt es dir geschwärzt aus.
+keine `rechnung.resolved.json`, keine PDFs, keine `status.yaml`, nichts unter `pro-forma/`,
+`belege/` oder `unterlagen/`. Was du vom Werkzeug brauchst, gibt es dir geschwärzt aus.
 
 **Geltungsbereich**, sag es dem Menschen einmal vor der ersten Rechnung:
 

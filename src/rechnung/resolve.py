@@ -446,6 +446,7 @@ def neu(
                             geschwaerzt=f"Der Ordner für {nummer} existiert schon.")
     ordner.mkdir(parents=True)
     (ordner / "belege").mkdir()
+    (ordner / "unterlagen").mkdir()   # Begleitunterlagen des Menschen (E-Mails, Bestellung); nie gedruckt
 
     sprache_zeile = f"sprache: {sprache}\n" if sprache else "# sprache: de | en\n"
     waehrung_zeile = f"waehrung: {waehrung}\n" if waehrung else "# waehrung: EUR | USD | GBP\n"

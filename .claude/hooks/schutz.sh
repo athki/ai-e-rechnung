@@ -13,7 +13,7 @@
 # Gewerbe-Wurzeln – der aus RECHNUNG_GEWERBE und der aus config.toml, damit der echte Ordner auch
 # dann geschützt ist, wenn die Env auf einen Test-Ordner zeigt:
 #   <wurzel>/<stammdaten>/** (mit der Preisliste), <wurzel>/<kunden>/**, und darunter überall
-#   *.resolved.json, rechnung.privat.yaml, PDFs, status.yaml, pro-forma/**, belege/**
+#   *.resolved.json, rechnung.privat.yaml, PDFs, status.yaml, pro-forma/**, belege/**, unterlagen/**
 # Read/Grep/Glob über den Pfad; Bash, wenn der Befehl eine Wurzel nennt (außer einem bloßen
 # `rechnung …`-Aufruf und Pfaden in Rechnungsordnern) oder in einer Wurzel läuft. Dazu sperrt er
 # Befehle, die RECHNUNG_GESCHWAERZT, RECHNUNG_GEWERBE oder RECHNUNG_CONFIG überschreiben oder löschen
@@ -155,6 +155,7 @@ lese_gesperrt() {
                 "/${stammdaten%/}/"*|"/${kunden%/}/"*) echo "Stammdaten (Aussteller, Kunden)"; return ;;
                 */pro-forma/*) echo "gesendete Pro forma"; return ;;
                 */belege/*) echo "Belege"; return ;;
+                */unterlagen/*) echo "Unterlagen"; return ;;
             esac
             case "$rel" in
                 *rechnung.resolved.json) echo "rechnung.resolved.json"; return ;;

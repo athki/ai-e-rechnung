@@ -171,6 +171,7 @@ und legt an:
 <gewerbe>/<ausgang>/2026/MM-2026-0001/
   rechnung.yaml      vorbefüllt, mit Kommentaren
   belege/            leer
+  unterlagen/        leer
 ```
 
 Das Kürzel der ersten Position bleibt ebenfalls leer und markiert.
@@ -265,6 +266,13 @@ untere Abschnitt samt Strich. Lange Werte brechen in ihrer Spalte um.
 
 Jede Datei, die unter `belege:` steht, muss im Unterordner `belege/` der Rechnung liegen. Sie wird
 als zusätzliche Seite ans PDF gehängt und mit „Anlage 1 zu Rechnung Nr. …“ gestempelt.
+
+Alles, was die Rechnung begleitet, aber nicht an den Kunden geht – die E-Mail, mit der er die
+Pro forma bestätigt hat, seine Bestellung, ein Angebot –, gehört nach `unterlagen/`. Das Werkzeug legt
+den Ordner bei `neu` an und fasst ihn sonst nicht an: nichts davon wird gedruckt, gehasht oder
+eingefroren, du kannst auch nach dem Festschreiben noch etwas hineinlegen. Unter
+`RECHNUNG_GESCHWAERZT` sperrt der Hook das Lesen dort für die AI. Bei älteren Rechnungen legst du
+den Ordner einfach selbst an.
 
 ### 5. Auflösen und kontrollieren
 

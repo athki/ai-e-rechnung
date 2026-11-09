@@ -30,7 +30,9 @@ Code oder Build-Artefakte.
     rechnung-pro-forma_<nummer>.pdf   # Arbeitskopie der Pro forma, bei jedem Bau überschrieben
     pro-forma/<n>/           # gesendete Pro-forma-Revision: PDF, rechnung.yaml, rechnung.privat.yaml, resolved.json
     status.yaml              # ab der ersten gesendeten Pro forma bzw. dem Festschreiben: Status, Daten, Hashes
-    belege/
+    belege/                  # werden ans PDF angehängt
+    unterlagen/              # Begleitunterlagen des Menschen (E-Mails, Bestellung), legt `neu` an; nie gedruckt,
+                             # nie eingefroren, für die AI gesperrt
   steuerberater/JJJJ/        # Export-Ziel
   rechnung-eingang/, bank/, vertraege/ …   # nicht Sache des Werkzeugs
 ```
@@ -192,7 +194,7 @@ Arten aus `meldung.py` (`eingabe`, `frage`, `stammdaten`, `ausserhalb`, `preise`
 geschwärzte Fassung wird zurückgehalten. Jedes Feld von `rechnung.yaml` ist in `sicht.EINSTUFUNG`
 eingestuft (Test); seit der Preisliste ist keines mehr „privat“. Der Hook sperrt unter dem Schalter auch
 das Lesen in den Gewerbe-Wurzeln (Env und config.toml): Stammdaten mit Preisliste, resolved.json,
-rechnung.privat.yaml, PDFs, status.yaml, `pro-forma/`, `belege/`; Repo und `stammdaten.example/` bleiben frei.
+rechnung.privat.yaml, PDFs, status.yaml, `pro-forma/`, `belege/`, `unterlagen/`; Repo und `stammdaten.example/` bleiben frei.
 Lesen über Bash ist damit nicht ganz gesperrt – echte Durchsetzung bietet der MCP-Server. Den
 Ablauf für die AI beschreibt der Skill `.claude/skills/rechnung/SKILL.md`.
 

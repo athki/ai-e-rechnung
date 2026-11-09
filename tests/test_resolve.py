@@ -130,6 +130,7 @@ def test_neu_legt_ordner_und_geruest_an(gewerbe):
                            taetigkeit="Panel: Zukunft der Arbeit", einordnung="unterrichtend", ort="GB")
     assert ordner == gewerbe / "rechnung-ausgang" / "2026" / nummer
     assert (ordner / "belege").is_dir()
+    assert (ordner / "unterlagen").is_dir()
     text = (ordner / r.INPUT_DATEI).read_text(encoding="utf-8")
     assert "kunde: sample-inc" in text
     assert "einheit: pauschal" in text       # vorbelegt, aber sichtbar in der Datei
